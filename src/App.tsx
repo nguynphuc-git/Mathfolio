@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { friendlyError, prepareLocal, study } from './ai';
+import { friendlyError, prepareLocal, study, type StudyMetrics, type StudyUpdate } from './ai';
 import { MarkdownView } from './components/MarkdownView';
 import { extractPdf } from './pdf';
 import { samples } from './samples';
@@ -19,6 +19,8 @@ const [context, setContext] = useState('');
 const [question, setQuestion] = useState('');
 const [policy, setPolicy] = useState<Policy>('local');
 const [result, setResult] = useState<StudyResult>();
+const [partial, setPartial] = useState<StudyUpdate>();
+const [metrics, setMetrics] = useState<StudyMetrics>();
 const [busy, setBusy] = useState(false);
 const [status, setStatus] = useState('');
 const [error, setError] = useState('');
@@ -33,6 +35,7 @@ loadNotes().then(setNotes).catch(() => setError('Không đọc được IndexedD
 .finally(() => setNotesReady(true));
 }, []);
 function captureSelection() {
+if (busy) return;
 const selection = window.getSelection();
 if (!selection || !readerRef.current?.contains(selection.anchorNode) || !readerRef.current.contains(selection.focusNode)) return;
 const text = selection.toString().trim();
@@ -44,18 +47,29 @@ setStatus(slice.found ? 'Đã lấy ngữ cảnh quanh đoạn. Hãy xem lại t
 }
 function clearReader() {
 readerVersion.current++;
+setPartial(undefined); setMetrics(undefined);
 setDocument(''); setDocumentTitle(''); setExcerpt(''); setContext(''); setSourcePage(undefined); setResult(undefined);
 }
 async function run(action: Action) {
 if (busy) return;
 setBusy(true); setError(''); setStatus('Đang xử lý / Working…');
-setResult(undefined); setRevealed(false); setAnswers({});
+setResult(undefined); setPartial(undefined); setMetrics(undefined); setRevealed(false); setAnswers({});
 const version = readerVersion.current;
 try {
 const value = await study({ subject, language, excerpt, context, question, action, policy, answerMode, documentTitle, sourcePage },
-p => setStatus(`Chuẩn bị mô hình / Preparing model: ${Math.round(p * 100)}%`));
-if (version === readerVersion.current) { setResult(value); setStatus('Hoàn tất / Done'); }
-} catch (e) { setError(friendlyError(e)); setStatus(''); }
+p => { if (version === readerVersion.current) setStatus(`Chuẩn bị mô hình / Preparing model: ${Math.round(p * 100)}%`); },
+update => {
+  if (version !== readerVersion.current) return;
+  setPartial(update); setStatus('Đang trả lời / Answering…');
+});
+if (version === readerVersion.current) {
+  setPartial(undefined); setResult(value); setMetrics(value.metrics); setStatus('Hoàn tất / Done');
+}
+} catch (e) {
+  if (version === readerVersion.current) {
+    setPartial(undefined); setMetrics(undefined); setError(friendlyError(e)); setStatus('');
+  }
+}
 finally { setBusy(false); }
 }
 async function prepare() {
@@ -124,9 +138,19 @@ setDocumentTitle('Tài liệu mẫu / Sample'); setExcerpt(''); setContext(''); 
 <button disabled={busy || !excerpt.trim() || policy !== 'hybrid'} onClick={() => void run('quiz')}>3 câu tự kiểm tra · Cloud</button>
 </div>
 <p role="status">{status}</p>{error && <p role="alert" className="error">{error}</p>}
+{partial && <article aria-busy="true">
+<p>Câu trả lời chưa hoàn tất / Answer in progress</p>
+<p className="badge">{partial.source === 'UNKNOWN' ? 'Đang xác nhận nguồn / Confirming source' : partial.source} · Chữ đầu tiên / First text: {(partial.firstTextMs / 1000).toFixed(2)} s</p>
+<div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{partial.markdown}</div>
+</article>}
 {result && <article>
 <p>Nguồn đoạn chọn / Selected source: {documentTitle}{sourcePage ? ` · Trang / Page ${sourcePage}` : ''}. AI chỉ nhận đoạn và ngữ cảnh đã xem trước.</p>
 <p className="badge">{result.source} · {(result.durationMs / 1000).toFixed(2)} s</p>
+{metrics && <p>
+Chuẩn bị local / Local preparation: {metrics.initializationMs === undefined ? 'chạy song song / concurrent' : `${(metrics.initializationMs / 1000).toFixed(2)} s`}
+{' · '}Chữ đầu tiên từ lúc bấm / First text since click: {metrics.firstTextMs === undefined ? 'không đo cho Quiz / not measured for Quiz' : `${(metrics.firstTextMs / 1000).toFixed(2)} s`}
+{' · '}Xử lý / Generation: {(metrics.generationMs / 1000).toFixed(2)} s
+</p>}
 <p>Giải thích do AI tạo; đối chiếu giả thiết và kiểm tra lại phép biến đổi. / AI explanation: verify assumptions and steps.</p>
 {result.quiz ? <div>{result.quiz.map((q, i) => <fieldset key={i}><legend>Câu / Question {i + 1}</legend>
 <MarkdownView value={q.questionMarkdown} />

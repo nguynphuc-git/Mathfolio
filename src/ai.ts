@@ -49,27 +49,76 @@ throw new Error('Quiz không đúng cấu trúc. Hãy thử lại.');
 }
 return list as QuizItem[];
 }
-export async function study(r: StudyRequest, progress: (value: number) => void): Promise<StudyResult> {
-validateRequest(r);
-const model = modelFor(r);
-const started = performance.now();
-if (r.action === 'quick' || r.action === 'hint') {
-// Start initialization while still in the originating user interaction.
-const init = model.initializeDeviceModel(progress);
-if (r.policy === 'local') await init;
-else void init.catch(() => { /* hybrid may use the cloud; source is read from response */ });
+export interface StudyMetrics {
+  initializationMs?: number;
+  firstTextMs?: number;
+  generationMs: number;
 }
-const result = await model.generateContent(buildPrompt(r));
-if (result.response.candidates?.some(c => c.finishReason === 'MAX_TOKENS'))
-throw new Error('Câu trả lời bị cắt do giới hạn đầu ra. Hãy hỏi một phần nhỏ hơn.');
-const raw = result.response.text().trim();
-if (!raw) throw new Error('Không có câu trả lời. Hãy sửa câu hỏi hoặc kiểm tra bộ lọc nội dung.');
-const quiz = r.action === 'quiz' ? parseQuiz(raw) : undefined;
-return {
-markdown: quiz ? quizToMarkdown(quiz) : raw, quiz,
-source: result.response.inferenceSource ?? 'UNKNOWN',
-durationMs: performance.now() - started
-};
+export interface StudyUpdate {
+  markdown: string;
+  source: string;
+  firstTextMs: number;
+}
+
+export async function study(
+  r: StudyRequest,
+  progress: (value: number) => void,
+  onText?: (update: StudyUpdate) => void
+): Promise<StudyResult & { metrics: StudyMetrics }> {
+  validateRequest(r);
+  const started = performance.now();
+  const model = modelFor(r);
+  let initializationMs: number | undefined = 0;
+  if (r.action === 'quick' || r.action === 'hint') {
+    const initStarted = performance.now();
+    const init = model.initializeDeviceModel(progress);
+    if (r.policy === 'local') {
+      await init;
+      initializationMs = performance.now() - initStarted;
+    } else {
+      initializationMs = undefined;
+      void init.catch(() => {});
+    }
+  }
+  const generationStarted = performance.now();
+  const prompt = buildPrompt(r);
+  let firstTextMs: number | undefined;
+  let response;
+  if (r.action === 'quiz') {
+    response = (await model.generateContent(prompt)).response;
+  } else {
+    const streamed = await model.generateContentStream(prompt);
+    void streamed.response.catch(() => {});
+    let markdown = '';
+    let source = 'UNKNOWN';
+    let lastUpdate = -Infinity;
+    for await (const chunk of streamed.stream) {
+      const text = chunk.text();
+      if (!text) continue;
+      markdown += text;
+      if (!markdown.trim()) continue;
+      const now = performance.now();
+      firstTextMs ??= now - started;
+      source = chunk.inferenceSource ?? source;
+      if (now - lastUpdate >= 100) {
+        onText?.({ markdown, source, firstTextMs });
+        lastUpdate = now;
+      }
+    }
+    response = await streamed.response;
+  }
+  if (response.candidates?.some(c => c.finishReason === 'MAX_TOKENS'))
+    throw new Error('Câu trả lời bị cắt do giới hạn đầu ra. Hãy hỏi một phần nhỏ hơn.');
+  const raw = response.text().trim();
+  if (!raw) throw new Error('Không có câu trả lời. Hãy sửa câu hỏi hoặc kiểm tra bộ lọc nội dung.');
+  const quiz = r.action === 'quiz' ? parseQuiz(raw) : undefined;
+  const finished = performance.now();
+  return {
+    markdown: quiz ? quizToMarkdown(quiz) : raw, quiz,
+    source: response.inferenceSource ?? 'UNKNOWN',
+    durationMs: finished - started,
+    metrics: { initializationMs, firstTextMs, generationMs: finished - generationStarted }
+  };
 }
 export function friendlyError(error: unknown): string {
 const message = error instanceof Error ? error.message : String(error);
