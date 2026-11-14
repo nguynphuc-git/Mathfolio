@@ -1,5 +1,5 @@
 import { getAI, GoogleAIBackend, getGenerativeModel, InferenceMode, Schema } from 'firebase/ai';
-import { getFirebaseApp } from './firebase';
+import { getCloudFirebaseApp } from './firebase';
 import { buildPrompt, quizToMarkdown, validateRequest } from './prompt';
 import type { QuizItem, StudyRequest, StudyResult } from './types';
 const quizSchema = Schema.object({ properties: {
@@ -12,11 +12,11 @@ const models = new Map<string, ReturnType<typeof getGenerativeModel>>();
 function modelFor(r: Pick<StudyRequest, 'action' | 'policy' | 'language'>) {
 const mode = r.action === 'deep' || r.action === 'quiz'
 ? InferenceMode.ONLY_IN_CLOUD
-: r.policy === 'local' ? InferenceMode.ONLY_ON_DEVICE : InferenceMode.PREFER_ON_DEVICE;
+: InferenceMode.ONLY_ON_DEVICE;
 const key = `${mode}:${r.action === 'quiz' ? 'quiz' : 'text'}:${r.language}`;
 let model = models.get(key);
 if (!model) {
-const ai = getAI(getFirebaseApp(), { backend: new GoogleAIBackend() });
+const ai = getAI(getCloudFirebaseApp(), { backend: new GoogleAIBackend() });
 model = getGenerativeModel(ai, {
 mode,
 inCloudParams: {
@@ -72,13 +72,8 @@ export async function study(
   if (r.action === 'quick' || r.action === 'hint') {
     const initStarted = performance.now();
     const init = model.initializeDeviceModel(progress);
-    if (r.policy === 'local') {
-      await init;
-      initializationMs = performance.now() - initStarted;
-    } else {
-      initializationMs = undefined;
-      void init.catch(() => {});
-    }
+    await init;
+    initializationMs = performance.now() - initStarted;
   }
   const generationStarted = performance.now();
   const prompt = buildPrompt(r);
