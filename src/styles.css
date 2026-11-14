@@ -1,0 +1,19 @@
+:root { font-family: system-ui, sans-serif; color: #193237; background: #f1f5f2; line-height: 1.65; }
+* { box-sizing: border-box; }
+body { margin: 0; } main { max-width: 1420px; margin: auto; padding: 24px; }
+header { padding: 12px 0 24px; } h1 { margin: 0; color: #116b61; } h2 { font-size: 1.2rem; }
+.toolbar, .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.columns { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.columns > div, article, main > section:last-child { background: white; padding: 20px; border-radius: 12px; min-width: 0; }
+label { display: block; margin: 8px 0; } input:not([type=checkbox]):not([type=radio]), select, textarea { display: block; width: 100%; padding: 10px; border: 1px solid #a8bdb7; border-radius: 6px; font: inherit; }
+textarea { min-height: 100px; resize: vertical; } input[type=file] { max-width: 280px; }
+button { border: 0; border-radius: 6px; padding: 11px 15px; background: #126d62; color: white; cursor: pointer; font: inherit; margin: 4px 4px 4px 0; }
+button:disabled { opacity: .45; cursor: not-allowed; } button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #be902f; outline-offset: 2px; }
+.reader { min-height: 400px; max-height: 760px; overflow: auto; border: 1px solid #d0ddd7; padding: 16px; }
+.notice, .badge { background: #e0efe9; padding: 10px; border-radius: 6px; }
+.error { background: #fff0ee; color: #9c3024; padding: 12px; }
+.consent { background: #fff7df; padding: 10px; } pre { overflow: auto; padding: 12px; background: #edf2ef; white-space: pre-wrap; overflow-wrap: anywhere; }
+.markdown pre { white-space: pre; } .markdown { overflow-wrap: anywhere; } .markdown .katex-display { overflow: auto hidden; padding: 8px 0; }
+details { margin: 12px 0; } summary { cursor: pointer; } fieldset { border: 1px solid #c7d7cf; margin-bottom: 16px; } .choice { display: flex; align-items: start; gap: 8px; } .choice p { margin: 0; } table { border-collapse: collapse; } td, th { border: 1px solid #c5d5cd; padding: 6px; }
+@media(max-width: 850px) { .columns { grid-template-columns: 1fr; } main { padding: 12px; } }
+.cloud-library { background: white; padding: 20px; margin: 16px 0; border-radius: 12px; }
