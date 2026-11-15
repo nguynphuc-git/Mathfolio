@@ -1,8 +1,15 @@
+## Refinement: formulas, editing and overflow
+
+- Edit/discard/delete/sign-out confirmations are styled in-app alert dialogs with focus trapping, Escape cancellation and an inert background. No native window.confirm remains in the notebook.
+- Problem text is smaller, wraps at the top-level rendered expression, and scrolls vertically in a 220px viewport. MathLive 0.111.4 is pinned; wrapping overrides are scoped to its top-level shadow DOM so fraction/root internals keep their math layout. Visual and caret behavior still need acceptance testing in Chrome.
+- Thin rounded scrollbars for problem, knowledge and chat appear on hover or keyboard focus without changing the available width; touch devices keep them available.
+- Local reference cards explicitly identify their source; no language-model call is claimed for these cards. Existing saved content remains intact until refreshed.
+
 ## Update: visual math input and English interface
 
-The problem box now uses MathLive: symbols render while typing. The x² key inserts a superscript at the cursor without duplicating x. Use **Text mode** for prose and **Math mode** for equations. LaTeX remains the storage/AI representation; the editor displays typeset math. Fonts are bundled locally for offline use.
+The problem box now uses MathLive: symbols render while typing. The x² key inserts a superscript at the cursor without duplicating x. Typing uses automatic math/text recognition in a single field; there are no mode buttons. LaTeX remains the storage/AI representation; the editor displays typeset math. Fonts are bundled locally for offline use.
 
-There is no subject selector or subject assumption in notebook AI prompts. Knowledge generation receives only the current problem, uses English, and is asked for 1–3 short bullets (55 words maximum). Previous knowledge/chat is excluded from re-analysis to avoid repeating an unrelated course overview. Existing saved answers are preserved; choose **Refresh knowledge** to regenerate in English.
+There is no subject selector or subject assumption in notebook AI prompts. Knowledge generation receives only the current problem and uses English. Recognized single-variable linear/quadratic equations get verified local formula cards with conditions and no numeric solution, labeled local reference rather than AI. Unsupported notation falls back to AI with formula-first instructions (1–3 bullets, up to 100 words excluding formulas). Conditional reference cues cover derivatives, integrals, logarithms, trigonometry, right triangles, probability, sequences and matrices; this is not an exhaustive mathematics engine. Previous knowledge/chat is excluded from re-analysis to avoid repeating an unrelated course overview. Existing saved answers are preserved; choose **Refresh knowledge** to regenerate in English.
 
 On desktop/tablet the knowledge panel follows the problem panel height using ResizeObserver, and its contents scroll internally. On phones it has a bounded 400px height. The rest of the notebook remains in normal page flow.
 

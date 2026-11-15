@@ -21,3 +21,29 @@
 .attachment-button{position:relative}
 .attachment-button input[type=file]{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .attachment-button:focus-within{outline:3px solid #c88d43;outline-offset:3px}
+/* Keep every grid track within its column, even for very long equations. */
+.workspace{grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,1fr)}
+.workspace>*{min-width:0}.problem{overflow:hidden}
+.math-input{height:220px;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable}
+.math-input math-field{min-height:100%;height:auto;font-size:17px;line-height:2.3;padding:12px 10px;overflow:visible}
+.math-input.compact{height:auto;max-height:110px;min-height:0}
+.math-input.compact math-field{font-size:15px;min-height:0}
+.math-input math-field::part(container){max-width:100%;min-width:0}
+.math-input math-field::part(content){max-width:100%;min-width:0}
+.math-input,.knowledge-scroll,.messages{scrollbar-width:thin;scrollbar-color:transparent transparent}
+.math-input:hover,.math-input:focus-within,.knowledge-scroll:hover,.knowledge-scroll:focus-within,.messages:hover,.messages:focus-within{scrollbar-color:#9baa92 transparent}
+.math-input::-webkit-scrollbar,.knowledge-scroll::-webkit-scrollbar,.messages::-webkit-scrollbar{width:7px;height:7px}
+.math-input::-webkit-scrollbar-track,.knowledge-scroll::-webkit-scrollbar-track,.messages::-webkit-scrollbar-track{background:transparent}
+.math-input::-webkit-scrollbar-thumb,.knowledge-scroll::-webkit-scrollbar-thumb,.messages::-webkit-scrollbar-thumb{background:transparent;border-radius:10px;border:2px solid transparent;background-clip:padding-box}
+.math-input:hover::-webkit-scrollbar-thumb,.math-input:focus-within::-webkit-scrollbar-thumb,.knowledge-scroll:hover::-webkit-scrollbar-thumb,.knowledge-scroll:focus-within::-webkit-scrollbar-thumb,.messages:hover::-webkit-scrollbar-thumb,.messages:focus-within::-webkit-scrollbar-thumb{background-color:#9baa92}
+.knowledge-scroll .empty-panel{height:auto;min-height:220px}
+.confirm-dialog{width:min(100%,460px);padding:30px;border-radius:16px;box-shadow:0 22px 80px #15291e33}
+.confirm-dialog h2{font:500 27px/1.3 'Lora',Georgia,serif;margin:10px 0 14px;color:#294d3c}
+.confirm-dialog #confirm-description{font-size:13px;color:#687a6c;line-height:1.8;margin:0 0 25px}
+.confirm-dialog .row{justify-content:flex-end;gap:10px}.confirm-icon{display:grid;place-items:center;width:44px;height:44px;border-radius:12px;color:#47734e;background:#e9efdf;font-size:25px;margin-bottom:18px}
+.confirmation-backdrop{backdrop-filter:blur(4px)}
+@media(max-width:1100px){.workspace{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+@media(max-width:650px){.workspace{grid-template-columns:minmax(0,1fr)}.math-input math-field{font-size:16px}.confirm-dialog{padding:24px}.confirm-dialog .row button{flex:1}}
+@media(hover:none){.math-input,.knowledge-scroll,.messages{scrollbar-color:#9baa92 transparent}.math-input::-webkit-scrollbar-thumb,.knowledge-scroll::-webkit-scrollbar-thumb,.messages::-webkit-scrollbar-thumb{background-color:#9baa92}}
+@supports selector(::-webkit-scrollbar){.math-input,.knowledge-scroll,.messages{scrollbar-width:auto;scrollbar-color:auto}}
+.math-input::-webkit-scrollbar-button,.knowledge-scroll::-webkit-scrollbar-button,.messages::-webkit-scrollbar-button{display:none;width:0;height:0}

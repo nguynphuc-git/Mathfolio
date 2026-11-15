@@ -60,8 +60,8 @@ describe('private exercise notebook', () => {
   });
   it('keeps tutoring stages separate and treats learning input as untrusted data', () => {
     expect(notebookPrompt(request)).toContain('Do not solve');
-    expect(notebookPrompt(request)).toContain('maximum 55 words');
-    expect(notebookPrompt(request)).toContain('EXACT supplied problem');
+    expect(notebookPrompt(request)).toContain('maximum 100 words');
+    expect(notebookPrompt(request)).toContain('EXACT mathematical structure');
     expect(notebookPrompt(request)).toContain('Answer ONLY in English');
     expect(notebookPrompt(request)).not.toContain('Subject: calculus');
     const focused = notebookPrompt({...request,knowledge:'OLD_UNRELATED_CALCULUS',messages:[{role:'assistant',text:'OLD_COURSE_OVERVIEW'}]});
