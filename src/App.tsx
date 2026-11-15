@@ -6,6 +6,7 @@ import { MarkdownView } from './components/MarkdownView';
 import { addFolder, removeFolder, emptyNotebook, loadNotebook, newExercise, notebookKey, putExercise, putExerciseNotes, readAttachment, saveNotebook, type Exercise, type Notebook, type Attachment } from './notebook';
 import { ConfirmDialog, type Confirmation } from './components/ConfirmDialog';
 import { ExercisePreview } from './components/ExercisePreview';
+import { NotesEditor } from './components/NotesEditor';
 import { MathInput, type MathInputHandle } from './components/MathInput';
 import { statementLatex } from './math-input';
 import './notebook.css';
@@ -122,18 +123,39 @@ export default function App() {
     try { await signOut(getAuth(getFirebaseApp())); } catch (e) { setError(friendlyError(e)); }
     finally { setAuthBusy(false); }
   }
+  async function allowCloud(): Promise<boolean> {
+    if (!online) { setError('Cloud AI needs an internet connection. Local AI is still available.'); return false; }
+    if (cloudAllowed) return true;
+    const version = epoch.current;
+    const accepted = await confirmChange({ title:'Allow Cloud AI?', description:'Cloud hints and chat send the current problem, essentials, opened hints and recent conversation to the AI service. Notes and attached images are not sent. Allow this for your current notebook session? You can turn Cloud AI off below Save exercise.', action:'Allow Cloud AI', cancel:'Not now' });
+    if (!accepted || version !== epoch.current || !navigator.onLine) return false;
+    setCloudAllowed(true); return true;
+  }
+  async function toggleCloud() {
+    if (blocked) return;
+    if (cloudAllowed) { setCloudAllowed(false); setChatRoute('local'); }
+    else await allowCloud();
+  }
+  async function selectChatRoute(route: 'local' | 'cloud') {
+    if (blocked) return;
+    if (route === 'local') { setChatRoute('local'); return; }
+    if (await allowCloud()) setChatRoute('cloud');
+  }
   async function ask(purpose: NotebookRequest['purpose']) {
     if (!ready || blocked || activeAI.current) return;
     const version = epoch.current; const id = draft.id; const askedQuestion = question.trim();
     if (purpose !== 'knowledge' && !draft.confirmed) { setError('Confirm the problem before asking for help.'); return; }
     if (purpose === 'chat' && !askedQuestion) return;
     if (purpose === 'hint2' && draft.hints.length < 1 || purpose === 'hint3' && draft.hints.length < 2) return;
+    const usesCloud = purpose === 'hint2' || purpose === 'hint3' || (purpose === 'chat' && chatRoute === 'cloud');
+    const permitted = usesCloud ? await allowCloud() : cloudAllowed;
+    if (usesCloud && !permitted || version !== epoch.current || activeAI.current) return;
     const operation = { controller: new AbortController(), status, error };
     activeAI.current = operation;
     const currentOperation = () => activeAI.current === operation && version === epoch.current && !operation.controller.signal.aborted;
     setBusy(purpose); setPartial(''); setError(''); setStatus('Waiting for AI…');
     try {
-      const answer = await notebookAI({ purpose, statement: draft.statement, knowledge: draft.knowledge?.text ?? '', hints: draft.hints.map(h => h.text), messages: draft.messages, question: askedQuestion, cloudAllowed, route: chatRoute }, text => {
+      const answer = await notebookAI({ purpose, statement: draft.statement, knowledge: draft.knowledge?.text ?? '', hints: draft.hints.map(h => h.text), messages: draft.messages, question: askedQuestion, cloudAllowed: permitted, route: chatRoute }, text => {
         if (currentOperation()) { setPartial(text); setStatus('AI is answering…'); }
       }, operation.controller.signal);
       if (!currentOperation()) return;
@@ -286,7 +308,7 @@ export default function App() {
     </section>}
     {user && !ready && <p role="status">Opening your notebook…</p>}
     {user && ready && tab === 'solve' && <>
-      <div className="page-heading"><div><p className="eyebrow">YOUR THINKING SPACE</p><h1>{draft.title || 'One problem. One discovery.'}</h1><p>Understand it. Try it. Open a hint when you need one.</p></div><div className="row"><button disabled={blocked} onClick={() => changeExercise(newExercise())}>＋ New exercise</button><>{savedDraft && <button disabled={blocked} onClick={() => beginSave(true)}>Rename / move</button>}<button className="primary" disabled={blocked || !draft.statement.trim()} onClick={() => beginSave()}>Save exercise {dirty ? '•' : ''}</button></></div></div>
+      <div className="page-heading"><div><p className="eyebrow">YOUR THINKING SPACE</p><h1>{draft.title || 'One problem. One discovery.'}</h1><p>Understand it. Try it. Open a hint when you need one.</p></div><div className="workspace-actions"><div className="row"><button disabled={blocked} onClick={() => changeExercise(newExercise())}>＋ New exercise</button>{savedDraft && <button disabled={blocked} onClick={() => beginSave(true)}>Rename / move</button>}<button className="primary" disabled={blocked || !draft.statement.trim()} onClick={() => beginSave()}>Save exercise {dirty ? '•' : ''}</button></div><button className="cloud-switch" role="switch" aria-checked={cloudAllowed} aria-label="Cloud AI" disabled={blocked} onClick={() => void toggleCloud()}><span className="switch-track" aria-hidden="true"><span/></span>Cloud AI <strong>{cloudAllowed ? 'On' : 'Off'}</strong></button></div></div>
       <div className="workspace">
         <section ref={problemPanel} className="paper problem"><div className="panel-heading"><span className="step">01</span><h2>Problem</h2><span className="tag">YOUR PROBLEM</span></div>
           <MathInput ref={input} value={statementLatex(draft.statement, draft.statementFormat)} readOnly={draft.confirmed} disabled={blocked} onChange={value => edit({ statement: value, statementFormat: 'latex' })}/>
@@ -306,14 +328,14 @@ export default function App() {
             {draft.hints[i] ? <>
               <button className="hint-toggle" aria-expanded={!collapsedHints.includes(i)} aria-controls={`hint-content-${i}`} onClick={() => setCollapsedHints(current => current.includes(i) ? current.filter(level => level !== i) : [...current,i])}>{collapsedHints.includes(i) ? 'Show hint ▾' : 'Hide hint ▴'}</button>
               <div id={`hint-content-${i}`} hidden={collapsedHints.includes(i)}><MarkdownView value={draft.hints[i].text}/><small className="subtle">{draft.hints[i].source}</small></div>
-            </> : busy === `hint${i + 1}` ? streaming(`hint${i + 1}` as NotebookRequest['purpose']) : <button disabled={blocked || !draft.confirmed || draft.hints.length !== i || (i > 0 && (!cloudAllowed || !online))} onClick={() => void ask(`hint${i + 1}` as NotebookRequest['purpose'])}>Open level {i + 1}</button>}
+            </> : busy === `hint${i + 1}` ? streaming(`hint${i + 1}` as NotebookRequest['purpose']) : <button disabled={blocked || !draft.confirmed || draft.hints.length !== i || (i > 0 && !online)} onClick={() => void ask(`hint${i + 1}` as NotebookRequest['purpose'])}>Open level {i + 1}</button>}
           </div>)}
           </div>
-          <label className="check"><input type="checkbox" checked={cloudAllowed} disabled={blocked} onChange={e => setCloudAllowed(e.target.checked)}/><span>Allow this problem and its context to be sent to cloud AI when I open hints 2–3 or choose Cloud chat.</span></label>
+
           {!online && <p className="subtle">Offline: hint 1 and local chat can work if the device model is ready.</p>}
         </section>
-        <section className="paper notes"><div className="panel-heading"><span className="step">04</span><h2>Your working notes</h2></div><textarea aria-label="Notes" value={draft.notes} disabled={blocked} maxLength={30000} onChange={e => edit({ notes: e.target.value })} placeholder="Write your approach, questions, or what you just learned…"/><label className="attachment-button">＋ Attach my solution<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'solution'); }}/></label><div className="attachments">{draft.attachments.filter(a => a.kind === 'solution').map(a => <figure key={a.id}><a href={a.data} target="_blank" rel="noreferrer"><img src={a.data} alt={a.name}/></a><figcaption>{a.name}<button disabled={blocked} onClick={() => edit({ attachments: draft.attachments.filter(x => x.id !== a.id) })}>Remove</button></figcaption></figure>)}</div><label className="check"><input type="checkbox" checked={draft.completed} disabled={blocked} onChange={e => edit({ completed: e.target.checked })}/>I have completed this exercise</label><p className="subtle">Notes and images are stored when you select Save exercise.</p></section>
-        <section className="paper discussion"><div className="panel-heading"><span className="step">05</span><h2>Another way to think about it?</h2><select aria-label="Chat processing" value={chatRoute} disabled={blocked} onChange={e => setChatRoute(e.target.value as 'local' | 'cloud')}><option value="local">On-device AI</option><option value="cloud" disabled={!online || !cloudAllowed}>Cloud AI</option></select></div><p className="subtle">Discuss your approach. AI receives the problem, essentials, opened hints and up to 6 recent messages.</p><div className="messages">{!draft.messages.length && <div className="empty-chat">“What if I try a different approach?”<small>Start with what you are thinking.</small></div>}{draft.messages.map((m, i) => <div className={`message ${m.role}`} key={i}><small>{m.role === 'user' ? 'You' : `Mathfolio · ${m.source ?? 'UNKNOWN'}`}</small><MarkdownView value={m.text}/></div>)}{streaming('chat')}</div><form className="chat-form" onSubmit={e => { e.preventDefault(); void ask('chat'); }}><input aria-label="Discussion question" maxLength={1000} value={question} disabled={blocked || !draft.confirmed} onChange={e => setQuestion(e.target.value)} placeholder="Ask a question or describe your approach…"/><button className="primary" disabled={blocked || !draft.confirmed || !question.trim()} type="submit">Send ↗</button></form></section>
+        <section className="paper notes"><div className="panel-heading"><span className="step">04</span><h2>Your working notes</h2></div><NotesEditor label="Notes" value={draft.notes} disabled={blocked} onChange={notes => edit({ notes })}/><label className="attachment-button">＋ Attach my solution<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'solution'); }}/></label><div className="attachments">{draft.attachments.filter(a => a.kind === 'solution').map(a => <figure key={a.id}><a href={a.data} target="_blank" rel="noreferrer"><img src={a.data} alt={a.name}/></a><figcaption>{a.name}<button disabled={blocked} onClick={() => edit({ attachments: draft.attachments.filter(x => x.id !== a.id) })}>Remove</button></figcaption></figure>)}</div><label className="check"><input type="checkbox" checked={draft.completed} disabled={blocked} onChange={e => edit({ completed: e.target.checked })}/>I have completed this exercise</label><p className="subtle">Notes and images are stored when you select Save exercise.</p></section>
+        <section className="paper discussion"><div className="panel-heading"><span className="step">05</span><h2>Another way to think about it?</h2><div className="chat-routes" role="group" aria-label="Chat processing"><button type="button" aria-pressed={chatRoute === 'local'} disabled={blocked} onClick={() => void selectChatRoute('local')}>Local AI</button><button type="button" aria-pressed={chatRoute === 'cloud'} disabled={blocked || !online} onClick={() => void selectChatRoute('cloud')}>Cloud AI</button></div></div><p className="subtle">Discuss your approach. AI receives the problem, essentials, opened hints and up to 6 recent messages.</p><div className="messages">{!draft.messages.length && <div className="empty-chat">“What if I try a different approach?”<small>Start with what you are thinking.</small></div>}{draft.messages.map((m, i) => <div className={`message ${m.role}`} key={i}><small>{m.role === 'user' ? 'You' : `Mathfolio · ${m.source ?? 'UNKNOWN'}`}</small><MarkdownView value={m.text}/></div>)}{streaming('chat')}</div><form className="chat-form" onSubmit={e => { e.preventDefault(); void ask('chat'); }}><input aria-label="Discussion question" maxLength={1000} value={question} disabled={blocked || !draft.confirmed} onChange={e => setQuestion(e.target.value)} placeholder="Ask a question or describe your approach…"/><button className="primary" disabled={blocked || !draft.confirmed || !question.trim()} type="submit">Send ↗</button></form></section>
       </div><p className="footer-note">AI can be wrong. Check assumptions and steps. The work is yours.</p>
     </>}
     {user && ready && tab === 'library' && <section><div className="page-heading"><div><p className="eyebrow">PAGES OF PROGRESS</p><h1>{folder ? book.folders.find(f => f.id === folder)?.name : 'Exercise library'}</h1><p>Revisit your thinking. Continue where you left off.</p></div><div className="row"><button disabled={blocked} onClick={() => { setFolderName(''); setError(''); setFolderDialog(true); }}>＋ New folder</button>{folder && folder !== 'general' && <button disabled={blocked} onClick={() => void deleteFolder(folder)}>Delete folder</button>}<button disabled={blocked} onClick={() => changeExercise(newExercise())}>＋ New exercise</button></div></div>{folder ? <><button onClick={() => setFolder(null)}>← All folders</button><div className="exercise-list">{!shown.length && <div className="paper empty-panel">No exercises in this folder yet.</div>}{shown.map(e => <article className="paper exercise-card" key={e.id}><div><span className={`tag ${e.completed ? 'done' : ''}`}>{e.completed ? 'Completed' : 'In progress'}</span><h2>{e.title}</h2><MathInput value={statementLatex(e.statement, e.statementFormat)} readOnly compact label={`Problem: ${e.title}`}/><small>{new Date(e.updatedAt).toLocaleString('en-GB')} · {e.hints.length}/3 hints opened</small></div><div className="row"><button className="primary" disabled={blocked} onClick={() => openPreview(e)}>Open exercise</button><button disabled={blocked} onClick={() => void deleteExercise(e.id)}>Delete</button></div></article>)}</div></> : <div className="folder-grid">{book.folders.map(f => <article className="paper folder-card" key={f.id}><button className="folder-open" disabled={blocked} onClick={() => setFolder(f.id)}><span aria-hidden="true">▱</span><h2>{f.name}</h2><small>{book.exercises.filter(e => e.folderId === f.id).length} exercises →</small></button>{f.id !== 'general' && <button className="folder-delete" disabled={blocked} aria-label={`Delete folder ${f.name}`} onClick={() => void deleteFolder(f.id)}>Delete folder</button>}</article>)}</div>}</section>}

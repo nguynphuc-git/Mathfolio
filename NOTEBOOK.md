@@ -2,6 +2,16 @@
 
 Mở trình khởi động cho hệ điều hành của bạn theo [README](README.md#chạy-thử-trên-máy-của-đồng-đội). Bạn có thể lưu đề, ghi chú và ảnh vào thư viện trước khi chọn **Confirm & analyze**, kể cả khi chưa có quota. Mở lại bằng **Open in workspace** để tiếp tục hoặc phân tích sau.
 
+## Stable scrolling, Cloud AI controls and improved input
+
+- Scroll containers reserve a constant thin scrollbar gutter before overflow and on hover/focus; removed the CSS switch between native standard/WebKit widths. The document also reserves its scrollbar gutter to reduce shifts when opening dialogs. The thumb can appear without taking width away from the text. Visual acceptance is still needed in Chrome at different zoom levels.
+- A Cloud AI On/Off switch sits below Save exercise. Opening a cloud hint (2 or 3), selecting Cloud chat, or enabling the switch asks for consent when permission is off. Denial/Escape/backdrop cancellation sends nothing. Acceptance enables the switch for the current signed-in notebook session; the requested hint then runs. Turning permission off selects Local chat. Offline cloud generation stays unavailable, and signing out resets consent. Enabling the switch by itself does not call AI.
+- Chat uses two side-by-side Local AI / Cloud AI buttons with the selected route emphasized. Selecting Local chat does not revoke permission for cloud hints; the top switch controls that permission.
+- Powers from the toolbar and the physical ^ key use MathLive's native superscript navigation, so fenced groups stay intact; a selected expression becomes the entire power base. Smart fences remain enabled. Variable exponents remain open for multiple characters, with arrow keys used to leave them.
+- Paste handling recognizes common inline equations, ASCII fractions, Unicode squared/cubed notation and prose. Explicit $...$, $$...$$, \\(...\\), \\[...\\] or application/x-latex data preserve LaTeX; MathLive's structured clipboard format is delegated to its native handler. Prose is escaped into text spans. This is conservative local parsing, not a universal semantic classifier: inspect ambiguous or unusual notation after pasting. Oversized paste is rejected without truncating the current expression.
+- Notes in workspace and library preview have a toggleable math-symbol keyboard (², ⁿ, √, ∫, ∑, fractions, inequalities, Greek letters). It inserts ordinary Unicode symbols/templates at the caret and preserves selected text for powers/roots/fractions. Notes remain multiline plain text; no stored-data migration or hidden LaTeX markup is introduced.
+- Added simulated DOM interaction coverage for consent/cancellation/offline behavior, route/switch synchronization, notes keyboard persistence, and editor clipboard/keyboard events. Actual MathLive layout/caret behavior and hover geometry still need testing on supported Chrome hardware.
+
 ## Saved-page preview and stopping AI
 
 - **Open exercise** now opens a scrollable saved-page dialog in the library, showing the problem, essentials, opened hints, notes, attached images and conversation without running AI. Only notes can be edited here. **Save notes** updates the notes of the existing saved page; unsaved note changes are protected when closing the dialog with Close, Escape or the backdrop.

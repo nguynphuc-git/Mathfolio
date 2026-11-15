@@ -1,5 +1,7 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { MathfieldElement } from 'mathlive';
+import { mixedTextToLatex } from '../math-paste';
+import { insertPower } from '../math-editor-actions';
 import 'mathlive/fonts.css';
 MathfieldElement.fontsDirectory = null;
 MathfieldElement.soundsDirectory = null;
@@ -9,9 +11,13 @@ export const MathInput = forwardRef<MathInputHandle, { value: string; onChange?:
   const host = useRef<HTMLDivElement>(null);
   const element = useRef<MathfieldElement | null>(null);
   const change = useRef(onChange); change.current = onChange;
+  const [inputError, setInputError] = useState(''); const validValue = useRef(value);
+  const notify = useRef<() => void>(() => {});
   useEffect(() => {
     const field = new MathfieldElement();
-    field.defaultMode = 'math'; field.smartMode = true; field.mathVirtualKeyboardPolicy = 'manual';
+    field.defaultMode = 'math'; field.smartMode = true; field.smartFence = true;
+    field.smartSuperscript = false; field.mathVirtualKeyboardPolicy = 'manual';
+    field.value = validValue.current;
     const flowStyle = window.document.createElement('style');
     // Limit these overrides to the top-level equation. Fraction/root internals keep their layout.
     flowStyle.textContent = `
@@ -25,22 +31,45 @@ export const MathInput = forwardRef<MathInputHandle, { value: string; onChange?:
     field.setAttribute('aria-label', label); field.setAttribute('role', 'textbox');
     field.setAttribute('placeholder', 'Type your problem here');
     const handleInput = () => {
-      if (field.value.length > 6000) { field.value = field.value.slice(0, 6000); }
+      if (field.value.length > 6000) { field.value = validValue.current; setInputError('Keep the problem within 6,000 characters.'); return; }
+      validValue.current = field.value; setInputError('');
       change.current?.(field.value);
     };
+    notify.current = handleInput;
+    const handlePaste = (event: ClipboardEvent) => {
+      if (field.readOnly || !event.clipboardData) return;
+      // Let MathLive preserve its own structured copy/paste, such as matrices.
+      if (event.clipboardData.getData('application/json+mathlive')) return;
+      const latex = event.clipboardData.getData('application/x-latex');
+      const text = event.clipboardData.getData('text/plain');
+      if (!latex && !text) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      const insertion = latex || mixedTextToLatex(text);
+      const selection = field.selectionIsCollapsed ? '' : field.getValue(field.selection, 'latex');
+      if (field.value.length - selection.length + insertion.length > 6000) { setInputError('Keep the problem within 6,000 characters.'); return; }
+      field.insert(insertion, { format:'latex', mode:'math', selectionMode:'after' }); handleInput();
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (field.readOnly || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.key !== '^') return;
+      event.preventDefault(); event.stopImmediatePropagation(); insertPower(field); handleInput();
+    };
     field.addEventListener('input', handleInput);
+    field.addEventListener('paste', handlePaste, true); field.addEventListener('keydown', handleKey, true);
     host.current?.appendChild(field); element.current = field;
-    return () => { field.removeEventListener('input', handleInput); field.remove(); element.current = null; };
+    return () => { field.removeEventListener('input', handleInput); field.removeEventListener('paste', handlePaste, true); field.removeEventListener('keydown', handleKey, true); field.remove(); element.current = null; notify.current = () => {}; };
   }, [label]);
-  useEffect(() => { const field = element.current; if (field && field.value !== value) field.value = value; }, [value]);
+  useEffect(() => { const field = element.current; validValue.current = value; setInputError(''); if (field && field.value !== value) field.value = value; }, [value]);
   useEffect(() => { if (element.current) { element.current.readOnly = !!readOnly || !!disabled; element.current.setAttribute('aria-disabled', String(!!disabled)); } }, [readOnly, disabled]);
   useImperativeHandle(ref, () => ({
     focus() { element.current?.focus(); },
     insert(latex) {
       const field = element.current; if (!field || field.readOnly) return;
-      field.focus(); field.insert(latex, { format: 'latex', mode: 'math', selectionMode: 'placeholder' });
-      change.current?.(field.value);
+      field.focus();
+      const power = /^\^\{(.*)\}$/.exec(latex);
+      if (power) insertPower(field, power[1] === '#?' ? undefined : power[1]);
+      else field.insert(latex, { format: 'latex', mode: 'math', selectionMode: 'placeholder' });
+      notify.current();
     }
   }), []);
-  return <div ref={host} className={`math-input${compact ? ' compact' : ''}`}/>;
+  return <><div ref={host} className={`math-input${compact ? ' compact' : ''}`}/>{inputError && <small className="error" role="alert">{inputError}</small>}</>;
 });

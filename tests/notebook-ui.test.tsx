@@ -50,7 +50,7 @@ beforeEach(async () => {
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
   await act(async () => { root.render(<App/>); });
 });
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('saved page previews and workspace copies', () => {
   it('saves and restores an unanalyzed problem without calling AI', async () => {
@@ -154,7 +154,7 @@ describe('Stop AI restores the pre-request page', () => {
     const before = structuredClone(stored());
     const calls: { text: (text: string) => void; resolve: (answer: Answer) => void; signal: AbortSignal }[] = [];
     mocks.ai.mockImplementation((_: NotebookRequest, text: (text: string) => void, signal: AbortSignal) => new Promise<Answer>(resolve => calls.push({ text, resolve, signal })));
-    if (purpose === 'hint2' || purpose === 'hint3') await act(async () => host.querySelector<HTMLInputElement>('.hints input[type="checkbox"]')!.click());
+    if (purpose === 'hint2' || purpose === 'hint3') { await click('Cloud AI'); await click('Allow Cloud AI'); }
     if (purpose === 'chat') await type('[aria-label="Discussion question"]', 'Keep this question');
     const trigger = purpose === 'knowledge' ? 'Refresh knowledge' : purpose === 'chat' ? 'Send' : `Open level ${purpose.slice(-1)}`;
     await click(trigger);
@@ -178,5 +178,86 @@ describe('Stop AI restores the pre-request page', () => {
     expect(button('Confirm & analyze').disabled).toBe(false);
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.readOnly).toBe(false);
     expect(mocks.write).not.toHaveBeenCalled();
+  });
+});
+
+describe('Cloud AI permission and chat controls', () => {
+  it('asks before cloud hint 2, cancels without running AI, then enables and runs only after consent', async () => {
+    await openWorkspace(); mocks.ai.mockResolvedValue({text:'Allowed cloud hint',source:'in_cloud'});
+    expect(host.querySelector('.hints input[type="checkbox"]')).toBeNull();
+    await click('Open level 2');
+    expect(host.querySelector('[role="alertdialog"]')!.textContent).toContain('Allow Cloud AI?');
+    expect(mocks.ai).not.toHaveBeenCalled();
+    await click('Not now'); expect(mocks.ai).not.toHaveBeenCalled();
+    expect(host.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('false');
+    await click('Open level 2'); await click('Allow Cloud AI');
+    expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'hint2',cloudAllowed:true});
+    expect(host.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('true');
+    expect(host.textContent).toContain('Allowed cloud hint');
+    await click('Cloud AI', host.querySelector('.workspace-actions')!);
+    await click('Open level 3');
+    expect(host.querySelector('[role="alertdialog"]')).not.toBeNull();
+    expect(mocks.ai).toHaveBeenCalledTimes(1);
+  });
+  it('syncs left/right chat selection with the switch, and never treats denial as consent', async () => {
+    await openWorkspace();
+    const routes = host.querySelector('[aria-label="Chat processing"]')!;
+    expect(button('Local AI',routes).getAttribute('aria-pressed')).toBe('true');
+    await click('Cloud AI',routes); await click('Not now');
+    expect(button('Local AI',routes).getAttribute('aria-pressed')).toBe('true');
+    expect(button('Cloud AI',routes).getAttribute('aria-pressed')).toBe('false');
+    await click('Cloud AI',routes); await click('Allow Cloud AI');
+    expect(button('Cloud AI',routes).getAttribute('aria-pressed')).toBe('true');
+    expect(host.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('true');
+    await click('Cloud AI',host.querySelector('.workspace-actions')!);
+    expect(button('Local AI',routes).getAttribute('aria-pressed')).toBe('true');
+    expect(host.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('false');
+    expect(mocks.ai).not.toHaveBeenCalled();
+  });
+  it('turns the top switch on through consent without selecting Cloud chat or calling AI', async () => {
+    await openWorkspace(); await click('Cloud AI', host.querySelector('.workspace-actions')!);
+    await click('Allow Cloud AI');
+    expect(host.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('true');
+    expect(button('Local AI', host.querySelector('.chat-routes')!).getAttribute('aria-pressed')).toBe('true');
+    expect(mocks.ai).not.toHaveBeenCalled();
+  });
+  it('keeps cloud requests unavailable offline while Local AI remains selectable', async () => {
+    await openWorkspace();
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    await act(async () => window.dispatchEvent(new Event('offline')));
+    const routes = host.querySelector('.chat-routes')!;
+    expect(button('Cloud AI',routes).disabled).toBe(true); expect(button('Local AI',routes).disabled).toBe(false);
+    expect(button('Open level 2').disabled).toBe(true);
+    await click('Cloud AI', host.querySelector('.workspace-actions')!);
+    expect(host.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('false');
+    expect(mocks.ai).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+});
+
+describe('notes math keyboard', () => {
+  it('toggles without changing notes and inserts a real symbol at the cursor', async () => {
+    await openWorkspace();
+    const original = stored().exercises[0].notes;
+    expect(button('Show math keyboard').getAttribute('aria-expanded')).toBe('false');
+    await click('Show math keyboard');
+    expect(button('Hide math keyboard').getAttribute('aria-expanded')).toBe('true');
+    expect(stored().exercises[0].notes).toBe(original);
+    const input = host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!;
+    input.setSelectionRange(0,0);
+    await click('∫',host.querySelector('.notes-math-keys')!);
+    expect(input.value).toBe('∫'+original);
+    await click('Hide math keyboard'); await click('Save exercise');
+    expect(stored().exercises[0].notes).toBe('∫'+original);
+  });
+  it('also supports the saved-page notes without rewriting the problem', async () => {
+    await library(); await click('Open exercise');
+    const statement=stored().exercises[0].statement;
+    await click('Show math keyboard');
+    const input=host.querySelector<HTMLTextAreaElement>('[aria-label="Saved exercise notes"]')!;
+    input.setSelectionRange(input.value.length,input.value.length);
+    await click('x²',host.querySelector('.notes-math-keys')!); await click('Save notes');
+    expect(stored().exercises[0].notes).toBe('Original notes²');
+    expect(stored().exercises[0].statement).toBe(statement);
   });
 });
