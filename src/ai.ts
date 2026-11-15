@@ -156,11 +156,12 @@ ${JSON.stringify(r.purpose === 'knowledge' ? { statement: r.statement } : { stat
 export async function notebookAI(r: NotebookRequest, onText: (text: string) => void, signal?: AbortSignal) {
   signal?.throwIfAborted();
   if (!r.statement.trim() || r.statement.length > 6000 || r.question.length > 1000) throw new Error('The problem must be at most 6,000 characters and the question at most 1,000.');
-  const cloud = r.purpose === 'hint2' || r.purpose === 'hint3' || (r.purpose === 'chat' && r.route === 'cloud');
-  if (cloud && !r.cloudAllowed) throw new Error('Allow cloud AI first.');
-  if (cloud && typeof navigator !== 'undefined' && !navigator.onLine) throw new Error('You are offline. Choose local chat or hint 1.');
   const reference = r.purpose === 'knowledge' ? formulaReference(r.statement) : undefined;
   if (reference) { onText(reference); return { text: reference, source: 'local_reference' }; }
+  const cloud = r.purpose === 'hint2' || r.purpose === 'hint3'
+    || ((r.purpose === 'knowledge' || r.purpose === 'chat') && r.route === 'cloud');
+  if (cloud && !r.cloudAllowed) throw new Error('Allow cloud AI first.');
+  if (cloud && typeof navigator !== 'undefined' && !navigator.onLine) throw new Error('You are offline. Choose local chat or hint 1.');
   const model = modelFor({ action: cloud ? 'deep' : 'quick', policy: cloud ? 'hybrid' : 'local', language: 'en' }, cloud ? undefined : signal);
   if (!cloud) await abortable(model.initializeDeviceModel(), signal);
   signal?.throwIfAborted();

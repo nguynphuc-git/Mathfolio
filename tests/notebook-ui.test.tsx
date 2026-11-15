@@ -174,10 +174,19 @@ describe('Stop AI restores the pre-request page', () => {
   it('does not confirm or save an unconfirmed problem when analysis is stopped', async () => {
     await type('[aria-label="Problem statement"]', 'A new problem');
     mocks.ai.mockImplementation(() => new Promise(() => {}));
-    await click('Confirm & analyze'); await click('■ Stop AI');
+    await click('Confirm & analyze');
+    expect(host.querySelector('[role="alertdialog"]')!.textContent).toContain('Cloud AI will receive the problem statement');
+    await click('Allow Cloud AI'); await click('■ Stop AI');
     expect(button('Confirm & analyze').disabled).toBe(false);
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.readOnly).toBe(false);
     expect(mocks.write).not.toHaveBeenCalled();
+  });
+  it('uses the local formula reference for recognized equations without cloud consent', async () => {
+    await type('[aria-label="Problem statement"]', 'x^2-5x+6=0');
+    mocks.ai.mockResolvedValue({text:'Quadratic formula',source:'local_reference'});
+    await click('Confirm & analyze');
+    expect(host.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'knowledge',route:'local',cloudAllowed:false});
   });
 });
 

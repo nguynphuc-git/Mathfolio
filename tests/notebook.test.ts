@@ -9,7 +9,7 @@ vi.mock('idb-keyval', () => ({get: vi.fn(async (key: string) => values.get(key))
 import { emptyNotebook, newExercise, notebookKey, putExercise, putExerciseNotes, loadNotebook, saveNotebook } from '../src/notebook';
 import { notebookAI, notebookPrompt, type NotebookRequest } from '../src/ai';
 afterEach(() => vi.unstubAllGlobals());
-const request: NotebookRequest = {purpose:'knowledge',statement:'Find the derivative of x squared.',subject:'calculus',knowledge:'',hints:[],messages:[],question:'',cloudAllowed:false,route:'cloud'};
+const request: NotebookRequest = {purpose:'knowledge',statement:'Find the derivative of x squared.',subject:'calculus',knowledge:'',hints:[],messages:[],question:'',cloudAllowed:false,route:'local'};
 describe('private exercise notebook', () => {
   it('isolates users and Firebase environments, including ambiguous delimiters', () => {
     expect(notebookKey('demo','alice')).not.toBe(notebookKey('demo','bob'));
@@ -49,6 +49,7 @@ describe('private exercise notebook', () => {
   it('requires consent for cloud hints and chat before touching Firebase', async () => {
     await expect(notebookAI({...request,purpose:'hint2'},vi.fn())).rejects.toThrow('Allow cloud AI');
     await expect(notebookAI({...request,purpose:'chat',route:'cloud'},vi.fn())).rejects.toThrow('Allow cloud AI');
+    await expect(notebookAI({...request,route:'cloud'},vi.fn())).rejects.toThrow('Allow cloud AI');
   });
   it('streams local prerequisites and keeps cloud calls gated by purpose', async()=>{
     vi.stubGlobal('navigator', {onLine:true});
@@ -61,6 +62,8 @@ describe('private exercise notebook', () => {
     expect(model.initializeDeviceModel).toHaveBeenCalled();
     expect(onText).toHaveBeenCalledWith('Power rule'); expect(result.source).toBe('on_device');
     await notebookAI({...request,purpose:'hint2',cloudAllowed:true},onText);
+    expect(getModel.mock.calls.at(-1)?.[1].mode).toBe(InferenceMode.ONLY_IN_CLOUD);
+    await notebookAI({...request,route:'cloud',cloudAllowed:true},onText);
     expect(getModel.mock.calls.at(-1)?.[1].mode).toBe(InferenceMode.ONLY_IN_CLOUD);
   });
   it('blocks cloud requests while offline', async()=>{

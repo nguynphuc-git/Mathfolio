@@ -9,6 +9,7 @@ import { ExercisePreview } from './components/ExercisePreview';
 import { NotesEditor } from './components/NotesEditor';
 import { MathInput, type MathInputHandle } from './components/MathInput';
 import { statementLatex } from './math-input';
+import { formulaReference } from './math-knowledge';
 import './notebook.css';
 
 const symbols = [ ['x²', '^{2}'], ['xⁿ', '^{#?}'], ['√', '\\sqrt{#?}'], ['a/b', '\\frac{#?}{#?}'], ['∑', '\\sum_{i=1}^{n}'], ['∫', '\\int_{}^{}'], ['lim', '\\lim_{x\\to 0}'], ['∞', '\\infty'], ['≤', '\\leq'], ['≥', '\\geq'], ['≠', '\\neq'], ['∈', '\\in'], ['∀', '\\forall'], ['⇒', '\\Rightarrow'], ['α', '\\alpha'], ['π', '\\pi'] ];
@@ -123,11 +124,11 @@ export default function App() {
     try { await signOut(getAuth(getFirebaseApp())); } catch (e) { setError(friendlyError(e)); }
     finally { setAuthBusy(false); }
   }
-  async function allowCloud(): Promise<boolean> {
+  async function allowCloud(description = 'Cloud hints and chat send the current problem, essentials, opened hints and recent conversation to the AI service. Notes and attached images are not sent. Allow this for your current notebook session? You can turn Cloud AI off below Save exercise.'): Promise<boolean> {
     if (!online) { setError('Cloud AI needs an internet connection. Local AI is still available.'); return false; }
     if (cloudAllowed) return true;
     const version = epoch.current;
-    const accepted = await confirmChange({ title:'Allow Cloud AI?', description:'Cloud hints and chat send the current problem, essentials, opened hints and recent conversation to the AI service. Notes and attached images are not sent. Allow this for your current notebook session? You can turn Cloud AI off below Save exercise.', action:'Allow Cloud AI', cancel:'Not now' });
+    const accepted = await confirmChange({ title:'Allow Cloud AI?', description, action:'Allow Cloud AI', cancel:'Not now' });
     if (!accepted || version !== epoch.current || !navigator.onLine) return false;
     setCloudAllowed(true); return true;
   }
@@ -147,15 +148,20 @@ export default function App() {
     if (purpose !== 'knowledge' && !draft.confirmed) { setError('Confirm the problem before asking for help.'); return; }
     if (purpose === 'chat' && !askedQuestion) return;
     if (purpose === 'hint2' && draft.hints.length < 1 || purpose === 'hint3' && draft.hints.length < 2) return;
-    const usesCloud = purpose === 'hint2' || purpose === 'hint3' || (purpose === 'chat' && chatRoute === 'cloud');
-    const permitted = usesCloud ? await allowCloud() : cloudAllowed;
+    const needsCloudKnowledge = purpose === 'knowledge' && !formulaReference(draft.statement);
+    const usesCloud = needsCloudKnowledge || purpose === 'hint2' || purpose === 'hint3' || (purpose === 'chat' && chatRoute === 'cloud');
+    const description = needsCloudKnowledge
+      ? 'This problem is too complex for the on-device formula helper. Cloud AI will receive the problem statement to identify the relevant mathematical concepts. Notes and images are not sent.'
+      : undefined;
+    const permitted = usesCloud ? await allowCloud(description) : cloudAllowed;
     if (usesCloud && !permitted || version !== epoch.current || activeAI.current) return;
     const operation = { controller: new AbortController(), status, error };
     activeAI.current = operation;
     const currentOperation = () => activeAI.current === operation && version === epoch.current && !operation.controller.signal.aborted;
     setBusy(purpose); setPartial(''); setError(''); setStatus('Waiting for AI…');
     try {
-      const answer = await notebookAI({ purpose, statement: draft.statement, knowledge: draft.knowledge?.text ?? '', hints: draft.hints.map(h => h.text), messages: draft.messages, question: askedQuestion, cloudAllowed: permitted, route: chatRoute }, text => {
+      const route = needsCloudKnowledge ? 'cloud' : chatRoute;
+      const answer = await notebookAI({ purpose, statement: draft.statement, knowledge: draft.knowledge?.text ?? '', hints: draft.hints.map(h => h.text), messages: draft.messages, question: askedQuestion, cloudAllowed: permitted, route }, text => {
         if (currentOperation()) { setPartial(text); setStatus('AI is answering…'); }
       }, operation.controller.signal);
       if (!currentOperation()) return;
