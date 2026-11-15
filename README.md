@@ -1,3 +1,7 @@
+## Giao diện sổ bài tập mới
+
+Xem [NOTEBOOK.md](NOTEBOOK.md) để chạy, dùng thử và xem giới hạn bản đầu.
+
 # StudyLens hybrid starter
 Mã mẫu đi kèm tài liệu `StudyLens-KeHoach-HuongDan.md`. Gồm Giải tích 1A,
 Toán rời rạc 1A và thuật toán; đầu ra Markdown + LaTeX, local/cloud qua

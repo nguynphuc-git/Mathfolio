@@ -1,0 +1,53 @@
+# Sổ bài tập StudyLens — bản đầu
+
+Nhánh này chuyển giao diện sang sổ bài tập theo bản phác thảo. React/Vite, Firebase Auth, cấu hình emulator và dịch vụ AI hiện tại vẫn được dùng; không thay .env.local hay triển khai Firebase rules.
+
+## Chạy
+
+- Node.js 24 LTS; npm ci; giữ cấu hình Firebase Web/App Check hiện có trong .env.local.
+- Nếu dùng emulator: VITE_USE_EMULATORS=true; Java 21 và Firebase CLI.
+- Cửa sổ 1 (lần đầu):
+
+```sh
+firebase emulators:start --only auth,firestore,storage --project demo-studylens-local --export-on-exit=.emulator-data
+```
+
+- Sau khi đã thoát bằng Ctrl+C và có thư mục .emulator-data, những lần sau:
+
+```sh
+firebase emulators:start --only auth,firestore,storage --project demo-studylens-local --import=.emulator-data --export-on-exit=.emulator-data
+```
+
+Trên Windows dùng `firebase.cmd` nếu PowerShell chặn firebase.ps1. Giữ dữ liệu Auth emulator qua các phiên để UID tài khoản không thay đổi. Tạo lại cùng email với UID mới sẽ mở một cuốn sổ local khác. Không commit .emulator-data hoặc token.
+
+- Cửa sổ 2: npm run dev (Windows: npm.cmd run dev). Đăng nhập/đăng ký bằng Auth hiện tại. Gemini vẫn kết nối project thật qua getCloudFirebaseApp; emulator không mô phỏng Gemini.
+
+## Luồng dùng thử
+
+1. Nhập đề, chọn môn, chèn ký hiệu tại con trỏ; xem trước công thức.
+2. Đính kèm ảnh đề nếu muốn (chỉ xem/lưu, không OCR và không gửi ảnh tới AI).
+3. Xác nhận đề & phân tích: gửi text cho local AI để nhận kiến thức cần biết. Người dùng chịu trách nhiệm kiểm tra đề. Bản đầu chưa tự chuẩn hóa đề bằng AI.
+4. Mở hint 1 local. Chỉ sau khi có hint trước mới mở được tầng tiếp theo. Hint 2 (phương pháp) và hint 3 (lời giải) dùng cloud, cần bật đồng ý và có mạng. Chưa mở thì không gọi AI hay tạo trước nội dung.
+5. Chat chọn local hoặc cloud; cloud cần đồng ý. Khi offline tự chọn local. Prompt dùng đề, kiến thức, hint đã mở và tối đa 6 tin nhắn gần nhất (mỗi tin tối đa 1.500 ký tự). Cả lịch sử vẫn được lưu trong sổ.
+6. Viết ghi chú/bài làm, đính kèm ảnh giải (PNG/JPG/WebP, tối đa 3 MB/ảnh, tổng 4 ảnh/bài).
+7. Lưu bài: đặt tên, chọn/tạo thư mục, đánh dấu đang làm/đã hoàn thành. Chỉ thông báo đã lưu sau khi IndexedDB ghi thành công.
+8. Mở Thư viện → thư mục → Mở bài. Đề, kiến thức, hint đã mở, ảnh, ghi chú và chat được phục hồi; không tạo lại AI. Có thể sửa ghi chú, lưu đè cùng bài, hoặc xóa.
+9. Sửa đề đã xác nhận sẽ yêu cầu bỏ kiến thức/hint/chat cũ để tránh trộn bài; giữ ghi chú và ảnh.
+
+## Lưu trữ và giới hạn
+
+- Notebook mới lưu IndexedDB, khóa bởi Firebase project ID + UID. Không hiển thị sổ người khác khi đổi tài khoản. Đăng xuất xóa trạng thái trên giao diện nhưng giữ sổ trên thiết bị.
+- Luôn cần đăng nhập trước khi dùng sổ; đăng ký/đăng nhập mới cần Auth/emulator. Có mạng không tự gửi bài lên cloud. Đồng bộ Firestore/Storage chưa có trong bản này.
+- Dữ liệu chỉ có trên trình duyệt/profile này; xóa dữ liệu trình duyệt có thể mất sổ. Giữ cùng Auth UID và emulator export để mở lại.
+- Kho ghi chú legacy trước đây không bị xóa, chưa được chuyển vào notebook mới. Các module reader/upload legacy vẫn giữ trong source, nhưng không nằm trên giao diện sổ.
+- Prompt ngắn và streaming vẫn dùng, không đảm bảo độ đúng hoặc hỗ trợ tiếng Việt của local trên mọi thiết bị. Quick/Hint legacy vẫn tồn tại cho code cũ.
+- Bản này chưa OCR, chưa AI chuẩn hóa đề, chưa đồng bộ cloud, chưa giải quyết xung đột sync và chưa triển khai production.
+
+## Kiểm tra
+
+```sh
+npm test
+npm run build
+```
+
+Tự nghiệm thu với emulator: hai tài khoản A/B (không thấy sổ nhau); lưu rồi F5; sửa lại cùng bài không nhân đôi; tất cả 3 hint; tắt cloud consent; chat offline sau khi model sẵn sàng; sai password; lỗi IndexedDB; giữ ảnh/LaTeX khi mở lại; restart emulator với import/export.
