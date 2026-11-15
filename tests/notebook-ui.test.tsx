@@ -53,6 +53,22 @@ beforeEach(async () => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 
 describe('saved page previews and workspace copies', () => {
+  it('saves and restores an unanalyzed problem without calling AI', async () => {
+    expect(button('Save exercise').disabled).toBe(true);
+    await type('[aria-label="Problem statement"]', 'Prove the theorem');
+    await type('[aria-label="Notes"]', 'Try induction');
+    await click('Save exercise');
+    await type('.save-dialog input', 'Induction');
+    await click('Save on this device');
+    const saved = stored().exercises[0];
+    expect(saved).toMatchObject({ title: 'Induction', confirmed: false, notes: 'Try induction' });
+    await click('＋ New exercise');
+    await openWorkspace();
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe(saved.statement);
+    expect(button('Confirm & analyze').disabled).toBe(false);
+    expect(mocks.ai).not.toHaveBeenCalled();
+  });
+
   it('opens all saved content in a dismissible preview; only notes can be edited', async () => {
     await library(); await click('Open exercise');
     const dialog = host.querySelector('[role="dialog"]')!;

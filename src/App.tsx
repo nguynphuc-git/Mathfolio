@@ -286,7 +286,7 @@ export default function App() {
     </section>}
     {user && !ready && <p role="status">Opening your notebook…</p>}
     {user && ready && tab === 'solve' && <>
-      <div className="page-heading"><div><p className="eyebrow">YOUR THINKING SPACE</p><h1>{draft.title || 'One problem. One discovery.'}</h1><p>Understand it. Try it. Open a hint when you need one.</p></div><div className="row"><button disabled={blocked} onClick={() => changeExercise(newExercise())}>＋ New exercise</button><>{savedDraft && <button disabled={blocked} onClick={() => beginSave(true)}>Rename / move</button>}<button className="primary" disabled={blocked || !draft.confirmed} onClick={() => beginSave()}>Save exercise {dirty ? '•' : ''}</button></></div></div>
+      <div className="page-heading"><div><p className="eyebrow">YOUR THINKING SPACE</p><h1>{draft.title || 'One problem. One discovery.'}</h1><p>Understand it. Try it. Open a hint when you need one.</p></div><div className="row"><button disabled={blocked} onClick={() => changeExercise(newExercise())}>＋ New exercise</button><>{savedDraft && <button disabled={blocked} onClick={() => beginSave(true)}>Rename / move</button>}<button className="primary" disabled={blocked || !draft.statement.trim()} onClick={() => beginSave()}>Save exercise {dirty ? '•' : ''}</button></></div></div>
       <div className="workspace">
         <section ref={problemPanel} className="paper problem"><div className="panel-heading"><span className="step">01</span><h2>Problem</h2><span className="tag">YOUR PROBLEM</span></div>
           <MathInput ref={input} value={statementLatex(draft.statement, draft.statementFormat)} readOnly={draft.confirmed} disabled={blocked} onChange={value => edit({ statement: value, statementFormat: 'latex' })}/>

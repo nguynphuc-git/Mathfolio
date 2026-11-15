@@ -1,3 +1,7 @@
+## Khởi động nhanh và lưu bài đang làm
+
+Mở trình khởi động cho hệ điều hành của bạn theo [README](README.md#chạy-thử-trên-máy-của-đồng-đội). Bạn có thể lưu đề, ghi chú và ảnh vào thư viện trước khi chọn **Confirm & analyze**, kể cả khi chưa có quota. Mở lại bằng **Open in workspace** để tiếp tục hoặc phân tích sau.
+
 ## Saved-page preview and stopping AI
 
 - **Open exercise** now opens a scrollable saved-page dialog in the library, showing the problem, essentials, opened hints, notes, attached images and conversation without running AI. Only notes can be edited here. **Save notes** updates the notes of the existing saved page; unsaved note changes are protected when closing the dialog with Close, Escape or the backdrop.
