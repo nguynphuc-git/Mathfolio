@@ -1,3 +1,11 @@
+## Update: visual math input and English interface
+
+The problem box now uses MathLive: symbols render while typing. The x² key inserts a superscript at the cursor without duplicating x. Use **Text mode** for prose and **Math mode** for equations. LaTeX remains the storage/AI representation; the editor displays typeset math. Fonts are bundled locally for offline use.
+
+There is no subject selector or subject assumption in notebook AI prompts. Knowledge generation receives only the current problem, uses English, and is asked for 1–3 short bullets (55 words maximum). Previous knowledge/chat is excluded from re-analysis to avoid repeating an unrelated course overview. Existing saved answers are preserved; choose **Refresh knowledge** to regenerate in English.
+
+On desktop/tablet the knowledge panel follows the problem panel height using ResizeObserver, and its contents scroll internally. On phones it has a bounded 400px height. The rest of the notebook remains in normal page flow.
+
 # Sổ bài tập StudyLens — bản đầu
 
 Nhánh này chuyển giao diện sang sổ bài tập theo bản phác thảo. React/Vite, Firebase Auth, cấu hình emulator và dịch vụ AI hiện tại vẫn được dùng; không thay .env.local hay triển khai Firebase rules.

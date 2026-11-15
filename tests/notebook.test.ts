@@ -38,8 +38,8 @@ describe('private exercise notebook', () => {
     expect(()=>putExercise(book,{...e,folderId:'missing'})).toThrow();
   });
   it('requires consent for cloud hints and chat before touching Firebase', async () => {
-    await expect(notebookAI({...request,purpose:'hint2'},vi.fn())).rejects.toThrow('cho phép');
-    await expect(notebookAI({...request,purpose:'chat',route:'cloud'},vi.fn())).rejects.toThrow('cho phép');
+    await expect(notebookAI({...request,purpose:'hint2'},vi.fn())).rejects.toThrow('Allow cloud AI');
+    await expect(notebookAI({...request,purpose:'chat',route:'cloud'},vi.fn())).rejects.toThrow('Allow cloud AI');
   });
   it('streams local prerequisites and keeps cloud calls gated by purpose', async()=>{
     vi.stubGlobal('navigator', {onLine:true});
@@ -56,10 +56,17 @@ describe('private exercise notebook', () => {
   });
   it('blocks cloud requests while offline', async()=>{
     vi.stubGlobal('navigator', {onLine:false});
-    await expect(notebookAI({...request,purpose:'hint3',cloudAllowed:true},vi.fn())).rejects.toThrow('Không có mạng');
+    await expect(notebookAI({...request,purpose:'hint3',cloudAllowed:true},vi.fn())).rejects.toThrow('offline');
   });
   it('keeps tutoring stages separate and treats learning input as untrusted data', () => {
     expect(notebookPrompt(request)).toContain('Do not solve');
+    expect(notebookPrompt(request)).toContain('maximum 55 words');
+    expect(notebookPrompt(request)).toContain('EXACT supplied problem');
+    expect(notebookPrompt(request)).toContain('Answer ONLY in English');
+    expect(notebookPrompt(request)).not.toContain('Subject: calculus');
+    const focused = notebookPrompt({...request,knowledge:'OLD_UNRELATED_CALCULUS',messages:[{role:'assistant',text:'OLD_COURSE_OVERVIEW'}]});
+    expect(focused).not.toContain('OLD_UNRELATED_CALCULUS');
+    expect(focused).not.toContain('OLD_COURSE_OVERVIEW');
     expect(notebookPrompt({...request,purpose:'hint1'})).toContain('Do not reveal');
     expect(notebookPrompt({...request,purpose:'hint2'})).toContain('Do not reveal the final');
     expect(notebookPrompt({...request,purpose:'hint3'})).toContain('full worked solution');
