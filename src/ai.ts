@@ -11,6 +11,7 @@ correctIndex: Schema.integer(), explanationMarkdown: Schema.string()
 } }) })
 } });
 const models = new Map<string, ReturnType<typeof getGenerativeModel>>();
+const localModelUnavailablePrefix = 'On-device model is not available in Chromium, this API is just echoing back the input:';
 function modelFor(r: Pick<StudyRequest, 'action' | 'policy' | 'language'>, signal?: AbortSignal) {
 const mode = r.action === 'deep' || r.action === 'quiz'
 ? InferenceMode.ONLY_IN_CLOUD
@@ -122,6 +123,8 @@ export async function study(
 }
 export function friendlyError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
+  if (/on-device ai is unavailable in this browser/i.test(message))
+    return 'On-device AI is unavailable in this browser. Turn on Cloud AI to use Firebase AI, or try a supported browser and device.';
   if (/429|quota|resource.exhausted/i.test(message)) return 'Rate limit reached. Wait before retrying, or use local AI.';
   if (/403|app.check|attestation|token/i.test(message)) return 'Check App Check, this device debug token, and Firebase project permissions.';
   if (/404|model.not.found/i.test(message)) return 'Cloud model unavailable. Check VITE_CLOUD_MODEL and project access.';
@@ -190,14 +193,21 @@ export async function notebookAI(r: NotebookRequest, onText: (text: string) => v
     void result.response.catch(() => {});
     return result;
   }), signal);
-  let text = ''; let last = -Infinity;
+  let text = ''; let last = -Infinity; let emitted = false; let bufferingLocalPrefix = !cloud; let localModelUnavailable = false;
   const iterator = streamed.stream[Symbol.asyncIterator]();
   try {
     while (true) {
       const chunk = await abortable(iterator.next(), signal);
       signal?.throwIfAborted();
       if (chunk.done) break;
+      if (localModelUnavailable) continue;
       text += chunk.value.text();
+      if (bufferingLocalPrefix) {
+        if (localModelUnavailablePrefix.startsWith(text)) continue;
+        if (text.startsWith(localModelUnavailablePrefix)) { localModelUnavailable = true; continue; }
+        onText(text); emitted = true; bufferingLocalPrefix = false; last = performance.now();
+        continue;
+      }
       if (performance.now() - last >= 100) { onText(text); last = performance.now(); }
     }
     const response = await abortable(streamed.response, signal);
@@ -205,6 +215,9 @@ export async function notebookAI(r: NotebookRequest, onText: (text: string) => v
     if (response.candidates?.some(c => c.finishReason === 'MAX_TOKENS')) throw new Error('The response was cut off. Ask about a smaller part.');
     const result = response.text().trim();
     if (!result) throw new Error('No answer was returned. Try again or revise the problem.');
+    if (!cloud && result.startsWith(localModelUnavailablePrefix))
+      throw new Error('On-device AI is unavailable in this browser. Enable Cloud AI to use Firebase AI, or try a browser and device that support an on-device model.');
+    if (!emitted) onText(result);
     return { text: result, source: response.inferenceSource ?? 'UNKNOWN' };
   } finally {
     if (signal?.aborted) void iterator.return?.(undefined).catch(() => {});

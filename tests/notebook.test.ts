@@ -83,6 +83,22 @@ describe('private exercise notebook', () => {
     vi.stubGlobal('navigator', {onLine:false});
     await expect(notebookAI({...request,purpose:'hint3',route:'cloud',cloudAllowed:true},vi.fn())).rejects.toThrow('offline');
   });
+  it('does not show or save Chromium local-model prompt echoes as an answer', async () => {
+    const prompt = notebookPrompt(request);
+    const echoed = `On-device model is not available in Chromium, this API is just echoing back the input: ${prompt}`;
+    getModel.mockReturnValue(model);
+    model.generateContentStream.mockResolvedValue({
+      stream: (async function*(){
+        yield { text: () => echoed.slice(0, 40) };
+        yield { text: () => echoed.slice(40, 100) };
+        yield { text: () => echoed.slice(100) };
+      })(),
+      response: Promise.resolve({ text: () => echoed, candidates: [] })
+    });
+    const onText = vi.fn();
+    await expect(notebookAI(request, onText)).rejects.toThrow('On-device AI is unavailable in this browser');
+    expect(onText).not.toHaveBeenCalled();
+  });
   it('keeps tutoring stages separate and treats learning input as untrusted data', () => {
     expect(notebookPrompt(request)).toContain('Do not solve');
     expect(notebookPrompt(request)).toContain('Answer in English');
