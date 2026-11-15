@@ -10,7 +10,7 @@ import { NotesEditor } from './components/NotesEditor';
 import { MathInput, type MathInputHandle } from './components/MathInput';
 import { statementLatex } from './math-input';
 import { mixedTextToLatex } from './math-paste';
-import type { PdfQuestion } from './pdf';
+import type { PdfProgress, PdfQuestion } from './pdf';
 import './notebook.css';
 
 const symbols = [ ['x²', '^{2}'], ['xⁿ', '^{#?}'], ['√', '\\sqrt{#?}'], ['a/b', '\\frac{#?}{#?}'], ['∑', '\\sum_{i=1}^{n}'], ['∫', '\\int_{}^{}'], ['lim', '\\lim_{x\\to 0}'], ['∞', '\\infty'], ['≤', '\\leq'], ['≥', '\\geq'], ['≠', '\\neq'], ['∈', '\\in'], ['∀', '\\forall'], ['⇒', '\\Rightarrow'], ['α', '\\alpha'], ['π', '\\pi'] ];
@@ -28,6 +28,7 @@ export default function App() {
   const [pdfSelected, setPdfSelected] = useState<PdfQuestion | null>(null);
   const [pdfSelectedIndex, setPdfSelectedIndex] = useState(0);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState<PdfProgress | null>(null);
   const [collapsedHints, setCollapsedHints] = useState<number[]>([]);
   const [preview, setPreview] = useState<{ id: string; notes: string } | null>(null);
   const [previewError, setPreviewError] = useState('');
@@ -101,13 +102,13 @@ export default function App() {
   function edit(update: Partial<Exercise>) { setDraft(value => ({ ...value, ...update })); setDirty(true); }
   async function loadPdf(file?: File) {
     if (!file) return;
-    setPdfBusy(true); setError(''); setStatus('');
+    setPdfBusy(true); setPdfProgress(null); setError(''); setStatus('');
     try {
       const { extractPdfQuestions } = await import('./pdf');
-      const questions = await extractPdfQuestions(file);
+      const questions = await extractPdfQuestions(file, setPdfProgress);
       setPdfQuestions(questions); setPdfSelected(questions[0] ?? null); setPdfSelectedIndex(0);
     } catch (e) { setError(friendlyError(e)); }
-    finally { setPdfBusy(false); }
+    finally { setPdfBusy(false); setPdfProgress(null); }
   }
   function usePdfQuestion() {
     if (!pdfSelected) return;
@@ -341,10 +342,10 @@ export default function App() {
           {!draft.confirmed && <><p className="subtle">Type your problem or paste LaTeX. Insert symbols directly below.</p><div className="math-keys">{symbols.map(([label, latex]) => <button key={label} disabled={blocked} onMouseDown={e => e.preventDefault()} onClick={() => insertMath(latex)} aria-label={`Insert ${label}`}>{label}</button>)}</div></>}
 
           <div className="row problem-import">
-            {!draft.confirmed && <label className="attachment-button">＋ Choose text PDF<input aria-label="Choose a text PDF" type="file" accept="application/pdf,.pdf" disabled={blocked || pdfBusy} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void loadPdf(file); }}/></label>}
-            {pdfBusy && <span role="status" className="subtle">Reading PDF text…</span>}
+            {!draft.confirmed && <label className="attachment-button">＋ Choose PDF<input aria-label="Choose a PDF" type="file" accept="application/pdf,.pdf" disabled={blocked || pdfBusy} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void loadPdf(file); }}/></label>}
+            {pdfBusy && <span role="status" className="subtle">{pdfProgress?.stage === 'ocr' ? `Local OCR · page ${pdfProgress.page} of ${pdfProgress.total}…` : pdfProgress ? `Reading PDF · page ${pdfProgress.page} of ${pdfProgress.total}…` : 'Preparing local OCR…'}</span>}
             <label className="attachment-button">＋ Attach problem image<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'problem'); }}/></label>
-          </div><p className="subtle">PDF import works with selectable text only. Scanned-image OCR is not available yet. Images are attachments only; automatic image reading is not available.</p>
+          </div><p className="subtle">Selectable PDF text is extracted directly. Scanned pages are recognized locally in Vietnamese and English; check formulas because OCR can misread math. Images are attachments only; automatic image reading is not available.</p>
           <div className="attachments">{draft.attachments.filter(a => a.kind === 'problem').map(a => <figure key={a.id}><a href={a.data} target="_blank" rel="noreferrer"><img src={a.data} alt={a.name}/></a><figcaption>{a.name}<button disabled={blocked} onClick={() => edit({ attachments: draft.attachments.filter(x => x.id !== a.id) })}>Remove</button></figcaption></figure>)}</div>
           <div className="row">{draft.confirmed && <button disabled={blocked} onClick={editStatement}>Edit problem</button>}<button className="primary" disabled={blocked || !draft.statement.trim()} onClick={() => void ask('knowledge')}>{draft.confirmed ? 'Refresh knowledge' : 'Confirm & analyze'}</button></div>
         </section>
@@ -373,7 +374,7 @@ export default function App() {
     {saveOpen && <div className="modal-backdrop"><section className="paper save-dialog" role="dialog" aria-modal="true" aria-labelledby="save-title"><p className="eyebrow">KEEP THIS PAGE</p><h2 id="save-title">Save to your notebook</h2><label>Exercise name<input autoFocus required maxLength={120} value={title} disabled={saving} onChange={e => setTitle(e.target.value)}/></label><label>Folder<select value={folderId} disabled={saving || !!newFolder.trim()} onChange={e => setFolderId(e.target.value)}>{book.folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><label>Or create a new folder<input maxLength={80} value={newFolder} disabled={saving} onChange={e => setNewFolder(e.target.value)} placeholder="e.g. Algebra — week 1"/></label><p className="subtle">The problem, essentials, opened hints, notes, images and chat stay on this browser. Cloud sync is not available yet.</p>{error && <p role="alert" className="error">{error}</p>}<div className="row"><button disabled={saving} onClick={() => setSaveOpen(false)}>Not now</button><button className="primary" disabled={saving || !title.trim()} onClick={() => void save()}>{saving ? 'Saving…' : 'Save on this device'}</button></div></section></div>}
   </main>{pdfQuestions !== null && <div className="modal-backdrop pdf-backdrop"><section className="paper save-dialog pdf-dialog" role="dialog" aria-modal="true" aria-labelledby="pdf-title">
     <p className="eyebrow">IMPORT A PROBLEM</p><h2 id="pdf-title">Choose a question from your PDF</h2>
-    {!pdfQuestions.length ? <p role="status">No selectable text was found. Scanned-image OCR is not available yet.</p> : <div className="pdf-picker">
+    {!pdfQuestions.length ? <p role="status">No readable text was found after local OCR.</p> : <div className="pdf-picker">
       <div className="pdf-question-list" role="list" aria-label="Extracted PDF text">
         {pdfQuestions.map((item, index) => <button type="button" role="listitem" key={`${item.page}-${index}`} aria-pressed={pdfSelectedIndex === index} onClick={() => { setPdfSelected(item); setPdfSelectedIndex(index); }}>
           <strong>Page {item.page} · Text {index + 1}</strong><span>{item.text.slice(0, 180)}{item.text.length > 180 ? '…' : ''}</span>
@@ -381,7 +382,7 @@ export default function App() {
       </div>
       {pdfSelected && <label className="pdf-selection">Selected text — edit before using<textarea aria-label="Selected PDF question" maxLength={6000} value={pdfSelected.text} onChange={event => setPdfSelected({ ...pdfSelected, text: event.target.value })}/>{pdfSelected.text.length > 6000 && <small className="error">Select a shorter question to stay within the 6,000-character limit.</small>}</label>}
     </div>}
-    <p className="subtle">Imported text is placed in the problem editor for you to review before analysis.</p>
+    <p className="subtle">Imported text is placed in the problem editor for you to review before analysis. OCR runs locally in Vietnamese and English; formulas may need correction.</p>
     <div className="row"><button type="button" onClick={() => { setPdfQuestions(null); setPdfSelected(null); setPdfSelectedIndex(0); }}>Cancel</button><button type="button" className="primary" disabled={!pdfSelected?.text.trim() || pdfSelected.text.length > 6000} onClick={usePdfQuestion}>Use this text</button></div>
   </section></div>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={book.folders.find(value => value.id === previewExercise.folderId)?.name ?? 'My exercises'} notes={preview.notes} saving={saving} suspended={!!confirmation} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</>;
 }

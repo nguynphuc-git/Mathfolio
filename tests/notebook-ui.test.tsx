@@ -59,7 +59,7 @@ describe('saved page previews and workspace copies', () => {
       { page: 1, text: '1. Solve x^2=4' },
       { page: 2, text: '2. Find y when y+1=3' }
     ]);
-    const upload = host.querySelector<HTMLInputElement>('[aria-label="Choose a text PDF"]')!;
+    const upload = host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
     const file = new File(['mock pdf'], 'questions.pdf', { type: 'application/pdf' });
     Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
     await act(async () => { upload.dispatchEvent(new Event('change', { bubbles: true })); });
@@ -74,11 +74,11 @@ describe('saved page previews and workspace copies', () => {
   });
 
   it('reports PDF extraction errors without opening an empty question picker', async () => {
-    mocks.pdf.mockRejectedValue(new Error('OCR is not available for scanned PDFs.'));
-    const upload = host.querySelector<HTMLInputElement>('[aria-label="Choose a text PDF"]')!;
+    mocks.pdf.mockRejectedValue(new Error('Could not recognize text in this PDF.'));
+    const upload = host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
     Object.defineProperty(upload, 'files', { configurable: true, value: [new File(['mock'], 'scan.pdf', { type: 'application/pdf' })] });
     await act(async () => { upload.dispatchEvent(new Event('change', { bubbles: true })); });
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain('OCR is not available');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not recognize text');
     expect(host.querySelector('[role="dialog"]')).toBeNull();
   });
 

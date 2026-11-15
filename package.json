@@ -8,12 +8,16 @@
 },
 "scripts": {
 "local": "node scripts/start-local.mjs",
+"predev": "node scripts/prepare-ocr-assets.mjs",
 "dev": "vite --host 0.0.0.0",
+"prebuild": "node scripts/prepare-ocr-assets.mjs",
 "build": "tsc --noEmit && vite build",
 "preview": "vite preview --host 0.0.0.0",
 "test": "vitest run"
 },
 "dependencies": {
+"@tesseract.js-data/eng": "1.0.0",
+"@tesseract.js-data/vie": "1.0.0",
 "firebase": "13.3.0",
 "idb-keyval": "6.3.0",
 "katex": "0.19.1",
@@ -24,7 +28,8 @@
 "react-markdown": "10.1.0",
 "rehype-katex": "7.0.1",
 "remark-gfm": "4.0.1",
-"remark-math": "6.0.0"
+"remark-math": "6.0.0",
+"tesseract.js": "7.0.0"
 },
 "devDependencies": {
 "@playwright/test": "1.65.0",
