@@ -103,6 +103,8 @@ describe('private exercise notebook', () => {
     expect(notebookPrompt(request)).toContain('Do not solve');
     expect(notebookPrompt(request)).toContain('Answer in English');
     expect(notebookPrompt(request).length).toBeLessThan(700);
+    expect(notebookPrompt({...request,purpose:'hint1'})).toContain('one short next-step hint');
+    expect(notebookPrompt({...request,purpose:'knowledge'})).toContain('Never invent missing conditions');
     expect(notebookPrompt(request)).not.toContain('Subject: calculus');
     const focused = notebookPrompt({...request,route:'cloud',knowledge:'OLD_UNRELATED_CALCULUS',messages:[{role:'assistant',text:'OLD_COURSE_OVERVIEW'}]});
     expect(focused).not.toContain('OLD_UNRELATED_CALCULUS');

@@ -41,6 +41,8 @@ The problem box now uses MathLive: symbols render while typing. The x² key inse
 
 There is no subject selector or subject assumption in notebook AI prompts. Knowledge generation receives only the current problem and uses English. Recognized single-variable linear/quadratic equations get verified local formula cards with conditions and no numeric solution, labeled local reference rather than AI. Other analysis and all hint levels use the on-device model by default, with compact prompts to reduce device input limits; enable **Cloud AI** to use Firebase AI for analysis and hints 2/3. Conditional reference cues cover derivatives, integrals, logarithms, trigonometry, right triangles, probability, sequences and matrices; this is not an exhaustive mathematics engine. Previous knowledge/chat is excluded from re-analysis to avoid repeating an unrelated course overview. Existing saved answers are preserved; choose **Refresh knowledge** to regenerate in English.
 
+Enter a problem by typing or pasting LaTeX into the math editor, or import a selectable-text PDF. PDF import extracts up to 30 pages / 150,000 characters, offers numbered questions (or page text when numbering is not detected), and lets you edit the selection before inserting it into the editor. The problem editor limit remains 6,000 characters. Scanned-image PDFs are not OCR'd; use a PDF with selectable text.
+
 On desktop/tablet the knowledge panel follows the problem panel height using ResizeObserver, and its contents scroll internally. On phones it has a bounded 400px height. The rest of the notebook remains in normal page flow.
 
 # Sổ bài tập StudyLens — bản đầu

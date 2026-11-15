@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NotebookRequest } from '../src/ai';
 import type { Answer, Notebook } from '../src/notebook';
 
-const mocks = vi.hoisted(() => ({ values: new Map<string, Notebook>(), ai: vi.fn(), write: vi.fn() }));
+const mocks = vi.hoisted(() => ({ values: new Map<string, Notebook>(), ai: vi.fn(), write: vi.fn(), pdf: vi.fn() }));
 vi.mock('idb-keyval', () => ({ get: vi.fn(async (key: string) => structuredClone(mocks.values.get(key))), set: async (key: string, value: Notebook) => { mocks.write(key, value); mocks.values.set(key, structuredClone(value)); } }));
 vi.mock('../src/firebase', () => ({ getFirebaseApp: () => ({}) }));
 vi.mock('firebase/auth', () => ({
@@ -14,6 +14,7 @@ vi.mock('firebase/auth', () => ({
   createUserWithEmailAndPassword: vi.fn(), signInWithEmailAndPassword: vi.fn(), signOut: vi.fn()
 }));
 vi.mock('../src/ai', () => ({ notebookAI: mocks.ai, friendlyError: (error: Error) => error.message }));
+vi.mock('../src/pdf', () => ({ extractPdfQuestions: mocks.pdf }));
 // MathLive caret/layout is tested manually in Chrome; these tests exercise page state and persistence.
 vi.mock('../src/components/MathInput', () => ({ MathInput: forwardRef(function Field(props: { value: string; onChange?: (value: string) => void; readOnly?: boolean; disabled?: boolean; label?: string }, ref) {
   useImperativeHandle(ref, () => ({ focus() {}, insert() {} }));
@@ -44,7 +45,7 @@ async function openWorkspace() { await library(); await click('Open exercise'); 
 beforeEach(async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
-  mocks.ai.mockReset(); mocks.write.mockReset(); mocks.values.clear();
+  mocks.ai.mockReset(); mocks.write.mockReset(); mocks.pdf.mockReset(); mocks.values.clear();
   const first = { ...newExercise(), id: 'first', title: 'Quadratic page', statement: 'x^2+2x=0', confirmed: true, notes: 'Original notes', knowledge: { text: 'Original essentials', source: 'local_reference' }, hints: [{ text: 'Original hint', source: 'on_device' }], messages: [{ role: 'user' as const, text: 'Original question' }], attachments: [{ id: 'image', name: 'solution.png', data: 'data:image/png;base64,AA==', kind: 'solution' as const }] };
   mocks.values.set(storageKey, { ...emptyNotebook(), exercises: [first, { ...newExercise(), id: 'second', title: 'Second page', statement: 'x=1', confirmed: true }] });
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
@@ -53,6 +54,34 @@ beforeEach(async () => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('saved page previews and workspace copies', () => {
+  it('lets the learner choose and edit extracted PDF text before inserting it', async () => {
+    mocks.pdf.mockResolvedValue([
+      { page: 1, text: '1. Solve x^2=4' },
+      { page: 2, text: '2. Find y when y+1=3' }
+    ]);
+    const upload = host.querySelector<HTMLInputElement>('[aria-label="Choose a text PDF"]')!;
+    const file = new File(['mock pdf'], 'questions.pdf', { type: 'application/pdf' });
+    Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
+    await act(async () => { upload.dispatchEvent(new Event('change', { bubbles: true })); });
+    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Choose a question from your PDF');
+    const second = [...host.querySelectorAll<HTMLButtonElement>('[role="list"] button')].find(item => item.textContent?.includes('Page 2'))!;
+    await act(async () => { second.click(); });
+    await type('[aria-label="Selected PDF question"]', '2. Find y when y+1=5');
+    await click('Use this text');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain('y+1=5');
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+    expect(host.textContent).toContain('Review it before analyzing');
+  });
+
+  it('reports PDF extraction errors without opening an empty question picker', async () => {
+    mocks.pdf.mockRejectedValue(new Error('OCR is not available for scanned PDFs.'));
+    const upload = host.querySelector<HTMLInputElement>('[aria-label="Choose a text PDF"]')!;
+    Object.defineProperty(upload, 'files', { configurable: true, value: [new File(['mock'], 'scan.pdf', { type: 'application/pdf' })] });
+    await act(async () => { upload.dispatchEvent(new Event('change', { bubbles: true })); });
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('OCR is not available');
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+  });
+
   it('saves and restores an unanalyzed problem without calling AI', async () => {
     expect(button('Save exercise').disabled).toBe(true);
     await type('[aria-label="Problem statement"]', 'Prove the theorem');

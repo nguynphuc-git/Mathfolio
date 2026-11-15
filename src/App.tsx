@@ -9,6 +9,8 @@ import { ExercisePreview } from './components/ExercisePreview';
 import { NotesEditor } from './components/NotesEditor';
 import { MathInput, type MathInputHandle } from './components/MathInput';
 import { statementLatex } from './math-input';
+import { mixedTextToLatex } from './math-paste';
+import type { PdfQuestion } from './pdf';
 import './notebook.css';
 
 const symbols = [ ['x²', '^{2}'], ['xⁿ', '^{#?}'], ['√', '\\sqrt{#?}'], ['a/b', '\\frac{#?}{#?}'], ['∑', '\\sum_{i=1}^{n}'], ['∫', '\\int_{}^{}'], ['lim', '\\lim_{x\\to 0}'], ['∞', '\\infty'], ['≤', '\\leq'], ['≥', '\\geq'], ['≠', '\\neq'], ['∈', '\\in'], ['∀', '\\forall'], ['⇒', '\\Rightarrow'], ['α', '\\alpha'], ['π', '\\pi'] ];
@@ -22,6 +24,10 @@ export default function App() {
   const [folder, setFolder] = useState<string | null>(null); const [saveOpen, setSaveOpen] = useState(false);
   const [title, setTitle] = useState(''); const [folderId, setFolderId] = useState('general'); const [newFolder, setNewFolder] = useState('');
   const [folderDialog, setFolderDialog] = useState(false); const [folderName, setFolderName] = useState('');
+  const [pdfQuestions, setPdfQuestions] = useState<PdfQuestion[] | null>(null);
+  const [pdfSelected, setPdfSelected] = useState<PdfQuestion | null>(null);
+  const [pdfSelectedIndex, setPdfSelectedIndex] = useState(0);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [collapsedHints, setCollapsedHints] = useState<number[]>([]);
   const [preview, setPreview] = useState<{ id: string; notes: string } | null>(null);
   const [previewError, setPreviewError] = useState('');
@@ -76,12 +82,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!saveOpen && !folderDialog) return;
+    if (!saveOpen && !folderDialog && pdfQuestions === null) return;
     const previous = documentActiveElement();
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !saving) { event.preventDefault(); setSaveOpen(false); setFolderDialog(false); }
+      if (event.key === 'Escape' && !saving) { event.preventDefault(); setSaveOpen(false); setFolderDialog(false); setPdfQuestions(null); }
       if (event.key !== 'Tab') return;
-      const nodes = [...window.document.querySelectorAll<HTMLElement>('[role="dialog"] button:not(:disabled), [role="dialog"] input:not(:disabled), [role="dialog"] select:not(:disabled)')];
+      const nodes = [...window.document.querySelectorAll<HTMLElement>('[role="dialog"] button:not(:disabled), [role="dialog"] input:not(:disabled), [role="dialog"] select:not(:disabled), [role="dialog"] textarea:not(:disabled)')];
       const first = nodes[0], last = nodes.at(-1);
       if (!first || !last) return;
       if (event.shiftKey && window.document.activeElement === first) { event.preventDefault(); last.focus(); }
@@ -89,10 +95,28 @@ export default function App() {
     };
     window.document.addEventListener('keydown', handleKey);
     return () => { window.document.removeEventListener('keydown', handleKey); previous?.focus(); };
-  }, [saveOpen, folderDialog, saving]);
+  }, [saveOpen, folderDialog, pdfQuestions, saving]);
   function documentActiveElement() { return window.document.activeElement instanceof HTMLElement ? window.document.activeElement : undefined; }
 
   function edit(update: Partial<Exercise>) { setDraft(value => ({ ...value, ...update })); setDirty(true); }
+  async function loadPdf(file?: File) {
+    if (!file) return;
+    setPdfBusy(true); setError(''); setStatus('');
+    try {
+      const { extractPdfQuestions } = await import('./pdf');
+      const questions = await extractPdfQuestions(file);
+      setPdfQuestions(questions); setPdfSelected(questions[0] ?? null); setPdfSelectedIndex(0);
+    } catch (e) { setError(friendlyError(e)); }
+    finally { setPdfBusy(false); }
+  }
+  function usePdfQuestion() {
+    if (!pdfSelected) return;
+    const statement = mixedTextToLatex(pdfSelected.text);
+    if (statement.length > 6000) { setError('This text is longer than the 6,000-character problem limit. Select a shorter question.'); return; }
+    edit({ statement, statementFormat: 'latex' });
+    setPdfQuestions(null); setPdfSelected(null); setPdfSelectedIndex(0);
+    setStatus('PDF text added to the problem editor. Review it before analyzing.');
+  }
   function confirmChange(value: Confirmation) {
     return new Promise<boolean>(resolve => { confirmationResult.current?.(false); confirmationResult.current=resolve; setConfirmation(value); });
   }
@@ -296,7 +320,7 @@ export default function App() {
   const shown = folder ? book.exercises.filter(e => e.folderId === folder) : [];
   const previewExercise = preview ? book.exercises.find(exercise => exercise.id === preview.id) : undefined;
   const savedDraft = book.exercises.some(exercise => exercise.id === draft.id);
-  return <><main className="notebook-app" inert={!!confirmation || !!preview}>
+  return <><main className="notebook-app" inert={!!confirmation || !!preview || pdfQuestions !== null}>
     <header className="notebook-header"><a className="brand" href="#" onClick={e => { e.preventDefault(); setTab('solve'); }}><span className="brand-mark">M</span><span>Mathfolio<small>YOUR DIGITAL EXERCISE BOOK</small></span></a>
       <nav aria-label="Navigation"><button className={tab === 'solve' ? 'active' : ''} onClick={() => setTab('solve')}>Workspace</button><button className={tab === 'library' ? 'active' : ''} onClick={() => setTab('library')}>Exercise library <span>{book.exercises.length}</span></button><button className={tab === 'account' ? 'active' : ''} onClick={() => setTab('account')}>{user ? 'Account' : 'Sign in'}</button></nav>
     </header>
@@ -314,9 +338,13 @@ export default function App() {
       <div className="workspace">
         <section ref={problemPanel} className="paper problem"><div className="panel-heading"><span className="step">01</span><h2>Problem</h2><span className="tag">YOUR PROBLEM</span></div>
           <MathInput ref={input} value={statementLatex(draft.statement, draft.statementFormat)} readOnly={draft.confirmed} disabled={blocked} onChange={value => edit({ statement: value, statementFormat: 'latex' })}/>
-          {!draft.confirmed && <><p className="subtle">Insert symbols directly into your problem.</p><div className="math-keys">{symbols.map(([label, latex]) => <button key={label} disabled={blocked} onMouseDown={e => e.preventDefault()} onClick={() => insertMath(latex)} aria-label={`Insert ${label}`}>{label}</button>)}</div></>}
+          {!draft.confirmed && <><p className="subtle">Type your problem or paste LaTeX. Insert symbols directly below.</p><div className="math-keys">{symbols.map(([label, latex]) => <button key={label} disabled={blocked} onMouseDown={e => e.preventDefault()} onClick={() => insertMath(latex)} aria-label={`Insert ${label}`}>{label}</button>)}</div></>}
 
-          <label className="attachment-button">＋ Attach problem image<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'problem'); }}/></label><p className="subtle">Images are attachments only. Enter the problem above; automatic image reading is not available yet.</p>
+          <div className="row problem-import">
+            {!draft.confirmed && <label className="attachment-button">＋ Choose text PDF<input aria-label="Choose a text PDF" type="file" accept="application/pdf,.pdf" disabled={blocked || pdfBusy} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void loadPdf(file); }}/></label>}
+            {pdfBusy && <span role="status" className="subtle">Reading PDF text…</span>}
+            <label className="attachment-button">＋ Attach problem image<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'problem'); }}/></label>
+          </div><p className="subtle">PDF import works with selectable text only. Scanned-image OCR is not available yet. Images are attachments only; automatic image reading is not available.</p>
           <div className="attachments">{draft.attachments.filter(a => a.kind === 'problem').map(a => <figure key={a.id}><a href={a.data} target="_blank" rel="noreferrer"><img src={a.data} alt={a.name}/></a><figcaption>{a.name}<button disabled={blocked} onClick={() => edit({ attachments: draft.attachments.filter(x => x.id !== a.id) })}>Remove</button></figcaption></figure>)}</div>
           <div className="row">{draft.confirmed && <button disabled={blocked} onClick={editStatement}>Edit problem</button>}<button className="primary" disabled={blocked || !draft.statement.trim()} onClick={() => void ask('knowledge')}>{draft.confirmed ? 'Refresh knowledge' : 'Confirm & analyze'}</button></div>
         </section>
@@ -343,5 +371,17 @@ export default function App() {
     {user && ready && tab === 'library' && <section><div className="page-heading"><div><p className="eyebrow">PAGES OF PROGRESS</p><h1>{folder ? book.folders.find(f => f.id === folder)?.name : 'Exercise library'}</h1><p>Revisit your thinking. Continue where you left off.</p></div><div className="row"><button disabled={blocked} onClick={() => { setFolderName(''); setError(''); setFolderDialog(true); }}>＋ New folder</button>{folder && folder !== 'general' && <button disabled={blocked} onClick={() => void deleteFolder(folder)}>Delete folder</button>}<button disabled={blocked} onClick={() => changeExercise(newExercise())}>＋ New exercise</button></div></div>{folder ? <><button onClick={() => setFolder(null)}>← All folders</button><div className="exercise-list">{!shown.length && <div className="paper empty-panel">No exercises in this folder yet.</div>}{shown.map(e => <article className="paper exercise-card" key={e.id}><div><span className={`tag ${e.completed ? 'done' : ''}`}>{e.completed ? 'Completed' : 'In progress'}</span><h2>{e.title}</h2><MathInput value={statementLatex(e.statement, e.statementFormat)} readOnly compact label={`Problem: ${e.title}`}/><small>{new Date(e.updatedAt).toLocaleString('en-GB')} · {e.hints.length}/3 hints opened</small></div><div className="row"><button className="primary" disabled={blocked} onClick={() => openPreview(e)}>Open exercise</button><button disabled={blocked} onClick={() => void deleteExercise(e.id)}>Delete</button></div></article>)}</div></> : <div className="folder-grid">{book.folders.map(f => <article className="paper folder-card" key={f.id}><button className="folder-open" disabled={blocked} onClick={() => setFolder(f.id)}><span aria-hidden="true">▱</span><h2>{f.name}</h2><small>{book.exercises.filter(e => e.folderId === f.id).length} exercises →</small></button>{f.id !== 'general' && <button className="folder-delete" disabled={blocked} aria-label={`Delete folder ${f.name}`} onClick={() => void deleteFolder(f.id)}>Delete folder</button>}</article>)}</div>}</section>}
     {folderDialog && <div className="modal-backdrop"><section className="paper save-dialog" role="dialog" aria-modal="true" aria-labelledby="folder-title"><p className="eyebrow">ORGANIZE YOUR THINKING</p><h2 id="folder-title">New folder</h2><form onSubmit={e => { e.preventDefault(); void createFolder(); }}><label>Folder name<input autoFocus required maxLength={80} value={folderName} disabled={saving} onChange={e => setFolderName(e.target.value)} placeholder="e.g. Algebra — week 1"/></label>{error && <p role="alert" className="error">{error}</p>}<div className="row"><button type="button" disabled={saving} onClick={() => setFolderDialog(false)}>Cancel</button><button className="primary" type="submit" disabled={saving || !folderName.trim()}>{saving ? 'Creating…' : 'Create folder'}</button></div></form></section></div>}
     {saveOpen && <div className="modal-backdrop"><section className="paper save-dialog" role="dialog" aria-modal="true" aria-labelledby="save-title"><p className="eyebrow">KEEP THIS PAGE</p><h2 id="save-title">Save to your notebook</h2><label>Exercise name<input autoFocus required maxLength={120} value={title} disabled={saving} onChange={e => setTitle(e.target.value)}/></label><label>Folder<select value={folderId} disabled={saving || !!newFolder.trim()} onChange={e => setFolderId(e.target.value)}>{book.folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><label>Or create a new folder<input maxLength={80} value={newFolder} disabled={saving} onChange={e => setNewFolder(e.target.value)} placeholder="e.g. Algebra — week 1"/></label><p className="subtle">The problem, essentials, opened hints, notes, images and chat stay on this browser. Cloud sync is not available yet.</p>{error && <p role="alert" className="error">{error}</p>}<div className="row"><button disabled={saving} onClick={() => setSaveOpen(false)}>Not now</button><button className="primary" disabled={saving || !title.trim()} onClick={() => void save()}>{saving ? 'Saving…' : 'Save on this device'}</button></div></section></div>}
-  </main>{preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={book.folders.find(value => value.id === previewExercise.folderId)?.name ?? 'My exercises'} notes={preview.notes} saving={saving} suspended={!!confirmation} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</>;
+  </main>{pdfQuestions !== null && <div className="modal-backdrop pdf-backdrop"><section className="paper save-dialog pdf-dialog" role="dialog" aria-modal="true" aria-labelledby="pdf-title">
+    <p className="eyebrow">IMPORT A PROBLEM</p><h2 id="pdf-title">Choose a question from your PDF</h2>
+    {!pdfQuestions.length ? <p role="status">No selectable text was found. Scanned-image OCR is not available yet.</p> : <div className="pdf-picker">
+      <div className="pdf-question-list" role="list" aria-label="Extracted PDF text">
+        {pdfQuestions.map((item, index) => <button type="button" role="listitem" key={`${item.page}-${index}`} aria-pressed={pdfSelectedIndex === index} onClick={() => { setPdfSelected(item); setPdfSelectedIndex(index); }}>
+          <strong>Page {item.page} · Text {index + 1}</strong><span>{item.text.slice(0, 180)}{item.text.length > 180 ? '…' : ''}</span>
+        </button>)}
+      </div>
+      {pdfSelected && <label className="pdf-selection">Selected text — edit before using<textarea aria-label="Selected PDF question" maxLength={6000} value={pdfSelected.text} onChange={event => setPdfSelected({ ...pdfSelected, text: event.target.value })}/>{pdfSelected.text.length > 6000 && <small className="error">Select a shorter question to stay within the 6,000-character limit.</small>}</label>}
+    </div>}
+    <p className="subtle">Imported text is placed in the problem editor for you to review before analysis.</p>
+    <div className="row"><button type="button" onClick={() => { setPdfQuestions(null); setPdfSelected(null); setPdfSelectedIndex(0); }}>Cancel</button><button type="button" className="primary" disabled={!pdfSelected?.text.trim() || pdfSelected.text.length > 6000} onClick={usePdfQuestion}>Use this text</button></div>
+  </section></div>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={book.folders.find(value => value.id === previewExercise.folderId)?.name ?? 'My exercises'} notes={preview.notes} saving={saving} suspended={!!confirmation} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</>;
 }
