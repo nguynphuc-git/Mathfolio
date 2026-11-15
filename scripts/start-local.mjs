@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
+import { startLocalMathOcr } from './local-math-ocr.mjs';
 
 process.chdir(fileURLToPath(new URL('..', import.meta.url)));
 const [major, minor] = process.versions.node.split('.').map(Number);
@@ -32,6 +33,7 @@ process.env.VITE_USE_EMULATORS = 'true';
 const { createServer } = await import('vite');
 const web = await createServer({ server: { host: 'localhost', port: 5173, strictPort: true, open: false } });
 await web.listen();
+const mathOcr = startLocalMathOcr();
 console.log('Mathfolio · Nhấn Ctrl+C một lần để lưu tài khoản rồi thoát.');
 const emulator = spawn(process.execPath, cliArgs, { stdio: ['inherit', 'pipe', 'inherit'] });
 let opened = false;
@@ -52,5 +54,6 @@ try {
   const [code] = await once(emulator, 'exit');
   process.exitCode = code ?? 1;
 } finally {
+  mathOcr?.kill('SIGTERM');
   await web.close();
 }

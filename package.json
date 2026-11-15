@@ -8,10 +8,12 @@
 },
 "scripts": {
 "local": "node scripts/start-local.mjs",
+"prelocal": "node scripts/prepare-ocr-assets.mjs",
 "predev": "node scripts/prepare-ocr-assets.mjs",
-"dev": "vite --host 0.0.0.0",
+"dev": "node scripts/start-dev.mjs --host 0.0.0.0",
 "prebuild": "node scripts/prepare-ocr-assets.mjs",
 "build": "tsc --noEmit && vite build",
+"setup:math-ocr": "node scripts/setup-math-ocr.mjs",
 "preview": "vite preview --host 0.0.0.0",
 "test": "vitest run"
 },

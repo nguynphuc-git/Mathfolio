@@ -74,3 +74,26 @@ export async function extractPdf(file: File): Promise<string> {
 export async function extractPdfQuestions(file: File, onProgress?: (progress: PdfProgress) => void): Promise<PdfQuestion[]> {
   return splitPdfQuestions(await extractPdfPages(file, onProgress));
 }
+
+export async function renderPdfPagePreview(file: File, pageNumber: number): Promise<string> {
+  const loadingTask = getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
+  try {
+    const pdf = await loadingTask.promise;
+    if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > pdf.numPages) throw new Error('Choose a valid PDF page.');
+    const page = await pdf.getPage(pageNumber);
+    const initial = page.getViewport({ scale: 1 });
+    const scale = Math.min(1.5, 2000 / initial.width, 2000 / initial.height);
+    const viewport = page.getViewport({ scale });
+    const canvas = window.document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    try {
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Could not render the selected PDF page.');
+      await page.render({ canvas, canvasContext: context, viewport }).promise;
+      return canvas.toDataURL('image/png');
+    } finally {
+      canvas.width = 0; canvas.height = 0; page.cleanup();
+    }
+  } finally { await loadingTask.destroy(); }
+}

@@ -7,10 +7,16 @@ vi.mock('../src/firebase',()=>({getCloudFirebaseApp:vi.fn(()=>({}))}));
 import { InferenceMode } from 'firebase/ai';
 vi.mock('idb-keyval', () => ({get: vi.fn(async (key: string) => values.get(key)), set: vi.fn(async (key: string, value: unknown) => { values.set(key, structuredClone(value)); })}));
 import { emptyNotebook, newExercise, notebookKey, putExercise, putExerciseNotes, loadNotebook, saveNotebook } from '../src/notebook';
-import { notebookAI, notebookPrompt, type NotebookRequest } from '../src/ai';
+import { notebookAI, notebookPrompt, recommendsCloudForProblem, type NotebookRequest } from '../src/ai';
 afterEach(() => vi.unstubAllGlobals());
 const request: NotebookRequest = {purpose:'knowledge',statement:'Find the derivative of x squared.',subject:'calculus',knowledge:'',hints:[],messages:[],question:'',cloudAllowed:false,route:'local'};
 describe('private exercise notebook', () => {
+  it('recommends cloud for likely multi-step problems, not simple equations', () => {
+    expect(recommendsCloudForProblem('x^2 + 2x = 0')).toBe(false);
+    expect(recommendsCloudForProblem('Prove that the sequence converges and justify each step.')).toBe(true);
+    expect(recommendsCloudForProblem(String.raw`Evaluate \int_0^1 x\,dx and compare with three other expressions = =`)).toBe(true);
+    expect(recommendsCloudForProblem('x '.repeat(151))).toBe(true);
+  });
   it('isolates users and Firebase environments, including ambiguous delimiters', () => {
     expect(notebookKey('demo','alice')).not.toBe(notebookKey('demo','bob'));
     expect(notebookKey('demo','alice')).not.toBe(notebookKey('live','alice'));

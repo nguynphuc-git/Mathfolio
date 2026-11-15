@@ -141,6 +141,12 @@ export interface NotebookRequest {
   messages: { role: 'user' | 'assistant'; text: string }[]; question: string;
   cloudAllowed: boolean; route: 'local' | 'cloud';
 }
+export function recommendsCloudForProblem(statement: string): boolean {
+  const value = statement.trim();
+  if (value.length > 300) return true;
+  if (/\b(?:prove|derive|justify|optimize|maximize|minimize|compare|analyze|evaluate|show\s+that)\b/i.test(value)) return true;
+  return (value.match(/(?:=|\\(?:int|sum|prod|lim)|∫|∑|∏|lim\b)/g)?.length ?? 0) >= 3;
+}
 export function notebookPrompt(r: NotebookRequest): string {
   if (r.route === 'local') {
     const tasks = {

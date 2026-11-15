@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createUserWithEmailAndPassword, getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth';
 import { getFirebaseApp } from './firebase';
-import { friendlyError, notebookAI, type NotebookRequest } from './ai';
+import { friendlyError, notebookAI, recommendsCloudForProblem, type NotebookRequest } from './ai';
 import { MarkdownView } from './components/MarkdownView';
+import { PdfFormulaCropper } from './components/PdfFormulaCropper';
 import { addFolder, removeFolder, emptyNotebook, loadNotebook, newExercise, notebookKey, putExercise, putExerciseNotes, readAttachment, saveNotebook, type Exercise, type Notebook, type Attachment } from './notebook';
 import { ConfirmDialog, type Confirmation } from './components/ConfirmDialog';
 import { ExercisePreview } from './components/ExercisePreview';
@@ -29,6 +30,10 @@ export default function App() {
   const [pdfSelectedIndex, setPdfSelectedIndex] = useState(0);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfProgress, setPdfProgress] = useState<PdfProgress | null>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<{ page: number; image: string } | null>(null);
+  const [pdfPreviewBusy, setPdfPreviewBusy] = useState(false);
+  const pdfPreviewRequest = useRef(0);
   const [collapsedHints, setCollapsedHints] = useState<number[]>([]);
   const [preview, setPreview] = useState<{ id: string; notes: string } | null>(null);
   const [previewError, setPreviewError] = useState('');
@@ -106,9 +111,33 @@ export default function App() {
     try {
       const { extractPdfQuestions } = await import('./pdf');
       const questions = await extractPdfQuestions(file, setPdfProgress);
+      setPdfFile(file); setPdfPreview(null);
       setPdfQuestions(questions); setPdfSelected(questions[0] ?? null); setPdfSelectedIndex(0);
+      if (questions[0]) void showPdfPage(file, questions[0].page);
     } catch (e) { setError(friendlyError(e)); }
     finally { setPdfBusy(false); setPdfProgress(null); }
+  }
+  async function showPdfPage(file: File, page: number) {
+    const request = ++pdfPreviewRequest.current;
+    setPdfPreview(null); setPdfPreviewBusy(true);
+    try {
+      const { renderPdfPagePreview } = await import('./pdf');
+      const image = await renderPdfPagePreview(file, page);
+      if (request === pdfPreviewRequest.current) setPdfPreview({ page, image });
+    } catch (e) {
+      if (request === pdfPreviewRequest.current) setError(friendlyError(e));
+    } finally {
+      if (request === pdfPreviewRequest.current) setPdfPreviewBusy(false);
+    }
+  }
+  function closePdfPicker() {
+    pdfPreviewRequest.current++;
+    setPdfQuestions(null); setPdfSelected(null); setPdfSelectedIndex(0);
+    setPdfFile(null); setPdfPreview(null); setPdfPreviewBusy(false);
+  }
+  function appendRecognizedFormula(latex: string) {
+    setPdfSelected(current => current ? { ...current, text: `${current.text.trim()}${current.text.trim() ? '\n' : ''}\\(${latex}\\)` } : current);
+    setStatus('Formula recognized as LaTeX locally. Review it in the selected text.');
   }
   function usePdfQuestion() {
     if (!pdfSelected) return;
@@ -340,6 +369,7 @@ export default function App() {
         <section ref={problemPanel} className="paper problem"><div className="panel-heading"><span className="step">01</span><h2>Problem</h2><span className="tag">YOUR PROBLEM</span></div>
           <MathInput ref={input} value={statementLatex(draft.statement, draft.statementFormat)} readOnly={draft.confirmed} disabled={blocked} onChange={value => edit({ statement: value, statementFormat: 'latex' })}/>
           {!draft.confirmed && <><p className="subtle">Type your problem or paste LaTeX. Insert symbols directly below.</p><div className="math-keys">{symbols.map(([label, latex]) => <button key={label} disabled={blocked} onMouseDown={e => e.preventDefault()} onClick={() => insertMath(latex)} aria-label={`Insert ${label}`}>{label}</button>)}</div></>}
+          {!cloudAllowed && online && draft.statement.trim() && recommendsCloudForProblem(draft.statement) && <aside className="cloud-recommendation" aria-label="Cloud AI recommendation"><p>This may need several reasoning steps. Cloud AI can provide deeper analysis; your problem is sent only after you enable it and run analysis.</p><button type="button" disabled={blocked} onClick={() => void allowCloud('Cloud AI may provide deeper reasoning for this problem. Your problem and related tutoring context are sent only when you choose to run an AI action with Cloud AI enabled. Allow Cloud AI for this session?')}>Consider Cloud AI</button></aside>}
 
           <div className="row problem-import">
             {!draft.confirmed && <label className="attachment-button">＋ Choose PDF<input aria-label="Choose a PDF" type="file" accept="application/pdf,.pdf" disabled={blocked || pdfBusy} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void loadPdf(file); }}/></label>}
@@ -376,13 +406,17 @@ export default function App() {
     <p className="eyebrow">IMPORT A PROBLEM</p><h2 id="pdf-title">Choose a question from your PDF</h2>
     {!pdfQuestions.length ? <p role="status">No readable text was found after local OCR.</p> : <div className="pdf-picker">
       <div className="pdf-question-list" role="list" aria-label="Extracted PDF text">
-        {pdfQuestions.map((item, index) => <button type="button" role="listitem" key={`${item.page}-${index}`} aria-pressed={pdfSelectedIndex === index} onClick={() => { setPdfSelected(item); setPdfSelectedIndex(index); }}>
+        {pdfQuestions.map((item, index) => <button type="button" role="listitem" key={`${item.page}-${index}`} aria-pressed={pdfSelectedIndex === index} onClick={() => { setPdfSelected(item); setPdfSelectedIndex(index); if (pdfFile && pdfPreview?.page !== item.page) void showPdfPage(pdfFile, item.page); }}>
           <strong>Page {item.page} · Text {index + 1}</strong><span>{item.text.slice(0, 180)}{item.text.length > 180 ? '…' : ''}</span>
         </button>)}
       </div>
-      {pdfSelected && <label className="pdf-selection">Selected text — edit before using<textarea aria-label="Selected PDF question" maxLength={6000} value={pdfSelected.text} onChange={event => setPdfSelected({ ...pdfSelected, text: event.target.value })}/>{pdfSelected.text.length > 6000 && <small className="error">Select a shorter question to stay within the 6,000-character limit.</small>}</label>}
+      {pdfSelected && <div className="pdf-import-content">
+        <label className="pdf-selection">Selected text — edit before using<textarea aria-label="Selected PDF question" maxLength={6000} value={pdfSelected.text} onChange={event => setPdfSelected({ ...pdfSelected, text: event.target.value })}/>{pdfSelected.text.length > 6000 && <small className="error">Select a shorter question to stay within the 6,000-character limit.</small>}</label>
+        {pdfPreviewBusy && <p role="status" className="subtle">Rendering page {pdfSelected.page}…</p>}
+        {pdfPreview?.page === pdfSelected.page && <PdfFormulaCropper key={pdfPreview.page} image={pdfPreview.image} onInsert={appendRecognizedFormula}/>}
+      </div>}
     </div>}
-    <p className="subtle">Imported text is placed in the problem editor for you to review before analysis. OCR runs locally in Vietnamese and English; formulas may need correction.</p>
-    <div className="row"><button type="button" onClick={() => { setPdfQuestions(null); setPdfSelected(null); setPdfSelectedIndex(0); }}>Cancel</button><button type="button" className="primary" disabled={!pdfSelected?.text.trim() || pdfSelected.text.length > 6000} onClick={usePdfQuestion}>Use this text</button></div>
+    <p className="subtle">Drag over a formula to recognize it as LaTeX; the formula image is processed by the local OCR service. The problem editor stores LaTeX and displays formatted math.</p>
+    <div className="row"><button type="button" onClick={closePdfPicker}>Cancel</button><button type="button" className="primary" disabled={!pdfSelected?.text.trim() || pdfSelected.text.length > 6000} onClick={usePdfQuestion}>Use this text</button></div>
   </section></div>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={book.folders.find(value => value.id === previewExercise.folderId)?.name ?? 'My exercises'} notes={preview.notes} saving={saving} suspended={!!confirmation} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</>;
 }
