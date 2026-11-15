@@ -1,3 +1,11 @@
+## Mathfolio: folder controls and compact hints
+
+The displayed product name and browser title are now Mathfolio. Existing Firebase project names, app IDs and IndexedDB keys are intentionally retained so existing accounts and saved pages remain accessible.
+
+- Fixed the MathLive root formula wrapper: its library default `width: min-content` was making words occupy separate lines. The root now uses the available width, with normal wrapping and a bounded vertical viewport; fraction/root internals keep their layout.
+- Hint card height follows the problem card. Hint content scrolls inside it; generated levels have Show/Hide controls that never regenerate AI and do not change which levels have been unlocked. These display choices reset when opening another exercise.
+- Library has New folder (custom name), duplicate-name validation and Delete folder actions. Deleting a custom folder requires confirmation and moves saved exercises into My exercises, preserving all page content/attachments. The default recovery folder cannot be deleted. Folder changes use the same account-scoped local storage, and only succeed in the UI after storage completes.
+
 ## Refinement: formulas, editing and overflow
 
 - Edit/discard/delete/sign-out confirmations are styled in-app alert dialogs with focus trapping, Escape cancellation and an inert background. No native window.confirm remains in the notebook.

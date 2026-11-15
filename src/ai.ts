@@ -142,7 +142,7 @@ export function notebookPrompt(r: NotebookRequest): string {
     hint3: 'Give the full worked solution and verify it. Maximum 350 words.',
     chat: 'Discuss the learner question about this exercise, maximum 160 words. Do not disclose a full solution unless explicitly asked.'
   };
-  return `StudyLens university tutor. Answer ONLY in English. Infer the mathematics needed from the actual problem; never assume a school subject or course.
+  return `Mathfolio university tutor. Answer ONLY in English. Infer the mathematics needed from the actual problem; never assume a school subject or course.
 ${tasks[r.purpose]}
 ${r.purpose === 'knowledge' ? referenceContext(r.statement) : ''}
 No greeting or unrelated topics. State missing assumptions instead of inventing them. Check mathematical steps. Never claim code was executed.

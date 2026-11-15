@@ -37,3 +37,19 @@ export async function readAttachment(file: File, kind: Attachment['kind']): Prom
   });
   return { id: crypto.randomUUID(), name: file.name, data, kind };
 }
+
+export function addFolder(book: Notebook, name: string): Notebook {
+  const label = name.trim();
+  if (!label || label.length > 80) throw new Error('Enter a folder name of 1–80 characters.');
+  if (book.folders.some(folder => folder.name.toLocaleLowerCase() === label.toLocaleLowerCase())) throw new Error('A folder with this name already exists.');
+  return { ...book, folders: [...book.folders, { id: crypto.randomUUID(), name: label }] };
+}
+/** Deleting a folder never deletes pages. The default folder is the recovery destination. */
+export function removeFolder(book: Notebook, id: string): Notebook {
+  if (id === 'general') throw new Error('The default folder cannot be deleted.');
+  if (!book.folders.some(folder => folder.id === id)) throw new Error('Folder not found.');
+  return {
+    folders: book.folders.filter(folder => folder.id !== id),
+    exercises: book.exercises.map(exercise => exercise.folderId === id ? { ...exercise, folderId: 'general' } : exercise)
+  };
+}

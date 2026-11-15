@@ -17,9 +17,9 @@ export const MathInput = forwardRef<MathInputHandle, { value: string; onChange?:
     flowStyle.textContent = `
       .ML__container { display:block!important; min-width:0!important; width:100%!important; }
       .ML__content { display:block!important; overflow:visible!important; width:auto!important; min-width:0!important; }
-      .ML__content > .ML__latex { display:block!important; white-space:normal!important; max-width:100%; }
+      .ML__content > .ML__latex { display:block!important; width:100%!important; min-width:0!important; box-sizing:border-box; white-space:normal!important; max-width:100%; }
       .ML__content > .ML__latex > .ML__base { display:inline!important; width:auto!important; white-space:normal!important; overflow-wrap:anywhere; line-height:2.3; }
-      .ML__content > .ML__latex > .ML__base .ML__text { white-space:break-spaces!important; overflow-wrap:anywhere; }
+      .ML__content > .ML__latex > .ML__base .ML__text { white-space:pre-wrap!important; overflow-wrap:break-word; }
     `;
     field.shadowRoot?.appendChild(flowStyle);
     field.setAttribute('aria-label', label); field.setAttribute('role', 'textbox');
