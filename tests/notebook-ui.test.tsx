@@ -174,9 +174,8 @@ describe('Stop AI restores the pre-request page', () => {
   it('does not confirm or save an unconfirmed problem when analysis is stopped', async () => {
     await type('[aria-label="Problem statement"]', 'A new problem');
     mocks.ai.mockImplementation(() => new Promise(() => {}));
-    await click('Confirm & analyze');
-    expect(host.querySelector('[role="alertdialog"]')!.textContent).toContain('Cloud AI will receive the problem statement');
-    await click('Allow Cloud AI'); await click('■ Stop AI');
+    await click('Confirm & analyze'); await click('■ Stop AI');
+    expect(host.querySelector('[role="alertdialog"]')).toBeNull();
     expect(button('Confirm & analyze').disabled).toBe(false);
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.readOnly).toBe(false);
     expect(mocks.write).not.toHaveBeenCalled();
@@ -191,22 +190,19 @@ describe('Stop AI restores the pre-request page', () => {
 });
 
 describe('Cloud AI permission and chat controls', () => {
-  it('asks before cloud hint 2, cancels without running AI, then enables and runs only after consent', async () => {
+  it('uses local hints by default and uses cloud hints only after explicit consent', async () => {
     await openWorkspace(); mocks.ai.mockResolvedValue({text:'Allowed cloud hint',source:'in_cloud'});
     expect(host.querySelector('.hints input[type="checkbox"]')).toBeNull();
     await click('Open level 2');
-    expect(host.querySelector('[role="alertdialog"]')!.textContent).toContain('Allow Cloud AI?');
-    expect(mocks.ai).not.toHaveBeenCalled();
-    await click('Not now'); expect(mocks.ai).not.toHaveBeenCalled();
-    expect(host.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('false');
-    await click('Open level 2'); await click('Allow Cloud AI');
-    expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'hint2',cloudAllowed:true});
-    expect(host.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('true');
+    expect(host.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'hint2',cloudAllowed:false,route:'local'});
     expect(host.textContent).toContain('Allowed cloud hint');
     await click('Cloud AI', host.querySelector('.workspace-actions')!);
+    await click('Allow Cloud AI');
+    expect(host.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('true');
     await click('Open level 3');
-    expect(host.querySelector('[role="alertdialog"]')).not.toBeNull();
-    expect(mocks.ai).toHaveBeenCalledTimes(1);
+    expect(mocks.ai.mock.calls[1][0]).toMatchObject({purpose:'hint3',cloudAllowed:true,route:'cloud'});
+    expect(mocks.ai).toHaveBeenCalledTimes(2);
   });
   it('syncs left/right chat selection with the switch, and never treats denial as consent', async () => {
     await openWorkspace();
@@ -236,7 +232,7 @@ describe('Cloud AI permission and chat controls', () => {
     await act(async () => window.dispatchEvent(new Event('offline')));
     const routes = host.querySelector('.chat-routes')!;
     expect(button('Cloud AI',routes).disabled).toBe(true); expect(button('Local AI',routes).disabled).toBe(false);
-    expect(button('Open level 2').disabled).toBe(true);
+    expect(button('Open level 2').disabled).toBe(false);
     await click('Cloud AI', host.querySelector('.workspace-actions')!);
     expect(host.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('false');
     expect(mocks.ai).not.toHaveBeenCalled();
