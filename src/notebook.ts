@@ -29,6 +29,13 @@ export function putExercise(book: Notebook, exercise: Exercise): Notebook {
   const snapshot = structuredClone({ ...exercise, title: exercise.title.trim(), updatedAt: new Date().toISOString() });
   return { ...book, exercises: [snapshot, ...book.exercises.filter(e => e.id !== exercise.id)] };
 }
+/** A library note edit must never overwrite other saved fields with a workspace draft. */
+export function putExerciseNotes(book: Notebook, id: string, notes: string): Notebook {
+  if (notes.length > 30000) throw new Error('Notes can contain up to 30,000 characters.');
+  if (!book.exercises.some(exercise => exercise.id === id)) throw new Error('Exercise not found.');
+  return { ...book, exercises: book.exercises.map(exercise => exercise.id === id
+    ? { ...exercise, notes, updatedAt: new Date().toISOString() } : exercise) };
+}
 export async function readAttachment(file: File, kind: Attachment['kind']): Promise<Attachment> {
   if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error('Choose a PNG, JPG or WebP image.');
   if (file.size > 3 * 1024 * 1024) throw new Error('Each image must be smaller than 3 MB.');

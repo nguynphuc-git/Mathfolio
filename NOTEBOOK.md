@@ -1,3 +1,11 @@
+## Saved-page preview and stopping AI
+
+- **Open exercise** now opens a scrollable saved-page dialog in the library, showing the problem, essentials, opened hints, notes, attached images and conversation without running AI. Only notes can be edited here. **Save notes** updates the notes of the existing saved page; unsaved note changes are protected when closing the dialog with Close, Escape or the backdrop.
+- **Open in workspace** opens an independent draft with the same exercise ID. Workspace edits do not affect the saved page until **Save exercise**, which updates the existing page directly. **Rename / move** opens the name/folder dialog; new exercises still ask for their initial name/folder. Leaving an unsaved workspace draft requires confirmation.
+- Every notebook AI task has **Stop AI**, available during preparation and streaming, including after navigating to another tab. Stopping clears only the active request's partial text, restores the prior page state and retains the chat question. No partial result is saved or allowed to overwrite a later task. Existing knowledge, hints, chat, notes and dirty status are kept. Account changes/unmount also cancel active requests.
+- Cancellation uses AbortSignal for cloud HTTP requests and native Chrome local session/prompt options. An abort-aware wait releases the UI even if a provider is slow to acknowledge cancellation. Cloud cancellation is client-side: a server request already being processed may still count toward usage. Physical Gemini Nano cancellation still needs acceptance testing on a supported Chrome device.
+- Added happy-dom as a development dependency for interaction tests of preview-only note editing, workspace save isolation, and cancellation of knowledge, all hint levels and chat. These simulated DOM tests do not verify visual layout or MathLive caret behavior.
+
 ## Mathfolio: folder controls and compact hints
 
 The displayed product name and browser title are now Mathfolio. Existing Firebase project names, app IDs and IndexedDB keys are intentionally retained so existing accounts and saved pages remain accessible.
