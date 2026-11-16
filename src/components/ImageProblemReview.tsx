@@ -1,3 +1,4 @@
+import { lockBodyScroll } from '../scroll-lock';
 import { useEffect, useRef, useState } from 'react';
 import { readProblemImage, type ProblemImage } from '../image-import';
 import { mixedTextToLatex } from '../math-paste';
@@ -9,7 +10,7 @@ export function ImageProblemReview({image,onClose,onApply,suspended,error,canKee
   const active=useRef<AbortController|null>(null);const dialog=useRef<HTMLElement>(null);const close=useRef<HTMLButtonElement>(null);
   const callbacks=useRef({onClose,suspended});callbacks.current={onClose,suspended};
   useEffect(()=>{
-    const previous=document.activeElement as HTMLElement|null;const overflow=document.body.style.overflow;document.body.style.overflow='hidden';close.current?.focus();
+    const previous=document.activeElement as HTMLElement|null;const release=lockBodyScroll();close.current?.focus();
     const key=(event:KeyboardEvent)=>{
       if(callbacks.current.suspended)return;
       if(event.key==='Escape'){event.preventDefault();callbacks.current.onClose();}
@@ -20,7 +21,7 @@ export function ImageProblemReview({image,onClose,onApply,suspended,error,canKee
       else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
     };
     document.addEventListener('keydown',key);
-    return()=>{active.current?.abort();active.current=null;document.body.style.overflow=overflow;document.removeEventListener('keydown',key);previous?.focus();};
+    return()=>{active.current?.abort();active.current=null;release();document.removeEventListener('keydown',key);previous?.focus();};
   },[]);
   function stop(){const job=active.current;active.current=null;job?.abort();setBusy(false);setStage('');setFailure('');}
   async function read(textOnly=false){

@@ -1,3 +1,13 @@
+## Large attachment viewer
+
+Click any problem/solution thumbnail in Workspace or the saved-page preview to open a large local image viewer. It provides Zoom in/out, Fit to window, Actual size, scroll-wheel zoom, and pointer/touch drag panning. Buttons and +/−/0/1 keyboard shortcuts control zoom; Escape, the close button or the outside backdrop close only the image viewer. The original image data is displayed; no AI call, upload, file rewrite or new tab is involved.
+
+The library preview stays underneath with its unsaved notes intact. Its Escape/focus behavior is suspended while the image viewer is open. Closing the viewer restores thumbnail focus and the parent scroll lock. Shared reference-counted locks restore page scrolling even when nested dialogs unmount together. Save/analyze shortcuts cannot act behind the image viewer. Account changes clear the open image.
+
+Tests cover thumbnail entry points, nested closing and unsaved notes, background shortcut isolation, zoom/fit/pan/error behavior, original image data preservation and nested scroll-lock cleanup. Browser geometry and trackpad/touch feel still require visual acceptance testing.
+
+A researched [Socratic Tutor integration proposal](docs/SOCRATIC_TUTOR_PROPOSAL.md) is included for discussion. Tutoring behavior has not changed in this update.
+
 ## Typeset notes, manual input modes and a movable keyboard
 
 - The problem editor now removes the outer inline wrapper's baseline space and uses a shorter root line height, bringing the first line nearer the top. Overrides remain at the root level so fraction/radical internals keep their native layout. These rules are installed after the MathLive mount as well as initial attachment.

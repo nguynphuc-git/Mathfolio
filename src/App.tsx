@@ -6,6 +6,8 @@ import { MarkdownView } from './components/MarkdownView';
 import { PdfFormulaCropper } from './components/PdfFormulaCropper';
 import { addFolder, removeFolder, emptyNotebook, loadNotebook, newExercise, notebookKey, putExercise, putExerciseNotes, readAttachment, saveNotebook, type Exercise, type Notebook, type Attachment } from './notebook';
 import { ConfirmDialog, type Confirmation } from './components/ConfirmDialog';
+import { ImageViewer } from './components/ImageViewer';
+import { AttachmentGallery } from './components/AttachmentGallery';
 import { ExercisePreview } from './components/ExercisePreview';
 import { NotesEditor } from './components/NotesEditor';
 import { MathInput, type MathInputHandle } from './components/MathInput';
@@ -50,6 +52,7 @@ export default function App() {
   const pdfPreviewRequest = useRef(0);
   const [collapsedHints, setCollapsedHints] = useState<number[]>([]);
   const [preview, setPreview] = useState<{ id: string; notes: string; notesFormat?:'latex' } | null>(null);
+  const [viewingImage,setViewingImage]=useState<Attachment|null>(null);
   const [previewError, setPreviewError] = useState('');
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const confirmationResult = useRef<((accepted: boolean) => void) | null>(null);
@@ -103,7 +106,7 @@ export default function App() {
         const version = ++epoch.current;
         confirmationResult.current?.(false); confirmationResult.current = null; setConfirmation(null);
         key.current = ''; setUser(next); setReady(false); setBook(emptyNotebook()); setDraft(newExercise()); setDirty(false);setRecovery(null);setDraftSave('idle');setDraftSavedAt('');setImageProblem(null);setImagePreparing(false);setPdfBusy(false);closePdfPicker();setImportError('');setLibraryQuery('');
-        setPartial(''); setBusy(null); setSaving(false); setSaveOpen(false); setFolderDialog(false); setPreview(null); setPreviewError(''); setCollapsedHints([]); setError(''); setStatus(''); setQuestion(''); setFolder(null); setCloudAllowed(false); setChatRoute('local');
+        setPartial(''); setBusy(null); setSaving(false); setSaveOpen(false); setFolderDialog(false); setPreview(null);setViewingImage(null); setPreviewError(''); setCollapsedHints([]); setError(''); setStatus(''); setQuestion(''); setFolder(null); setCloudAllowed(false); setChatRoute('local');
         if (!next) return;
         const nextKey = notebookKey(auth.app.options.projectId!, next.uid); key.current = nextKey;
         void Promise.all([loadNotebook(nextKey),loadWorkspaceDraft(nextKey).catch(()=>null)]).then(([value,unfinished]) => {
@@ -426,11 +429,11 @@ export default function App() {
       if(!(event.ctrlKey||event.metaKey))return;
       if(event.key.toLowerCase()==='s'){
         event.preventDefault();
-        if(confirmation||saveOpen||folderDialog||pdfQuestions!==null||imageProblem||blocked)return;
+        if(viewingImage||confirmation||saveOpen||folderDialog||pdfQuestions!==null||imageProblem||blocked)return;
         if(preview){void savePreviewNotes();return;}
         if(tab==='solve'&&draft.statement.trim())beginSave();
       }
-      if(event.key==='Enter'&&tab==='solve'&&!preview&&!confirmation&&!saveOpen&&!folderDialog&&pdfQuestions===null&&!imageProblem&&!blocked){
+      if(event.key==='Enter'&&tab==='solve'&&!preview&&!viewingImage&&!confirmation&&!saveOpen&&!folderDialog&&pdfQuestions===null&&!imageProblem&&!blocked){
         event.preventDefault();
         if((event.target as HTMLElement)?.getAttribute('aria-label')==='Discussion question')void ask('chat');
         else if(draft.statement.trim())void ask('knowledge');
@@ -438,7 +441,7 @@ export default function App() {
     };
     window.addEventListener('keydown',keydown);return()=>window.removeEventListener('keydown',keydown);
   });
-  return <><main className="notebook-app" style={{'--problem-font-size':`${mathSize}px`} as React.CSSProperties} inert={!!confirmation || !!preview || pdfQuestions !== null || !!imageProblem}>
+  return <><main className="notebook-app" style={{'--problem-font-size':`${mathSize}px`} as React.CSSProperties} inert={!!confirmation || !!preview || pdfQuestions !== null || !!imageProblem || !!viewingImage}>
     <header className="notebook-header"><a className="brand" href="#" onClick={e => { e.preventDefault(); setTab('solve'); }}><span className="brand-mark" aria-hidden="true">Σ</span><span>Mathfolio<small>YOUR DIGITAL EXERCISE BOOK</small></span></a>
       <nav aria-label="Navigation"><button className={tab === 'solve' ? 'active' : ''} onClick={() => setTab('solve')}>Workspace</button><button className={tab === 'library' ? 'active' : ''} onClick={() => setTab('library')}>Exercise library <span>{book.exercises.length}</span></button><button className={tab === 'account' ? 'active' : ''} onClick={() => setTab('account')}>{user ? 'Account' : 'Sign in'}</button></nav>
     </header>
@@ -471,7 +474,7 @@ export default function App() {
           <div className="problem-import">
             {pdfBusy && <span role="status" className="subtle">{pdfProgress?.stage === 'ocr' ? `Local OCR · page ${pdfProgress.page} of ${pdfProgress.total}…` : pdfProgress ? `Reading PDF · page ${pdfProgress.page} of ${pdfProgress.total}…` : 'Preparing local OCR…'}</span>}
             <details className="problem-attachments"><summary>Source images · {draft.attachments.filter(a=>a.kind==='problem').length}</summary>          <label className="attachment-button">＋ Attach problem image<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'problem'); }}/></label>
-          <div className="attachments">{draft.attachments.filter(a => a.kind === 'problem').map(a => <figure key={a.id}><a href={a.data} target="_blank" rel="noreferrer"><img src={a.data} alt={a.name}/></a><figcaption>{a.name}<button disabled={blocked} onClick={() => edit({ attachments: draft.attachments.filter(x => x.id !== a.id) })}>Remove</button></figcaption></figure>)}</div>
+          <AttachmentGallery images={draft.attachments.filter(a=>a.kind==='problem')} onOpen={setViewingImage} disabled={blocked} onRemove={id=>edit({attachments:draft.attachments.filter(a=>a.id!==id)})}/>
 </details></div>
           <div className="row">{draft.confirmed && <button disabled={blocked} onClick={editStatement}>Edit problem</button>}<button className="primary" title="Analyze problem (Ctrl+Enter)" disabled={blocked || !draft.statement.trim()} onClick={() => void ask('knowledge')}>{draft.confirmed ? 'Refresh knowledge' : 'Confirm & analyze'}</button></div>
         </section>
@@ -493,7 +496,7 @@ export default function App() {
         </section>
       </div><div className="workbench">
         <section className="paper discussion"><div className="panel-heading"><span className="step">04</span><h2>Another way to think about it?</h2><div className="chat-routes" role="group" aria-label="Chat processing"><button type="button" aria-pressed={chatRoute === 'local'} disabled={blocked} onClick={() => void selectChatRoute('local')}>Local AI</button><button type="button" aria-pressed={chatRoute === 'cloud'} disabled={blocked || !online} onClick={() => void selectChatRoute('cloud')}>Cloud AI</button></div></div><p className="subtle">Discuss your approach. AI receives the problem, essentials, opened hints and up to 6 recent messages.</p><div className="messages">{!draft.messages.length && <div className="empty-chat">“What if I try a different approach?”<small>Start with what you are thinking.</small></div>}{draft.messages.map((m, i) => <div className={`message ${m.role}`} key={i}><small>{m.role === 'user' ? 'You' : `Mathfolio · ${sourceLabel(m.source)}`}</small><MarkdownView value={m.text}/></div>)}{streaming('chat')}</div><form className="chat-form" onSubmit={e => { e.preventDefault(); void ask('chat'); }}><input aria-label="Discussion question" maxLength={1000} value={question} disabled={blocked || !draft.confirmed} onChange={e => setQuestion(e.target.value)} placeholder="Ask a question or describe your approach…"/><button className="primary" disabled={blocked || !draft.confirmed || !question.trim()} type="submit">Send ↗</button></form></section>
-        <section className="paper notes"><div className="panel-heading"><span className="step">05</span><h2>Your working notes</h2></div><NotesEditor label="Notes" value={draft.notes} format={draft.notesFormat} disabled={blocked} onChange={notes => edit({ notes,notesFormat:'latex' })}/><label className="attachment-button">＋ Attach my solution<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'solution'); }}/></label><div className="attachments">{draft.attachments.filter(a => a.kind === 'solution').map(a => <figure key={a.id}><a href={a.data} target="_blank" rel="noreferrer"><img src={a.data} alt={a.name}/></a><figcaption>{a.name}<button disabled={blocked} onClick={() => edit({ attachments: draft.attachments.filter(x => x.id !== a.id) })}>Remove</button></figcaption></figure>)}</div><label className="check"><input type="checkbox" checked={draft.completed} disabled={blocked} onChange={e => edit({ completed: e.target.checked })}/>I have completed this exercise</label><p className="subtle">Notes and images are stored when you select Save exercise.</p></section>
+        <section className="paper notes"><div className="panel-heading"><span className="step">05</span><h2>Your working notes</h2></div><NotesEditor label="Notes" value={draft.notes} format={draft.notesFormat} disabled={blocked} onChange={notes => edit({ notes,notesFormat:'latex' })}/><label className="attachment-button">＋ Attach my solution<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'solution'); }}/></label><AttachmentGallery images={draft.attachments.filter(a=>a.kind==='solution')} onOpen={setViewingImage} disabled={blocked} onRemove={id=>edit({attachments:draft.attachments.filter(a=>a.id!==id)})}/><label className="check"><input type="checkbox" checked={draft.completed} disabled={blocked} onChange={e => edit({ completed: e.target.checked })}/>I have completed this exercise</label><p className="subtle">Notes and images are stored when you select Save exercise.</p></section>
 
       </div><p className="footer-note">AI can be wrong. Check assumptions and steps. The work is yours.</p>
     </>}
@@ -520,5 +523,5 @@ export default function App() {
     <p className="subtle">Drag over a formula to recognize it as LaTeX; the formula image is processed by the local OCR service. The problem editor stores LaTeX and displays formatted math.</p>
     {pdfReplacePending && <div className="pdf-replace-confirm" role="alert"><p>This replaces the current problem and clears its knowledge, hints, and chat so they match the PDF. Your notes and attached images will be kept.</p><div className="row"><button type="button" onClick={() => setPdfReplacePending(false)}>Keep current problem</button><button type="button" className="primary" disabled={!pdfSelected || mixedTextToLatex(pdfSelected.text).length > 6000} onClick={() => { if (pdfSelected) applyPdfQuestion(mixedTextToLatex(pdfSelected.text)); }}>Replace with PDF text</button></div></div>}
     <div className="row"><button type="button" onClick={closePdfPicker}>Cancel</button><button type="button" className="primary" disabled={pdfReplacePending || !pdfSelected?.text.trim() || pdfSelected.text.length > 6000} onClick={usePdfQuestion}>Use this text</button></div>
-  </section></div>} {imageProblem&&<ImageProblemReview image={imageProblem} onClose={()=>{setImageProblem(null);setImportError('');}} onApply={applyImageText} suspended={!!confirmation} error={importError} canKeepImage={draft.attachments.length<4}/>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={book.folders.find(value => value.id === previewExercise.folderId)?.name ?? 'My exercises'} notes={preview.notes} notesFormat={preview.notesFormat} saving={saving} suspended={!!confirmation} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes,notesFormat:'latex' } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</>;
+  </section></div>} {imageProblem&&<ImageProblemReview image={imageProblem} onClose={()=>{setImageProblem(null);setImportError('');}} onApply={applyImageText} suspended={!!confirmation} error={importError} canKeepImage={draft.attachments.length<4}/>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={book.folders.find(value => value.id === previewExercise.folderId)?.name ?? 'My exercises'} notes={preview.notes} notesFormat={preview.notesFormat} saving={saving} onImage={setViewingImage} suspended={!!confirmation || !!viewingImage} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes,notesFormat:'latex' } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {viewingImage&&<ImageViewer key={viewingImage.id} image={viewingImage} onClose={()=>setViewingImage(null)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</>;
 }

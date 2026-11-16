@@ -468,3 +468,34 @@ describe('image problem review',()=>{
     expect(mocks.write).not.toHaveBeenCalled();
   });
 });
+
+describe('attachment zoom viewer across workspace and library',()=>{
+  it('opens a saved attachment over the library preview and returns without losing unsaved notes',async()=>{
+    await library();await click('Open exercise');await type('[aria-label="Saved exercise notes"]','Keep unsaved notes');
+    const thumbnail=host.querySelector<HTMLButtonElement>('[aria-label="View image: solution.png"]')!;
+    await act(async()=>{thumbnail.focus();thumbnail.click();});
+    expect(host.querySelector('.image-viewer')).not.toBeNull();expect(host.querySelectorAll('[role="dialog"]')).toHaveLength(2);
+    expect(host.querySelector('.exercise-backdrop')?.hasAttribute('inert')).toBe(true);expect(document.body.style.overflow).toBe('hidden');
+    await act(async()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
+    expect(host.querySelector('.image-viewer')).toBeNull();expect(host.querySelector('.exercise-preview')).not.toBeNull();
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Saved exercise notes"]')!.value).toBe('Keep unsaved notes');expect(document.activeElement).toBe(thumbnail);
+    expect(document.body.style.overflow).toBe('hidden');expect(stored().exercises[0].notes).toBe('Original notes');expect(mocks.write).not.toHaveBeenCalled();
+    await click('Close',host.querySelector('.exercise-preview')!);await click('Discard notes & continue');expect(document.body.style.overflow).toBe('');
+  });
+  it('opens workspace solution images locally and blocks save/analyze shortcuts behind the viewer',async()=>{
+    await openWorkspace();const before=structuredClone(stored());
+    await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="View image: solution.png"]')!.click());
+    expect(host.querySelector('main')?.hasAttribute('inert')).toBe(true);
+    for(const key of ['s','Enter'])await act(async()=>window.dispatchEvent(new KeyboardEvent('keydown',{key,ctrlKey:true,bubbles:true,cancelable:true})));
+    expect(mocks.ai).not.toHaveBeenCalled();expect(mocks.write).not.toHaveBeenCalled();
+    await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Close image viewer"]')!.click());
+    expect(host.querySelector('main')?.hasAttribute('inert')).toBe(false);expect(stored()).toEqual(before);expect(document.body.style.overflow).toBe('');
+  });
+  it('uses the same popup for source problem images',async()=>{
+    stored().exercises[0].attachments.push({id:'problem-image',name:'question.png',kind:'problem',data:'data:image/png;base64,AA=='});
+    await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));await openWorkspace();
+    const details=host.querySelector<HTMLDetailsElement>('.problem-attachments')!;await act(async()=>{details.open=true;});
+    await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="View image: question.png"]')!.click());
+    expect(host.querySelector('.image-viewer-header')?.textContent).toContain('PROBLEM IMAGE');expect(host.querySelector('.image-viewer-header')?.textContent).toContain('question.png');expect(mocks.ai).not.toHaveBeenCalled();
+  });
+});
