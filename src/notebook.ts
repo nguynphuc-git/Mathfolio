@@ -1,11 +1,12 @@
 import { get, set } from 'idb-keyval';
+import type { GeometryDiagram } from './geometry-diagram';
 export interface Answer { text: string; source: string }
 export interface Message { role: 'user' | 'assistant'; text: string; source?: string; format?:'latex' }
 export interface Attachment { id: string; name: string; data: string; kind: 'problem' | 'solution'; useForAI?:boolean }
 export interface Exercise {
   id: string; title: string; folderId: string; folderIds?:string[]; subject?: 'calculus' | 'discrete' | 'algorithms';
   statement: string; statementFormat?: 'latex'; confirmed: boolean; knowledge?: Answer; hints: Answer[];
-  notes: string; notesFormat?: 'latex'; messages: Message[]; attachments: Attachment[]; completed: boolean; updatedAt: string;
+  notes: string; notesFormat?: 'latex'; messages: Message[]; attachments: Attachment[]; geometryDiagram?: GeometryDiagram; completed: boolean; updatedAt: string;
 }
 export interface Notebook { folders: { id: string; name: string }[]; exercises: Exercise[] }
 export function sameAttachments(a:Attachment[],b:Attachment[]):boolean{return a.length===b.length&&a.every((image,index)=>{const other=b[index];return image.id===other.id&&image.name===other.name&&image.data===other.data&&image.kind===other.kind&&image.useForAI===other.useForAI;});}

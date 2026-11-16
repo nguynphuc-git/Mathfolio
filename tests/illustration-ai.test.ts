@@ -68,3 +68,9 @@ describe('illustrations are actual model input',()=>{
     expect(notebookPrompt({...base,route:'cloud'})).toContain('Never assume lengths');expect(notebookPrompt(base)).not.toContain(image.data);
   });
 });
+
+it('solves a supported simple local equation without initializing or calling the model',async()=>{
+  const result=await notebookAI({...base,purpose:'hint3',images:[]},()=>{});
+  expect(result.source).toBe('local_calculation');expect(result.text).toContain('x=2');
+  expect(mock.model).not.toHaveBeenCalled();expect(mock.initialize).not.toHaveBeenCalled();
+});

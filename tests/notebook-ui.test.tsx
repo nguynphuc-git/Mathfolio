@@ -58,6 +58,7 @@ async function openWorkspace() { await library(); await click('Open exercise'); 
 beforeEach(async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  localStorage.removeItem('mathfolio-appearance-v1');
   mocks.ai.mockReset(); mocks.imageCloud.mockReset(); mocks.imageLocal.mockReset(); mocks.readAttachment.mockReset(); mocks.insert.mockReset(); mocks.write.mockReset(); mocks.pdf.mockReset(); mocks.pdfPreview.mockReset(); mocks.values.clear();
   mocks.prepareImage.mockReset().mockResolvedValue({ data: 'data:image/jpeg;base64,AA==', name: 'problem.jpg' });
   mocks.readImage.mockReset();
@@ -205,6 +206,18 @@ describe('saved page previews and workspace copies', () => {
     expect(host.textContent).toContain('Review it before analyzing');
     expect(mocks.pdfPreview).toHaveBeenCalledWith(file, 1);
     expect(mocks.pdfPreview).toHaveBeenCalledWith(file, 2);
+  });
+  it('creates a geometry sketch after importing a diagram problem from PDF',async()=>{
+    mocks.pdf.mockResolvedValue([{page:1,text:'Triangle ABC has AB = 5 cm and angle ACB = 90 degrees. Find BC.'}]);
+    const upload=host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
+    Object.defineProperty(upload,'files',{configurable:true,value:[new File(['pdf'],'triangle.pdf',{type:'application/pdf'})]});
+    await act(async()=>upload.dispatchEvent(new Event('change',{bubbles:true})));
+    await click('Use this question');
+    const board=host.querySelector<HTMLElement>('.geometry-board')!;
+    expect(board.querySelector('.geometry-canvas')?.getAttribute('aria-label')).toContain('triangle schematic');
+    expect(board.textContent).toContain('AB = 5 cm');
+    expect(host.querySelector('[aria-label="Problem statement"]')).not.toBeNull();
+    expect(mocks.ai).not.toHaveBeenCalled();
   });
 
   it('filters extracted PDF questions without losing the selected item', async () => {
@@ -577,6 +590,7 @@ describe('workspace recovery and library tools',()=>{
   it('uses sigma branding, places discussion before notes, and keeps zoom and symbol search local',async()=>{
     expect(host.querySelector('.brand-mark')?.textContent).toBe('Σ');
     expect([...host.querySelector('.workbench')!.children].map(x=>x.className)).toEqual(['paper discussion','paper notes']);
+    await act(async()=>{host.querySelector<HTMLDetailsElement>('.study-options')!.open=true;});
     await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Increase math size"]')!.click());
     expect(host.querySelector<HTMLElement>('main')!.style.getPropertyValue('--problem-font-size')).toBe('18px');
     const keyboard=host.querySelector('.problem .math-keyboard')!;await click('More symbols',keyboard);
@@ -722,5 +736,71 @@ describe('library browsing improvements',()=>{
     await act(async()=>{select.value='oldest';select.dispatchEvent(new Event('change',{bubbles:true}));});
     expect([...host.querySelectorAll('.exercise-card h2')].map(e=>e.textContent)).toEqual(['Second page','Quadratic page']);
     expect(host.querySelector('nav [aria-current="page"]')?.textContent).toContain('Exercise library');
+  });
+});
+
+describe('workspace comfort and English guide',()=>{
+  it('opens the English guide without losing a draft and returns to work',async()=>{
+    await type('[aria-label="Problem statement"]','2x+3=7');
+    await click('How to use');
+    expect(host.querySelector('#guide-title')?.textContent).toBe('How to use Mathfolio');
+    expect(host.querySelector('nav [aria-current="page"]')?.textContent).toBe('How to use');
+    await click('Go to workspace');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe('2x+3=7');
+    expect(mocks.ai).not.toHaveBeenCalled();
+  });
+  it('toggles focus without discarding notes or requesting AI',async()=>{
+    await type('[aria-label="Notes"]','My approach');await click('Focus mode');
+    expect(host.querySelector('.workspace-content')?.classList.contains('focus-mode')).toBe(true);
+    await click('Exit focus mode');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe('My approach');
+    expect(mocks.ai).not.toHaveBeenCalled();
+  });
+  it('passes answer style to new local requests',async()=>{
+    const select=host.querySelector<HTMLSelectElement>('[aria-label="Local answer style"]')!;
+    await act(async()=>{select.value='brief';select.dispatchEvent(new Event('change',{bubbles:true}));});
+    await type('[aria-label="Problem statement"]','2x+3=7');mocks.ai.mockResolvedValue({text:'Formula',source:'on_device'});
+    await click('Confirm & analyze');expect(mocks.ai.mock.calls[0][0]).toMatchObject({responseStyle:'brief',route:'local'});
+  });
+  it('applies and persists reading appearance preferences',async()=>{
+    await act(async()=>{host.querySelector<HTMLElement>('.appearance-disclosure summary')!.click();});
+    const selects=host.querySelectorAll<HTMLSelectElement>('.appearance-settings select');
+    await act(async()=>{selects[0].value='dark';selects[0].dispatchEvent(new Event('change',{bubbles:true}));});
+    await act(async()=>{selects[2].value='serif';selects[2].dispatchEvent(new Event('change',{bubbles:true}));});
+    await act(async()=>{selects[3].value='blue';selects[3].dispatchEvent(new Event('change',{bubbles:true}));});
+    await act(async()=>{selects[4].value='justify';selects[4].dispatchEvent(new Event('change',{bubbles:true}));});
+    await type('.appearance-size input','19');
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(document.documentElement.dataset.readingFont).toBe('serif');
+    expect(document.documentElement.dataset.ink).toBe('blue');
+    expect(document.documentElement.dataset.readingAlign).toBe('justify');
+    expect(document.documentElement.style.getPropertyValue('--reading-size')).toBe('19px');
+    expect(host.querySelector<HTMLElement>('.appearance-preview p')!.style.fontSize).toBe('19px');
+    expect(host.querySelector<HTMLElement>('.appearance-preview')!.classList.contains('preview-paper')).toBe(true);
+    expect(JSON.parse(localStorage.getItem('mathfolio-appearance-v1')!)).toMatchObject({theme:'dark',font:'serif',textColor:'blue',alignment:'justify',textSize:19});
+  });
+  it('opens Geometry Studio and switches between 2D and 3D calculations',async()=>{
+    await click('◇ Geometry studio');
+    const studio=host.querySelector<HTMLElement>('.geometry-studio')!;
+    expect(studio.textContent).toContain('Area');
+    const shape=studio.querySelector<HTMLSelectElement>('select')!;
+    await act(async()=>{shape.value='cone';shape.dispatchEvent(new Event('change',{bubbles:true}));});
+    expect(studio.textContent).toContain('Slant height');
+    expect(studio.textContent).toContain('Total surface area');
+    expect(studio.textContent).toContain('Try a geometry proof or reasoning problem');
+    expect(mocks.ai).not.toHaveBeenCalled();
+  });
+  it('builds a diagram from a problem, exposes colored drawing tools, then starts the guided analysis',async()=>{
+    await type('[aria-label="Problem statement"]','Triangle ABC has AB = 5 cm and angle ACB = 90 degrees. Find BC.');
+    await click('Create diagram');
+    const board=host.querySelector<HTMLElement>('.geometry-board')!;
+    expect(board.querySelector('.geometry-canvas')?.getAttribute('aria-label')).toContain('triangle schematic');
+    expect(board.textContent).toContain('AB = 5 cm');
+    expect(board.textContent).toContain('∠ACB = 90°');
+    expect(board.textContent).toContain('starting hint, method, and full worked solution');
+    expect(board.querySelector('[aria-label="Blue mark"]')).not.toBeNull();
+    mocks.ai.mockResolvedValue({text:'Use Pythagoras in the right triangle.',source:'on_device'});
+    await click('Analyze problem',board);
+    expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'knowledge',statement:'Triangle ABC has AB = 5 cm and angle ACB = 90 degrees. Find BC.'});
   });
 });
