@@ -19,7 +19,7 @@ describe('notebook folder management', () => {
     book=putExercise(book,page);
     const next=removeFolder(book,folderId);
     expect(next.folders).toHaveLength(1);
-    expect(next.exercises[0]).toEqual({...book.exercises[0],folderId:'general'});
+    expect(next.exercises[0]).toEqual({...book.exercises[0],folderId:'general',folderIds:[]});
     expect(book.exercises[0].folderId).toBe(folderId);
   });
   it('keeps pages in other folders and refuses deletion of the recovery folder', () => {

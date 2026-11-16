@@ -4,11 +4,12 @@ import { getFirebaseApp } from './firebase';
 import { friendlyError, notebookAI, recognizeImageWithCloud, recommendsCloudForProblem, type NotebookRequest } from './ai';
 import { MarkdownView } from './components/MarkdownView';
 import { PdfFormulaCropper } from './components/PdfFormulaCropper';
-import { addFolder, removeFolder, emptyNotebook, loadNotebook, newExercise, notebookKey, putExercise, putExerciseNotes, readAttachment, saveNotebook, type Exercise, type Notebook, type Attachment } from './notebook';
+import { addFolder, removeFolder, emptyNotebook, loadNotebook, newExercise, notebookKey, putExercise, putExercisePreview, exerciseFolderIds, inExerciseFolder, withExerciseFolders, sameAttachments, readAttachment, saveNotebook, type Exercise, type Notebook, type Attachment } from './notebook';
 import { ConfirmDialog, type Confirmation } from './components/ConfirmDialog';
 import { ImageViewer } from './components/ImageViewer';
 import { AttachmentGallery } from './components/AttachmentGallery';
 import { ExercisePreview } from './components/ExercisePreview';
+import {FolderPicker} from './components/FolderPicker';
 import { NotesEditor } from './components/NotesEditor';
 import { MathInput, type MathInputHandle } from './components/MathInput';
 import { statementLatex,hasEditorContent } from './math-input';
@@ -33,7 +34,7 @@ export default function App() {
   const [book, setBook] = useState<Notebook>(emptyNotebook); const [ready, setReady] = useState(false);
   const [draft, setDraft] = useState<Exercise>(newExercise); const [dirty, setDirty] = useState(false);
   const [folder, setFolder] = useState<string | null>(null); const [saveOpen, setSaveOpen] = useState(false);
-  const [title, setTitle] = useState(''); const [folderId, setFolderId] = useState('general'); const [newFolder, setNewFolder] = useState('');
+  const [title, setTitle] = useState(''); const [folderIds, setFolderIds] = useState<string[]>([]); const [newFolder, setNewFolder] = useState('');
   const [folderDialog, setFolderDialog] = useState(false); const [folderName, setFolderName] = useState('');
   const [recovery,setRecovery]=useState<WorkspaceDraft|null>(null);
   const [draftSave,setDraftSave]=useState<'idle'|'saving'|'saved'|'error'>('idle');const [draftSavedAt,setDraftSavedAt]=useState('');
@@ -56,7 +57,7 @@ export default function App() {
   const pdfCloudReadRequest = useRef(0);
   const [imageBusy, setImageBusy] = useState(false);
   const [collapsedHints, setCollapsedHints] = useState<number[]>([]);
-  const [preview, setPreview] = useState<{ id: string; notes: string; notesFormat?:'latex' } | null>(null);
+  const [preview, setPreview] = useState<{ id: string; notes: string; notesFormat?:'latex'; attachments:Attachment[]; folderIds:string[] } | null>(null);
   const [viewingImage,setViewingImage]=useState<Attachment|null>(null);
   const [previewError, setPreviewError] = useState('');
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
@@ -296,14 +297,15 @@ export default function App() {
     if (route === 'local') { setChatRoute('local'); return; }
     if (await allowCloud()) setChatRoute('cloud');
   }
-  async function ask(purpose: NotebookRequest['purpose']) {
+  async function ask(purpose: NotebookRequest['purpose'],requestCloud=false) {
     if (!ready || blocked || activeAI.current) return;
     const version = epoch.current; const id = draft.id; const askedQuestion = question.trim();
     if (purpose !== 'knowledge' && !draft.confirmed) { setError('Confirm the problem before asking for help.'); return; }
     if (purpose === 'chat' && !hasEditorContent(askedQuestion)) return;
     if (purpose === 'hint2' && draft.hints.length < 1 || purpose === 'hint3' && draft.hints.length < 2) return;
     const requestsCloudChat = purpose === 'chat' && chatRoute === 'cloud';
-    const permitted = requestsCloudChat ? await allowCloud() : cloudAllowed && online;
+    const permitted = requestsCloudChat||requestCloud ? await allowCloud() : cloudAllowed && online;
+    if(requestCloud&&!permitted)return;
     if (requestsCloudChat && !permitted || version !== epoch.current || activeAI.current) return;
     const operation = { controller: new AbortController(), status, error };
     activeAI.current = operation;
@@ -400,21 +402,22 @@ export default function App() {
   }
   function beginSave(editDetails = false) {
     if (!editDetails && book.exercises.some(exercise => exercise.id === draft.id)) { void save(draft); return; }
-    setTitle(draft.title); setFolderId(draft.folderId); setNewFolder(''); setSaveOpen(true);
+    setTitle(draft.title); setFolderIds(exerciseFolderIds(draft)); setNewFolder(''); setSaveOpen(true);
   }
   async function save(existing?: Exercise) {
     const version = epoch.current; const storageKey = key.current;
     if (!storageKey || !ready || blocked) return;
     setSaving(true); setError('');
     try {
-      let next = book; let selected = existing?.folderId ?? folderId;
+      let next = book; let selected = existing ? exerciseFolderIds(existing) : [...folderIds];
       if (!existing && newFolder.trim()) {
         if (newFolder.trim().length > 80) throw new Error('Folder names can contain up to 80 characters.');
         const existing = book.folders.find(f => f.name.toLocaleLowerCase() === newFolder.trim().toLocaleLowerCase());
-        selected = existing?.id ?? crypto.randomUUID();
-        if (!existing) next = { ...book, folders: [...book.folders, { id: selected, name: newFolder.trim() }] };
+        const createdId = existing?.id ?? crypto.randomUUID();
+        selected = [...new Set([...selected,createdId])];
+        if (!existing) next = { ...book, folders: [...book.folders, { id: createdId, name: newFolder.trim() }] };
       }
-      next = putExercise(next, { ...(existing ?? draft), title: existing?.title ?? title.slice(0, 120), folderId: selected });
+      next = putExercise(next, withExerciseFolders(next,{ ...(existing ?? draft), title: existing?.title ?? title.slice(0, 120) },selected));
       await saveNotebook(storageKey, next);
       if (version !== epoch.current) return;
       if(draftTimer.current)clearTimeout(draftTimer.current);draftTimer.current=null;
@@ -424,12 +427,25 @@ export default function App() {
     } catch (e) { if (version === epoch.current) setError(friendlyError(e)); }
     finally { if (version === epoch.current) setSaving(false); }
   }
-  function openPreview(exercise: Exercise) { setPreview({ id: exercise.id, notes: exercise.notes,notesFormat:exercise.notesFormat }); setPreviewError(''); }
+  function openPreview(exercise: Exercise) { setPreview({ id: exercise.id, notes: exercise.notes,notesFormat:exercise.notesFormat,attachments:structuredClone(exercise.attachments),folderIds:exerciseFolderIds(exercise) }); setPreviewError(''); }
+  function previewDirty(value:NonNullable<typeof preview>,exercise:Exercise){
+    return value.notes!==exercise.notes||value.notesFormat!==exercise.notesFormat||!sameAttachments(value.attachments,exercise.attachments)||value.folderIds.slice().sort().join('|')!==exerciseFolderIds(exercise).sort().join('|');
+  }
+  async function attachPreview(file:File){
+    if(!preview||blocked)return;const version=epoch.current,id=preview.id;
+    setSaving(true);setPreviewError('');
+    try{
+      if(preview.attachments.length>=4)throw new Error('Each exercise supports up to 4 images.');
+      const image=await readAttachment(file,'solution');
+      if(version===epoch.current)setPreview(current=>current?.id===id&&current.attachments.length<4?{...current,attachments:[...current.attachments,image]}:current);
+    }catch(error){if(version===epoch.current)setPreviewError(friendlyError(error));}
+    finally{if(version===epoch.current)setSaving(false);}
+  }
   async function leavePreview(openWorkspace = false) {
     if (!preview || saving) return;
     const version = epoch.current;
     const exercise = book.exercises.find(value => value.id === preview.id); if (!exercise) return;
-    if ((preview.notes !== exercise.notes || preview.notesFormat !== exercise.notesFormat) && !await confirmChange({ title:'Leave these note changes?', description:'Your notes in this preview have not been saved. Select Keep working to save them, or discard the note changes and continue.', action:'Discard notes & continue' })) return;
+    if (previewDirty(preview,exercise) && !await confirmChange({ title:'Leave these changes?', description:'Your preview changes have not been saved. Keep working to save them, or discard these changes and continue.', action:'Discard changes & continue' })) return;
     if (version !== epoch.current) return;
     if (openWorkspace && !await changeExercise(exercise)) return;
     setPreview(null); setPreviewError('');
@@ -440,19 +456,21 @@ export default function App() {
     const original = book.exercises.find(value => value.id === preview.id); if (!original) return;
     setSaving(true); setPreviewError('');
     try {
-      const next = putExerciseNotes(book, preview.id, preview.notes,preview.notesFormat);
+      const next = putExercisePreview(book, preview.id, {notes:preview.notes,notesFormat:preview.notesFormat,...(!sameAttachments(preview.attachments,original.attachments)?{attachments:preview.attachments}:{}),...(preview.folderIds.slice().sort().join('|')!==exerciseFolderIds(original).sort().join('|')?{folderIds:preview.folderIds}:{})});
       await saveNotebook(storageKey, next);
       if (version !== epoch.current) return;
       setBook(next);
-      // Preserve any existing workspace edits. Its notes can only follow the library
-      // when they still match the previously saved notes.
-      setDraft(current => current.id === preview.id && current.notes === original.notes && current.notesFormat===original.notesFormat ? { ...current, notes: preview.notes,notesFormat:preview.notesFormat } : current);
+      const saved=next.exercises.find(exercise=>exercise.id===preview.id)!;
+      setDraft(current=>current.id!==preview.id?current:{...current,
+        ...(current.notes===original.notes&&current.notesFormat===original.notesFormat?{notes:saved.notes,notesFormat:saved.notesFormat}:{}),
+        ...(sameAttachments(current.attachments,original.attachments)?{attachments:structuredClone(saved.attachments)}:{}),
+        ...(exerciseFolderIds(current).sort().join('|')===exerciseFolderIds(original).sort().join('|')?{folderIds:exerciseFolderIds(saved),folderId:saved.folderId}:{})});
     } catch (e) { if (version === epoch.current) setPreviewError(friendlyError(e)); }
     finally { if (version === epoch.current) setSaving(false); }
   }
   async function deleteExercise(id: string) {
     const version = epoch.current;
-    if (!await confirmChange({title:'Delete this exercise?',description:'This page and its saved attachments will be removed from this device. This cannot be undone.',action:'Delete exercise'})) return;
+    if (!await confirmChange({title:'Delete this exercise?',description:'This exercise and its attachments will be deleted from My exercises and every other folder. Folder entries refer to the same file. This cannot be undone.',action:'Delete exercise'})) return;
     if (version !== epoch.current) return;
     setSaving(true);
     try {
@@ -480,8 +498,8 @@ export default function App() {
     if (blocked || id === 'general') return;
     const version=epoch.current;
     const target=book.folders.find(f => f.id === id); if (!target) return;
-    const count=book.exercises.filter(e => e.folderId === id).length;
-    if (!await confirmChange({title:`Delete “${target.name}”?`,description:count ? `${count} saved exercise${count === 1 ? '' : 's'} will move to My exercises. Your pages and attachments will not be deleted.` : 'This empty folder will be removed from your notebook.',action:'Delete folder'})) return;
+    const count=book.exercises.filter(e => inExerciseFolder(e,id)).length;
+    if (!await confirmChange({title:`Delete “${target.name}”?`,description:count ? `${count} saved exercise${count === 1 ? '' : 's'} will remain in My exercises and any other folders. Your pages and attachments will not be deleted.` : 'This empty folder will be removed from your notebook.',action:'Delete folder'})) return;
     if (version !== epoch.current) return;
     setSaving(true); setError('');
     try {
@@ -489,8 +507,8 @@ export default function App() {
       await saveNotebook(key.current,next);
       if (version !== epoch.current) return;
       setBook(next); if (folder === id) setFolder(null);
-      setDraft(current => current.folderId === id ? { ...current,folderId:'general' } : current);
-      setFolderId(current => current === id ? 'general' : current);
+      setDraft(current => exerciseFolderIds(current).includes(id) ? withExerciseFolders(next,current,exerciseFolderIds(current).filter(folder=>folder!==id)) : current);
+      setFolderIds(current => current.filter(folder=>folder!==id));
       setStatus('Folder removed. Saved exercises were kept.');
     } catch (e) { if (version === epoch.current) setError(friendlyError(e)); }
     finally { if (version === epoch.current) setSaving(false); }
@@ -541,7 +559,7 @@ export default function App() {
         <div className="import-actions row"><label className="attachment-button pdf-upload-button">＋ Choose PDF<input aria-label="Choose a PDF" type="file" accept="application/pdf,.pdf" disabled={blocked} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void loadPdf(file);}}/></label><label className="attachment-button">＋ Read image<input aria-label="Read a problem image" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void loadImage(file);}}/></label>
           <div className="math-zoom" role="group" aria-label="Math size"><button aria-label="Decrease math size" disabled={mathSize<=14} onClick={()=>setMathSize(size=>Math.max(14,size-1))}>A−</button><span>{mathSize}</span><button aria-label="Increase math size" disabled={mathSize>=23} onClick={()=>setMathSize(size=>Math.min(23,size+1))}>A+</button></div>
         </div>
-        <div className="workspace-actions"><div className="row"><span className={`save-state ${dirty?'draft':'saved'}`} role="status">{dirty ? draftSave==='saved'?`Draft saved · ${new Date(draftSavedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`:draftSave==='saving'?'Saving draft…':'Unsaved changes' : savedDraft?'Saved on this device':'New exercise'}</span><button disabled={blocked} onClick={()=>changeExercise(newExercise())}>＋ New exercise</button>{savedDraft&&<button disabled={blocked} onClick={()=>beginSave(true)}>Rename / move</button>}<button title="Save exercise (Ctrl+S)" className="primary" disabled={blocked||!hasEditorContent(draft.statement)} onClick={()=>beginSave()}>Save exercise {dirty?'•':''}</button></div><button className="cloud-switch" role="switch" aria-checked={cloudAllowed} aria-label="Cloud AI" disabled={blocked} onClick={()=>void toggleCloud()}><span className="switch-track" aria-hidden="true"><span/></span>Cloud AI <strong>{cloudAllowed?'On':'Off'}</strong></button></div>
+        <div className="workspace-actions"><div className="row"><span className={`save-state ${dirty?'draft':'saved'}`} role="status">{dirty ? draftSave==='saved'?`Draft saved · ${new Date(draftSavedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`:draftSave==='saving'?'Saving draft…':'Unsaved changes' : savedDraft?'Saved on this device':'New exercise'}</span><button disabled={blocked} onClick={()=>changeExercise(newExercise())}>＋ New exercise</button>{savedDraft&&<button disabled={blocked} onClick={()=>beginSave(true)}>Name / folders</button>}<button title="Save exercise (Ctrl+S)" className="primary" disabled={blocked||!hasEditorContent(draft.statement)} onClick={()=>beginSave()}>Save exercise {dirty?'•':''}</button></div><button className="cloud-switch" role="switch" aria-checked={cloudAllowed} aria-label="Cloud AI" disabled={blocked} onClick={()=>void toggleCloud()}><span className="switch-track" aria-hidden="true"><span/></span>Cloud AI <strong>{cloudAllowed?'On':'Off'}</strong></button></div>
       </div>
       <div className="problem-row">
         <section className="paper problem"><div className="panel-heading"><span className="step">01</span><h2>Problem</h2><span className="tag">YOUR PROBLEM</span></div>
@@ -555,7 +573,7 @@ export default function App() {
           <label className="attachment-button">＋ Add illustration<input aria-label="Attach a problem illustration" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked||draft.attachments.length>=4} onChange={event=>{const file=event.target.files?.[0];event.target.value='';void attach(file,'problem');}}/></label>
           <p className="subtle">Selected illustrations are included in new AI requests. Refresh knowledge to update earlier analysis. Notes and solution images are excluded.</p>
           <div className="illustrations-scroll">{!draft.attachments.some(image=>image.kind==='problem')&&<p className="empty-illustrations">Add a diagram, graph or image needed to understand the problem. Click any image to zoom.</p>}
-            <AttachmentGallery images={draft.attachments.filter(image=>image.kind==='problem')} onOpen={setViewingImage} disabled={blocked} onRemove={id=>void reviseIllustrations(draft.attachments.filter(image=>image.id!==id))} onAISelection={(id,included)=>void reviseIllustrations(draft.attachments.map(image=>image.id===id?{...image,useForAI:included}:image))}/>
+            <AttachmentGallery images={draft.attachments.filter(image=>image.kind==='problem')} onOpen={setViewingImage} disabled={blocked} onRename={(id,name)=>edit({attachments:draft.attachments.map(image=>image.id===id?{...image,name}:image)})} onRemove={id=>void reviseIllustrations(draft.attachments.filter(image=>image.id!==id))} onAISelection={(id,included)=>void reviseIllustrations(draft.attachments.map(image=>image.id===id?{...image,useForAI:included}:image))}/>
             {draft.attachments.filter(image=>image.kind==='problem').map(image=><div className="row" key={`read-${image.id}`}><span className="subtle">{image.name}</span><button type="button" disabled={blocked} onClick={()=>void readProblemImage(image,'local')}>Read locally</button><button type="button" disabled={blocked||!online} onClick={()=>void readProblemImage(image,'cloud')}>Read with Cloud AI</button></div>)}
           </div>
           <p className="subtle">{cloudAllowed&&online?'Cloud actions send selected illustrations. Local chat stays on your device.':'Local AI needs a compatible device to understand illustrations. Images are not sent to cloud while Cloud AI is off.'}</p>
@@ -568,6 +586,7 @@ export default function App() {
           <div className="hints-scroll" role="region" aria-label="Exercise hints" tabIndex={0}>
           {labels.map((label, i) => <div className="hint-tier" key={label}>
             <div className="hint-title"><span className="hint-number">{i + 1}</span><strong>{label}</strong><span className="source-label">{draft.hints[i]?sourceLabel(draft.hints[i].source):i>0&&cloudAllowed&&online?'Cloud':'Local'}</span></div>
+            {i>0&&online&&!cloudAllowed&&!draft.hints[i]&&<aside className="hint-cloud-suggestion"><p>Cloud AI is available for deeper reasoning on this level.</p><button type="button" disabled={blocked||!draft.confirmed||draft.hints.length!==i} onClick={()=>void ask(`hint${i+1}` as NotebookRequest['purpose'],true)}>Use Cloud AI</button></aside>}
             {draft.hints[i] ? <>
               <button className="hint-toggle" aria-expanded={!collapsedHints.includes(i)} aria-controls={`hint-content-${i}`} onClick={() => setCollapsedHints(current => current.includes(i) ? current.filter(level => level !== i) : [...current,i])}>{collapsedHints.includes(i) ? 'Show hint ▾' : 'Hide hint ▴'}</button>
               <div id={`hint-content-${i}`} hidden={collapsedHints.includes(i)}><MarkdownView value={draft.hints[i].text}/><small className="subtle">{sourceLabel(draft.hints[i].source)}</small></div>
@@ -579,13 +598,13 @@ export default function App() {
         </section>
       </div><div className="workbench">
         <section className="paper discussion"><div className="panel-heading"><span className="step">04</span><h2>Another way to think about it?</h2><div className="chat-routes" role="group" aria-label="Chat processing"><button type="button" aria-pressed={chatRoute === 'local'} disabled={blocked} onClick={() => void selectChatRoute('local')}>Local AI</button><button type="button" aria-pressed={chatRoute === 'cloud'} disabled={blocked || !online} onClick={() => void selectChatRoute('cloud')}>Cloud AI</button></div></div><p className="subtle">Discuss your approach. AI receives the problem, essentials, opened hints and up to 6 recent messages.</p><div className="messages">{!draft.messages.length && <div className="empty-chat">“What if I try a different approach?”<small>Start with what you are thinking.</small></div>}{draft.messages.map((m, i) => <div className={`message ${m.role}`} key={i}><small>{m.role === 'user' ? 'You' : `Mathfolio · ${sourceLabel(m.source)}`}</small><>{m.role==='user'&&m.format==='latex'?<MathInput value={m.text} readOnly compact label="Your question"/>:<MarkdownView value={m.text}/>}</></div>)}{streaming('chat')}</div><form className="chat-form" onSubmit={e => { e.preventDefault(); void ask('chat'); }}><div className="chat-entry"><MathInput ref={chatInput} label="Discussion question" maxLength={1000} value={question} disabled={blocked||!draft.confirmed} initialMode="text" onChange={setQuestion} placeholder="Ask a question or describe your approach…"/><MathKeyboard showCommon={false} disabled={blocked||!draft.confirmed} onActivate={()=>chatInput.current?.focus()} onInsert={symbol=>chatInput.current?.insert(symbol.latex)}/></div><button className="primary" disabled={blocked || !draft.confirmed || !hasEditorContent(question)} type="submit">Send ↗</button></form></section>
-        <section className="paper notes"><div className="panel-heading"><span className="step">05</span><h2>Your working notes</h2></div><NotesEditor label="Notes" value={draft.notes} format={draft.notesFormat} disabled={blocked} onChange={notes => edit({ notes,notesFormat:'latex' })}/><label className="attachment-button">＋ Attach my solution<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'solution'); }}/></label><AttachmentGallery images={draft.attachments.filter(a=>a.kind==='solution')} onOpen={setViewingImage} disabled={blocked} onRemove={id=>edit({attachments:draft.attachments.filter(a=>a.id!==id)})}/><label className="check"><input type="checkbox" checked={draft.completed} disabled={blocked} onChange={e => edit({ completed: e.target.checked })}/>I have completed this exercise</label><p className="subtle">Notes and images are stored when you select Save exercise.</p></section>
+        <section className="paper notes"><div className="panel-heading"><span className="step">05</span><h2>Your working notes</h2></div><NotesEditor label="Notes" value={draft.notes} format={draft.notesFormat} disabled={blocked} onChange={notes => edit({ notes,notesFormat:'latex' })}/><label className="attachment-button">＋ Attach my solution<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'solution'); }}/></label><AttachmentGallery images={draft.attachments.filter(a=>a.kind==='solution')} onOpen={setViewingImage} disabled={blocked} onRename={(id,name)=>edit({attachments:draft.attachments.map(image=>image.id===id?{...image,name}:image)})} onRemove={id=>edit({attachments:draft.attachments.filter(a=>a.id!==id)})}/><label className="check"><input type="checkbox" checked={draft.completed} disabled={blocked} onChange={e => edit({ completed: e.target.checked })}/>I have completed this exercise</label><p className="subtle">Notes and images are stored when you select Save exercise.</p></section>
 
       </div><p className="footer-note">AI can be wrong. Check assumptions and steps. The work is yours.</p>
     </>}
-    {user && ready && tab === 'library' && <section><div className="page-heading"><div><p className="eyebrow">PAGES OF PROGRESS</p><h1>{folder ? book.folders.find(f => f.id === folder)?.name : 'Exercise library'}</h1><p>Revisit your thinking. Continue where you left off.</p></div><div className="row"><button disabled={blocked} onClick={() => { setFolderName(''); setError(''); setFolderDialog(true); }}>＋ New folder</button>{folder && folder !== 'general' && <button disabled={blocked} onClick={() => void deleteFolder(folder)}>Delete folder</button>}<button disabled={blocked} onClick={() => changeExercise(newExercise())}>＋ New exercise</button></div></div><div className="library-tools"><input aria-label="Search exercises" placeholder="Search names, problems or notes…" value={libraryQuery} onChange={e=>setLibraryQuery(e.target.value)}/><select aria-label="Exercise status" value={libraryCompletion} onChange={e=>setLibraryCompletion(e.target.value as typeof libraryCompletion)}><option value="all">All exercises</option><option value="progress">In progress</option><option value="completed">Completed</option></select><select aria-label="Sort exercises" value={librarySort} onChange={e=>setLibrarySort(e.target.value as ExerciseSort)}><option value="recent">Recently updated</option><option value="oldest">Oldest first</option><option value="name">Name A–Z</option></select></div>{showPages ? <>{folder&&<button onClick={()=>{setFolder(null);setLibraryQuery('');setLibraryCompletion('all');}}>← All folders</button>}<div className="exercise-list">{!shown.length && <div className="paper empty-panel">No matching exercises. Try another search or create a new page.</div>}{shown.map(e => <article className="paper exercise-card" key={e.id}><div><span className={`tag ${e.completed ? 'done' : ''}`}>{e.completed ? 'Completed' : 'In progress'}</span><h2>{e.title}</h2><MathInput value={statementLatex(e.statement, e.statementFormat)} readOnly compact label={`Problem: ${e.title}`}/><small>{new Date(e.updatedAt).toLocaleString('en-GB')} · {e.hints.length}/3 hints opened</small></div><div className="row"><button className="primary" disabled={blocked} onClick={() => openPreview(e)}>Open exercise</button><button disabled={blocked} onClick={() => void deleteExercise(e.id)}>Delete</button></div></article>)}</div></> : <div className="folder-grid">{book.folders.map(f => <article className="paper folder-card" key={f.id}><button className="folder-open" disabled={blocked} onClick={() => setFolder(f.id)}><span aria-hidden="true">▱</span><h2>{f.name}</h2><small>{book.exercises.filter(e => e.folderId === f.id).length} exercises →</small></button>{f.id !== 'general' && <button className="folder-delete" disabled={blocked} aria-label={`Delete folder ${f.name}`} onClick={() => void deleteFolder(f.id)}>Delete folder</button>}</article>)}</div>}</section>}
+    {user && ready && tab === 'library' && <section><div className="page-heading"><div><p className="eyebrow">PAGES OF PROGRESS</p><h1>{folder ? book.folders.find(f => f.id === folder)?.name : 'Exercise library'}</h1><p>Revisit your thinking. Continue where you left off.</p></div><div className="row"><button disabled={blocked} onClick={() => { setFolderName(''); setError(''); setFolderDialog(true); }}>＋ New folder</button>{folder && folder !== 'general' && <button disabled={blocked} onClick={() => void deleteFolder(folder)}>Delete folder</button>}<button disabled={blocked} onClick={() => changeExercise(newExercise())}>＋ New exercise</button></div></div><div className="library-tools"><input aria-label="Search exercises" placeholder="Search names, problems or notes…" value={libraryQuery} onChange={e=>setLibraryQuery(e.target.value)}/><select aria-label="Exercise status" value={libraryCompletion} onChange={e=>setLibraryCompletion(e.target.value as typeof libraryCompletion)}><option value="all">All exercises</option><option value="progress">In progress</option><option value="completed">Completed</option></select><select aria-label="Sort exercises" value={librarySort} onChange={e=>setLibrarySort(e.target.value as ExerciseSort)}><option value="recent">Recently updated</option><option value="oldest">Oldest first</option><option value="name">Name A–Z</option></select></div>{showPages ? <>{folder&&<button onClick={()=>{setFolder(null);setLibraryQuery('');setLibraryCompletion('all');}}>← All folders</button>}<div className="exercise-list">{!shown.length && <div className="paper empty-panel">No matching exercises. Try another search or create a new page.</div>}{shown.map(e => <article className="paper exercise-card" key={e.id}><div><span className={`tag ${e.completed ? 'done' : ''}`}>{e.completed ? 'Completed' : 'In progress'}</span><h2>{e.title}</h2><MathInput value={statementLatex(e.statement, e.statementFormat)} readOnly compact label={`Problem: ${e.title}`}/><small>{new Date(e.updatedAt).toLocaleString('en-GB')} · {e.hints.length}/3 hints opened</small></div><div className="row"><button className="primary" disabled={blocked} onClick={() => openPreview(e)}>Open exercise</button><button disabled={blocked} onClick={() => void deleteExercise(e.id)}>Delete</button></div></article>)}</div></> : <div className="folder-grid">{book.folders.map(f => <article className="paper folder-card" key={f.id}><button className="folder-open" disabled={blocked} onClick={() => setFolder(f.id)}><span aria-hidden="true">▱</span><h2>{f.name}</h2><small>{book.exercises.filter(e => inExerciseFolder(e,f.id)).length} exercises →</small></button>{f.id !== 'general' && <button className="folder-delete" disabled={blocked} aria-label={`Delete folder ${f.name}`} onClick={() => void deleteFolder(f.id)}>Delete folder</button>}</article>)}</div>}</section>}
     {folderDialog && <div className="modal-backdrop"><section className="paper save-dialog" role="dialog" aria-modal="true" aria-labelledby="folder-title"><p className="eyebrow">ORGANIZE YOUR THINKING</p><h2 id="folder-title">New folder</h2><form onSubmit={e => { e.preventDefault(); void createFolder(); }}><label>Folder name<input autoFocus required maxLength={80} value={folderName} disabled={saving} onChange={e => setFolderName(e.target.value)} placeholder="e.g. Algebra — week 1"/></label>{error && <p role="alert" className="error">{error}</p>}<div className="row"><button type="button" disabled={saving} onClick={() => setFolderDialog(false)}>Cancel</button><button className="primary" type="submit" disabled={saving || !folderName.trim()}>{saving ? 'Creating…' : 'Create folder'}</button></div></form></section></div>}
-    {saveOpen && <div className="modal-backdrop"><section className="paper save-dialog" role="dialog" aria-modal="true" aria-labelledby="save-title"><p className="eyebrow">KEEP THIS PAGE</p><h2 id="save-title">Save to your notebook</h2><label>Exercise name<input autoFocus required maxLength={120} value={title} disabled={saving} onChange={e => setTitle(e.target.value)}/></label><label>Folder<select value={folderId} disabled={saving || !!newFolder.trim()} onChange={e => setFolderId(e.target.value)}>{book.folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><label>Or create a new folder<input maxLength={80} value={newFolder} disabled={saving} onChange={e => setNewFolder(e.target.value)} placeholder="e.g. Algebra — week 1"/></label><p className="subtle">The problem, essentials, opened hints, notes, images and chat stay on this browser. Cloud sync is not available yet.</p>{error && <p role="alert" className="error">{error}</p>}<div className="row"><button disabled={saving} onClick={() => setSaveOpen(false)}>Not now</button><button className="primary" disabled={saving || !title.trim()} onClick={() => void save()}>{saving ? 'Saving…' : 'Save on this device'}</button></div></section></div>}
+    {saveOpen && <div className="modal-backdrop"><section className="paper save-dialog" role="dialog" aria-modal="true" aria-labelledby="save-title"><p className="eyebrow">KEEP THIS PAGE</p><h2 id="save-title">Save to your notebook</h2><label>Exercise name<input autoFocus required maxLength={120} value={title} disabled={saving} onChange={e => setTitle(e.target.value)}/></label><FolderPicker folders={book.folders} selected={folderIds} disabled={saving} onChange={setFolderIds}/><label>Or create a new folder<input maxLength={80} value={newFolder} disabled={saving} onChange={e => setNewFolder(e.target.value)} placeholder="e.g. Algebra — week 1"/></label><p className="subtle">The problem, essentials, opened hints, notes, images and chat stay on this browser. Cloud sync is not available yet.</p>{error && <p role="alert" className="error">{error}</p>}<div className="row"><button disabled={saving} onClick={() => setSaveOpen(false)}>Not now</button><button className="primary" disabled={saving || !title.trim()} onClick={() => void save()}>{saving ? 'Saving…' : 'Save on this device'}</button></div></section></div>}
   </main>{pdfQuestions !== null && <div className="modal-backdrop pdf-backdrop"><section className="paper save-dialog pdf-dialog" role="dialog" aria-modal="true" aria-labelledby="pdf-title">
     <header className="pdf-dialog-header"><div><p className="eyebrow">PDF IMPORT · SELECT · REVIEW · USE</p><h2 id="pdf-title">Choose a question to solve</h2><p className="subtle">Select a detected question, review the extracted text, then add it to your workspace.</p></div><button type="button" aria-label="Close PDF import" disabled={imageBusy} onClick={closePdfPicker}>✕</button></header>
     {!pdfQuestions.length ? <p role="status">No readable text was found after local OCR.</p> : <div className="pdf-picker">
@@ -612,5 +631,5 @@ export default function App() {
     <p className="subtle pdf-privacy-note">Cloud reading sends only the selected PDF page after separate consent. Review the transcription and formulas before using them.</p>
     {pdfReplacePending && <div className="pdf-replace-confirm" role="alert"><p>This replaces the current problem and clears its knowledge, hints, and chat so they match the PDF. Your notes and attached images will be kept.</p><div className="row"><button type="button" onClick={() => setPdfReplacePending(false)}>Keep current problem</button><button type="button" className="primary" disabled={!pdfSelected || mixedTextToLatex(pdfSelected.text).length > 6000} onClick={() => { if (pdfSelected) applyPdfQuestion(mixedTextToLatex(pdfSelected.text)); }}>Replace with PDF text</button></div></div>}
     <div className="row pdf-dialog-actions"><button type="button" disabled={imageBusy} onClick={closePdfPicker}>Cancel</button><button type="button" className="primary" disabled={imageBusy || pdfReplacePending || !pdfSelected?.text.trim() || pdfSelected.text.length > 6000} onClick={usePdfQuestion}>Use this question</button></div>
-  </section></div>} {imageProblem&&<ImageProblemReview image={imageProblem} onClose={()=>{setImageProblem(null);setImportError('');}} onApply={applyImageText} suspended={!!confirmation} error={importError} canKeepImage={draft.attachments.length<4}/>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={book.folders.find(value => value.id === previewExercise.folderId)?.name ?? 'My exercises'} notes={preview.notes} notesFormat={preview.notesFormat} saving={saving} onImage={setViewingImage} suspended={!!confirmation || !!viewingImage} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes,notesFormat:'latex' } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {viewingImage&&<ImageViewer key={viewingImage.id} image={viewingImage} onClose={()=>setViewingImage(null)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</MathKeyboardProvider>;
+  </section></div>} {imageProblem&&<ImageProblemReview image={imageProblem} onClose={()=>{setImageProblem(null);setImportError('');}} onApply={applyImageText} suspended={!!confirmation} error={importError} canKeepImage={draft.attachments.length<4}/>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={['My exercises',...book.folders.filter(value=>exerciseFolderIds(previewExercise).includes(value.id)).map(value=>value.name)].join(' · ')} attachments={preview.attachments} folders={book.folders} folderIds={preview.folderIds} onAttachments={attachments=>setPreview(current=>current?{...current,attachments}:current)} onAttach={file=>void attachPreview(file)} onFolders={folderIds=>setPreview(current=>current?{...current,folderIds}:current)} notes={preview.notes} notesFormat={preview.notesFormat} saving={saving} onImage={setViewingImage} suspended={!!confirmation || !!viewingImage} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes,notesFormat:'latex' } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {viewingImage&&<ImageViewer key={viewingImage.id} image={viewingImage} onClose={()=>setViewingImage(null)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</MathKeyboardProvider>;
 }

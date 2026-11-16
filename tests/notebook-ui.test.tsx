@@ -72,6 +72,84 @@ beforeEach(async () => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+describe('library image edits and shared folders',()=>{
+  async function reload(){await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));}
+  function folders(){stored().folders.push({id:'a',name:'Algebra'},{id:'b',name:'Revision'});}
+  async function selectFolder(name:string,scope:ParentNode=host){const label=[...scope.querySelectorAll('label')].find(item=>item.textContent?.trim()===name)!;await act(async()=>label.querySelector<HTMLInputElement>('input')!.click());}
+  it('shows illustrations with the problem, solution images with notes, and saves renamed/added/removed images in place',async()=>{
+    stored().exercises[0].attachments.push({id:'diagram',kind:'problem',name:'diagram.png',data:'data:image/png;base64,AQ=='});
+    const original=structuredClone(stored().exercises[0]);await reload();await library();await click('Open exercise');
+    const problem=host.querySelector('.preview-columns .preview-section')!,notes=host.querySelector('.preview-notes')!;
+    expect(problem.textContent).toContain('diagram.png');expect(problem.textContent).not.toContain('solution.png');expect(notes.textContent).toContain('solution.png');
+    await click('Rename',problem);await type('[aria-label="Image name"]','Given diagram');await click('Apply name',problem);
+    await click('Remove',notes);expect(stored().exercises[0].attachments).toEqual(original.attachments);
+    const upload=host.querySelector<HTMLInputElement>('[aria-label="Attach a solution in preview"]')!;
+    Object.defineProperty(upload,'files',{configurable:true,value:[new File(['solution'],'new-work.png',{type:'image/png'})]});
+    await act(async()=>{upload.dispatchEvent(new Event('change',{bubbles:true}));await new Promise(resolve=>setTimeout(resolve,20));});
+    expect(notes.textContent).toContain('new-work.png');await click('Save changes');
+    const saved=stored().exercises[0];expect(saved.attachments.map(image=>image.name)).toEqual(['Given diagram','new-work.png']);
+    expect(saved.statement).toBe(original.statement);expect(saved.hints).toEqual(original.hints);expect(saved.knowledge).toEqual(original.knowledge);expect(mocks.ai).not.toHaveBeenCalled();
+    await click('Close',host.querySelector('.exercise-preview')!);await click('Open exercise');expect(host.querySelector('.preview-notes')!.textContent).toContain('new-work.png');
+  });
+  it('protects unsaved image edits on close and never turns rename Escape into closing the preview',async()=>{
+    await library();await click('Open exercise');await click('Rename',host.querySelector('.preview-notes')!);
+    const input=host.querySelector<HTMLInputElement>('[aria-label="Image name"]')!;await act(async()=>input.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
+    expect(host.querySelector('.exercise-preview')).not.toBeNull();expect(host.querySelector('[role="alertdialog"]')).toBeNull();
+    await click('Remove',host.querySelector('.preview-notes')!);await click('Close',host.querySelector('.exercise-preview')!);expect(host.querySelector('[role="alertdialog"]')).not.toBeNull();
+    await click('Discard changes & continue');expect(stored().exercises[0].attachments).toHaveLength(1);
+  });
+  it('can add a saved page to multiple folders from preview without copying it',async()=>{
+    folders();await reload();await library();await click('Open exercise');await selectFolder('Algebra');await selectFolder('Revision');
+    expect(stored().exercises[0].folderIds).toBeUndefined();await click('Save changes');expect(stored().exercises).toHaveLength(2);expect(stored().exercises[0].folderIds).toEqual(['a','b']);
+    await click('Close',host.querySelector('.exercise-preview')!);await click('← All folders');
+    const cards=[...host.querySelectorAll('.folder-card')];expect(cards.find(card=>card.textContent?.includes('My exercises'))!.textContent).toContain('2 exercises');
+    for(const name of ['Algebra','Revision'])expect(cards.find(card=>card.textContent?.includes(name))!.textContent).toContain('1 exercises');
+  });
+  it('saves a new page in multiple folders while always including it in history',async()=>{
+    folders();await reload();await type('[aria-label="Problem statement"]','x=7');await click('Save exercise');await type('[aria-labelledby="save-title"] label input','New shared exercise');
+    await selectFolder('Algebra',host.querySelector('[aria-labelledby="save-title"]')!);await selectFolder('Revision',host.querySelector('[aria-labelledby="save-title"]')!);await click('Save on this device');
+    expect(stored().exercises).toHaveLength(3);expect(stored().exercises[0].folderIds).toEqual(['a','b']);
+    await library();expect(host.querySelectorAll('.exercise-card')).toHaveLength(3);
+  });
+  it('deletes a shared history page everywhere after explicit confirmation',async()=>{
+    folders();stored().exercises[0].folderIds=['a','b'];stored().exercises[0].folderId='a';await reload();await library();
+    expect(host.querySelectorAll('.exercise-card')).toHaveLength(2);await click('Delete',host.querySelector('.exercise-card')!);
+    expect(host.querySelector('[role="alertdialog"]')!.textContent).toContain('every other folder');await click('Delete exercise');
+    expect(stored().exercises.map(page=>page.id)).toEqual(['second']);await click('← All folders');
+    for(const card of [...host.querySelectorAll('.folder-card')].filter(card=>/Algebra|Revision/.test(card.textContent??'')))expect(card.textContent).toContain('0 exercises');
+  });
+  it('keeps staged image and folder edits after a failed save and allows retry',async()=>{
+    folders();await reload();await library();await click('Open exercise');await selectFolder('Algebra');await click('Remove',host.querySelector('.preview-notes')!);
+    mocks.write.mockImplementationOnce(()=>{throw new Error('Storage is full');});await click('Save changes');
+    expect(stored().exercises[0].attachments).toHaveLength(1);expect(stored().exercises[0].folderIds).toBeUndefined();expect(host.querySelector('.exercise-preview')!.textContent).toContain('Storage is full');
+    expect(host.querySelector('.preview-notes')!.textContent).not.toContain('solution.png');await click('Save changes');expect(stored().exercises[0].attachments).toEqual([]);expect(stored().exercises[0].folderIds).toEqual(['a']);
+  });
+  it('preserves independent workspace notes while following library image and folder edits',async()=>{
+    folders();await reload();await openWorkspace();await type('[aria-label="Notes"]','Workspace-only notes');await click('Exercise library');await click('Open exercise');
+    await click('Rename',host.querySelector('.preview-notes')!);await type('[aria-label="Image name"]','Proof photo');await click('Apply name');await selectFolder('Revision');await click('Save changes');
+    expect(stored().exercises[0].notes).toBe('Original notes');await click('Close',host.querySelector('.exercise-preview')!);await click('Workspace');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe('Workspace-only notes');await click('Save exercise');
+    expect(stored().exercises[0].attachments[0].name).toBe('Proof photo');expect(stored().exercises[0].folderIds).toEqual(['b']);expect(stored().exercises[0].notes).toBe('Workspace-only notes');expect(stored().exercises).toHaveLength(2);
+  });
+});
+
+describe('online suggestions for later hint levels',()=>{
+  it('offers cloud on levels 2 and 3 and generates only after permission with the correct route',async()=>{
+    await openWorkspace();const tiers=host.querySelectorAll('.hint-tier');
+    expect(tiers[0].querySelector('.hint-cloud-suggestion')).toBeNull();expect(tiers[1].textContent).toContain('Cloud AI is available');expect(tiers[2].textContent).toContain('Cloud AI is available');
+    await click('Use Cloud AI',tiers[1]);expect(mocks.ai).not.toHaveBeenCalled();await click('Not now',host.querySelector('[role="alertdialog"]')!);expect(mocks.ai).not.toHaveBeenCalled();
+    mocks.ai.mockResolvedValue({text:'Cloud method',source:'IN_CLOUD'});await click('Use Cloud AI',tiers[1]);await click('Allow Cloud AI',host.querySelector('[role="alertdialog"]')!);
+    expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'hint2',route:'cloud',cloudAllowed:true});expect(host.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('true');
+    await click('Cloud AI',host.querySelector('.workspace-actions')!);await click('Use Cloud AI',host.querySelectorAll('.hint-tier')[2]);await click('Allow Cloud AI',host.querySelector('[role="alertdialog"]')!);
+    expect(mocks.ai.mock.calls[1][0]).toMatchObject({purpose:'hint3',route:'cloud',cloudAllowed:true});
+  });
+  it('hides the cloud suggestion offline while keeping the local level available',async()=>{
+    await openWorkspace();vi.stubGlobal('navigator',{onLine:false});await act(async()=>window.dispatchEvent(new Event('offline')));
+    expect(host.querySelector('.hint-cloud-suggestion')).toBeNull();expect(button('Open level 2').disabled).toBe(false);
+    mocks.ai.mockResolvedValue({text:'Local method',source:'ON_DEVICE'});await click('Open level 2');expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'hint2',route:'local'});
+  });
+});
+
 describe('saved page previews and workspace copies', () => {
   it('normalizes fragmented PDF text, previews the result and can restore the extracted source', async () => {
     const raw='Bài 2.1. Những khẳng định\nnào sau đây là đúng?\na)0 ∈ ∅ b)∅ ⊆ {0}';
@@ -243,7 +321,7 @@ describe('saved page previews and workspace copies', () => {
     expect(mocks.ai).not.toHaveBeenCalled();
   });
 
-  it('opens all saved content in a dismissible preview; only notes can be edited', async () => {
+  it('opens all saved content in a dismissible preview; problem and AI content stay read-only', async () => {
     await library(); await click('Open exercise');
     const dialog = host.querySelector('[role="dialog"]')!;
     expect(dialog.textContent).toContain('Original essentials'); expect(dialog.textContent).toContain('Original hint');
@@ -260,8 +338,8 @@ describe('saved page previews and workspace copies', () => {
     const original = structuredClone(stored().exercises[0]);
     await library(); await click('Open exercise');
     await type('[aria-label="Saved exercise notes"]', 'Updated in preview');
-    expect(button('Save notes').disabled).toBe(false);
-    await click('Save notes');
+    expect(button('Save changes').disabled).toBe(false);
+    await click('Save changes');
     const { notes, notesFormat, updatedAt, ...other } = stored().exercises[0];expect(notesFormat).toBe('latex');
     const { notes: _, updatedAt: __, ...before } = original;
     expect(notes).toBe('Updated in preview'); expect(other).toEqual(before);
@@ -276,19 +354,19 @@ describe('saved page previews and workspace copies', () => {
     expect(host.querySelector('[role="alertdialog"]')).not.toBeNull();
     await click('Keep working');
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Saved exercise notes"]')!.value).toBe('Unsaved preview');
-    await click('Close', host.querySelector('[role="dialog"]')!); await click('Discard notes & continue');
+    await click('Close', host.querySelector('[role="dialog"]')!); await click('Discard changes & continue');
     expect(stored().exercises[0].notes).toBe('Original notes');
   });
   it('keeps the edited notes and original saved page when storage fails, then allows retry', async () => {
     await library(); await click('Open exercise');
     await type('[aria-label="Saved exercise notes"]', 'Notes to retry');
     mocks.write.mockImplementationOnce(() => { throw new Error('Storage is full'); });
-    await click('Save notes');
+    await click('Save changes');
     expect(host.querySelector('[role="dialog"]')!.textContent).toContain('Storage is full');
     expect(stored().exercises[0].notes).toBe('Original notes');
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Saved exercise notes"]')!.value).toBe('Notes to retry');
-    expect(button('Save notes').disabled).toBe(false);
-    await click('Save notes'); expect(stored().exercises[0].notes).toBe('Notes to retry');
+    expect(button('Save changes').disabled).toBe(false);
+    await click('Save changes'); expect(stored().exercises[0].notes).toBe('Notes to retry');
   });
   it('keeps workspace edits out of the saved page until Save overwrites the same exercise', async () => {
     await openWorkspace(); await type('[aria-label="Notes"]', 'Uncommitted workspace');
@@ -456,7 +534,7 @@ describe('notes math keyboard', () => {
     await click('Show math keyboard');
     const input=host.querySelector<HTMLTextAreaElement>('[aria-label="Saved exercise notes"]')!;
     input.setSelectionRange(input.value.length,input.value.length);
-    await click('x²',host.querySelector('.notes-math-keys')!); await click('Save notes');
+    await click('x²',host.querySelector('.notes-math-keys')!); await click('Save changes');
     expect(mocks.insert).toHaveBeenCalledWith('^{2}');expect(stored().exercises[0].notes).toBe(String.raw`\text{Original notes}^{2}`);expect(stored().exercises[0].notesFormat).toBe('latex');
     expect(stored().exercises[0].statement).toBe(statement);
   });
@@ -564,7 +642,7 @@ describe('attachment zoom viewer across workspace and library',()=>{
     expect(host.querySelector('.image-viewer')).toBeNull();expect(host.querySelector('.exercise-preview')).not.toBeNull();
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Saved exercise notes"]')!.value).toBe('Keep unsaved notes');expect(document.activeElement).toBe(thumbnail);
     expect(document.body.style.overflow).toBe('hidden');expect(stored().exercises[0].notes).toBe('Original notes');expect(mocks.write).not.toHaveBeenCalled();
-    await click('Close',host.querySelector('.exercise-preview')!);await click('Discard notes & continue');expect(document.body.style.overflow).toBe('');
+    await click('Close',host.querySelector('.exercise-preview')!);await click('Discard changes & continue');expect(document.body.style.overflow).toBe('');
   });
   it('opens workspace solution images locally and blocks save/analyze shortcuts behind the viewer',async()=>{
     await openWorkspace();const before=structuredClone(stored());
