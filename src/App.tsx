@@ -49,7 +49,7 @@ export default function App() {
   const [pdfPreviewBusy, setPdfPreviewBusy] = useState(false);
   const pdfPreviewRequest = useRef(0);
   const [collapsedHints, setCollapsedHints] = useState<number[]>([]);
-  const [preview, setPreview] = useState<{ id: string; notes: string } | null>(null);
+  const [preview, setPreview] = useState<{ id: string; notes: string; notesFormat?:'latex' } | null>(null);
   const [previewError, setPreviewError] = useState('');
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const confirmationResult = useRef<((accepted: boolean) => void) | null>(null);
@@ -344,12 +344,12 @@ export default function App() {
     } catch (e) { if (version === epoch.current) setError(friendlyError(e)); }
     finally { if (version === epoch.current) setSaving(false); }
   }
-  function openPreview(exercise: Exercise) { setPreview({ id: exercise.id, notes: exercise.notes }); setPreviewError(''); }
+  function openPreview(exercise: Exercise) { setPreview({ id: exercise.id, notes: exercise.notes,notesFormat:exercise.notesFormat }); setPreviewError(''); }
   async function leavePreview(openWorkspace = false) {
     if (!preview || saving) return;
     const version = epoch.current;
     const exercise = book.exercises.find(value => value.id === preview.id); if (!exercise) return;
-    if (preview.notes !== exercise.notes && !await confirmChange({ title:'Leave these note changes?', description:'Your notes in this preview have not been saved. Select Keep working to save them, or discard the note changes and continue.', action:'Discard notes & continue' })) return;
+    if ((preview.notes !== exercise.notes || preview.notesFormat !== exercise.notesFormat) && !await confirmChange({ title:'Leave these note changes?', description:'Your notes in this preview have not been saved. Select Keep working to save them, or discard the note changes and continue.', action:'Discard notes & continue' })) return;
     if (version !== epoch.current) return;
     if (openWorkspace && !await changeExercise(exercise)) return;
     setPreview(null); setPreviewError('');
@@ -360,13 +360,13 @@ export default function App() {
     const original = book.exercises.find(value => value.id === preview.id); if (!original) return;
     setSaving(true); setPreviewError('');
     try {
-      const next = putExerciseNotes(book, preview.id, preview.notes);
+      const next = putExerciseNotes(book, preview.id, preview.notes,preview.notesFormat);
       await saveNotebook(storageKey, next);
       if (version !== epoch.current) return;
       setBook(next);
       // Preserve any existing workspace edits. Its notes can only follow the library
       // when they still match the previously saved notes.
-      setDraft(current => current.id === preview.id && current.notes === original.notes ? { ...current, notes: preview.notes } : current);
+      setDraft(current => current.id === preview.id && current.notes === original.notes && current.notesFormat===original.notesFormat ? { ...current, notes: preview.notes,notesFormat:preview.notesFormat } : current);
     } catch (e) { if (version === epoch.current) setPreviewError(friendlyError(e)); }
     finally { if (version === epoch.current) setSaving(false); }
   }
@@ -493,7 +493,7 @@ export default function App() {
         </section>
       </div><div className="workbench">
         <section className="paper discussion"><div className="panel-heading"><span className="step">04</span><h2>Another way to think about it?</h2><div className="chat-routes" role="group" aria-label="Chat processing"><button type="button" aria-pressed={chatRoute === 'local'} disabled={blocked} onClick={() => void selectChatRoute('local')}>Local AI</button><button type="button" aria-pressed={chatRoute === 'cloud'} disabled={blocked || !online} onClick={() => void selectChatRoute('cloud')}>Cloud AI</button></div></div><p className="subtle">Discuss your approach. AI receives the problem, essentials, opened hints and up to 6 recent messages.</p><div className="messages">{!draft.messages.length && <div className="empty-chat">“What if I try a different approach?”<small>Start with what you are thinking.</small></div>}{draft.messages.map((m, i) => <div className={`message ${m.role}`} key={i}><small>{m.role === 'user' ? 'You' : `Mathfolio · ${sourceLabel(m.source)}`}</small><MarkdownView value={m.text}/></div>)}{streaming('chat')}</div><form className="chat-form" onSubmit={e => { e.preventDefault(); void ask('chat'); }}><input aria-label="Discussion question" maxLength={1000} value={question} disabled={blocked || !draft.confirmed} onChange={e => setQuestion(e.target.value)} placeholder="Ask a question or describe your approach…"/><button className="primary" disabled={blocked || !draft.confirmed || !question.trim()} type="submit">Send ↗</button></form></section>
-        <section className="paper notes"><div className="panel-heading"><span className="step">05</span><h2>Your working notes</h2></div><NotesEditor label="Notes" value={draft.notes} disabled={blocked} onChange={notes => edit({ notes })}/><label className="attachment-button">＋ Attach my solution<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'solution'); }}/></label><div className="attachments">{draft.attachments.filter(a => a.kind === 'solution').map(a => <figure key={a.id}><a href={a.data} target="_blank" rel="noreferrer"><img src={a.data} alt={a.name}/></a><figcaption>{a.name}<button disabled={blocked} onClick={() => edit({ attachments: draft.attachments.filter(x => x.id !== a.id) })}>Remove</button></figcaption></figure>)}</div><label className="check"><input type="checkbox" checked={draft.completed} disabled={blocked} onChange={e => edit({ completed: e.target.checked })}/>I have completed this exercise</label><p className="subtle">Notes and images are stored when you select Save exercise.</p></section>
+        <section className="paper notes"><div className="panel-heading"><span className="step">05</span><h2>Your working notes</h2></div><NotesEditor label="Notes" value={draft.notes} format={draft.notesFormat} disabled={blocked} onChange={notes => edit({ notes,notesFormat:'latex' })}/><label className="attachment-button">＋ Attach my solution<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'solution'); }}/></label><div className="attachments">{draft.attachments.filter(a => a.kind === 'solution').map(a => <figure key={a.id}><a href={a.data} target="_blank" rel="noreferrer"><img src={a.data} alt={a.name}/></a><figcaption>{a.name}<button disabled={blocked} onClick={() => edit({ attachments: draft.attachments.filter(x => x.id !== a.id) })}>Remove</button></figcaption></figure>)}</div><label className="check"><input type="checkbox" checked={draft.completed} disabled={blocked} onChange={e => edit({ completed: e.target.checked })}/>I have completed this exercise</label><p className="subtle">Notes and images are stored when you select Save exercise.</p></section>
 
       </div><p className="footer-note">AI can be wrong. Check assumptions and steps. The work is yours.</p>
     </>}
@@ -520,5 +520,5 @@ export default function App() {
     <p className="subtle">Drag over a formula to recognize it as LaTeX; the formula image is processed by the local OCR service. The problem editor stores LaTeX and displays formatted math.</p>
     {pdfReplacePending && <div className="pdf-replace-confirm" role="alert"><p>This replaces the current problem and clears its knowledge, hints, and chat so they match the PDF. Your notes and attached images will be kept.</p><div className="row"><button type="button" onClick={() => setPdfReplacePending(false)}>Keep current problem</button><button type="button" className="primary" disabled={!pdfSelected || mixedTextToLatex(pdfSelected.text).length > 6000} onClick={() => { if (pdfSelected) applyPdfQuestion(mixedTextToLatex(pdfSelected.text)); }}>Replace with PDF text</button></div></div>}
     <div className="row"><button type="button" onClick={closePdfPicker}>Cancel</button><button type="button" className="primary" disabled={pdfReplacePending || !pdfSelected?.text.trim() || pdfSelected.text.length > 6000} onClick={usePdfQuestion}>Use this text</button></div>
-  </section></div>} {imageProblem&&<ImageProblemReview image={imageProblem} onClose={()=>{setImageProblem(null);setImportError('');}} onApply={applyImageText} suspended={!!confirmation} error={importError} canKeepImage={draft.attachments.length<4}/>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={book.folders.find(value => value.id === previewExercise.folderId)?.name ?? 'My exercises'} notes={preview.notes} saving={saving} suspended={!!confirmation} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</>;
+  </section></div>} {imageProblem&&<ImageProblemReview image={imageProblem} onClose={()=>{setImageProblem(null);setImportError('');}} onApply={applyImageText} suspended={!!confirmation} error={importError} canKeepImage={draft.attachments.length<4}/>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={book.folders.find(value => value.id === previewExercise.folderId)?.name ?? 'My exercises'} notes={preview.notes} notesFormat={preview.notesFormat} saving={saving} suspended={!!confirmation} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes,notesFormat:'latex' } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</>;
 }

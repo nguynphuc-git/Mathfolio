@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NotebookRequest } from '../src/ai';
 import type { Answer, Notebook } from '../src/notebook';
 
-const mocks = vi.hoisted(() => ({ values: new Map<string, unknown>(), ai: vi.fn(), write: vi.fn(), pdf: vi.fn(), pdfPreview: vi.fn(), prepareImage:vi.fn(), readImage:vi.fn() }));
+const mocks = vi.hoisted(() => ({ values: new Map<string, unknown>(), ai: vi.fn(), write: vi.fn(), pdf: vi.fn(), pdfPreview: vi.fn(), prepareImage:vi.fn(), readImage:vi.fn(),insert:vi.fn() }));
 vi.mock('idb-keyval', () => ({ get: vi.fn(async (key: string) => structuredClone(mocks.values.get(key))), del: async (key:string) => { mocks.values.delete(key); }, set: async (key: string, value: unknown) => { mocks.write(key, value); mocks.values.set(key, structuredClone(value)); } }));
 vi.mock('../src/firebase', () => ({ getFirebaseApp: () => ({}) }));
 vi.mock('firebase/auth', () => ({
@@ -26,7 +26,7 @@ vi.mock('../src/components/PdfFormulaCropper', () => ({
 }));
 // MathLive caret/layout is tested manually in Chrome; these tests exercise page state and persistence.
 vi.mock('../src/components/MathInput', () => ({ MathInput: forwardRef(function Field(props: { value: string; onChange?: (value: string) => void; readOnly?: boolean; disabled?: boolean; label?: string }, ref) {
-  useImperativeHandle(ref, () => ({ focus() {}, insert() {} }));
+  useImperativeHandle(ref, () => ({ focus() {}, insert(latex:string) {mocks.insert(latex);props.onChange?.(props.value+latex);} }));
   return <textarea aria-label={props.label ?? 'Problem statement'} readOnly={props.readOnly} disabled={props.disabled} value={props.value} onChange={event => props.onChange?.(event.target.value)}/>;
 }) }));
 import App from '../src/App';
@@ -55,7 +55,7 @@ async function openWorkspace() { await library(); await click('Open exercise'); 
 beforeEach(async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
-  mocks.ai.mockReset(); mocks.write.mockReset(); mocks.pdf.mockReset(); mocks.pdfPreview.mockReset(); mocks.values.clear();
+  mocks.ai.mockReset();mocks.insert.mockReset(); mocks.write.mockReset(); mocks.pdf.mockReset(); mocks.pdfPreview.mockReset(); mocks.values.clear();
   mocks.prepareImage.mockReset().mockResolvedValue({data:'data:image/jpeg;base64,AA==',name:'problem.jpg'});mocks.readImage.mockReset();
   mocks.pdfPreview.mockResolvedValue('data:image/png;base64,AA==');
   const first = { ...newExercise(), id: 'first', updatedAt:'2001-01-01T12:00:00Z', title: 'Quadratic page', statement: 'x^2+2x=0', confirmed: true, notes: 'Original notes', knowledge: { text: 'Original essentials', source: 'local_reference' }, hints: [{ text: 'Original hint', source: 'on_device' }], messages: [{ role: 'user' as const, text: 'Original question' }], attachments: [{ id: 'image', name: 'solution.png', data: 'data:image/png;base64,AA==', kind: 'solution' as const }] };
@@ -186,7 +186,7 @@ describe('saved page previews and workspace copies', () => {
     await type('[aria-label="Saved exercise notes"]', 'Updated in preview');
     expect(button('Save notes').disabled).toBe(false);
     await click('Save notes');
-    const { notes, updatedAt, ...other } = stored().exercises[0];
+    const { notes, notesFormat, updatedAt, ...other } = stored().exercises[0];expect(notesFormat).toBe('latex');
     const { notes: _, updatedAt: __, ...before } = original;
     expect(notes).toBe('Updated in preview'); expect(other).toEqual(before);
     await click('Close', host.querySelector('[role="dialog"]')!);
@@ -217,7 +217,7 @@ describe('saved page previews and workspace copies', () => {
   it('keeps workspace edits out of the saved page until Save overwrites the same exercise', async () => {
     await openWorkspace(); await type('[aria-label="Notes"]', 'Uncommitted workspace');
     await click('Exercise library'); await click('Open exercise');
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Saved exercise notes"]')!.value).toBe('Original notes');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Saved exercise notes"]')!.value).toBe(String.raw`\text{Original notes}`);
     await click('Close', host.querySelector('[role="dialog"]')!); await click('Workspace');
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe('Uncommitted workspace');
     await click('Save exercise');
@@ -362,9 +362,9 @@ describe('notes math keyboard', () => {
     const input = host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!;
     input.setSelectionRange(0,0);
     await click('∫',host.querySelector('.notes-math-keys')!);
-    expect(input.value).toBe('∫'+original);
+    expect(mocks.insert).toHaveBeenCalledWith(String.raw`\int_{#?}^{#?}`);expect(input.value).toContain(String.raw`\int`);
     await click('Hide math keyboard'); await click('Save exercise');
-    expect(stored().exercises[0].notes).toBe('∫'+original);
+    expect(stored().exercises[0].notes).toContain(String.raw`\int`);expect(stored().exercises[0].notesFormat).toBe('latex');
   });
   it('also supports the saved-page notes without rewriting the problem', async () => {
     await library(); await click('Open exercise');
@@ -373,7 +373,7 @@ describe('notes math keyboard', () => {
     const input=host.querySelector<HTMLTextAreaElement>('[aria-label="Saved exercise notes"]')!;
     input.setSelectionRange(input.value.length,input.value.length);
     await click('x²',host.querySelector('.notes-math-keys')!); await click('Save notes');
-    expect(stored().exercises[0].notes).toBe('Original notes²');
+    expect(mocks.insert).toHaveBeenCalledWith('^{2}');expect(stored().exercises[0].notes).toBe(String.raw`\text{Original notes}^{2}`);expect(stored().exercises[0].notesFormat).toBe('latex');
     expect(stored().exercises[0].statement).toBe(statement);
   });
 });
@@ -421,6 +421,8 @@ describe('workspace recovery and library tools',()=>{
     await type('.problem [aria-label="Search math symbols"]','integral');
     expect(keyboard.querySelector('[aria-label="Search results"]')?.textContent).toContain('∫');
     await act(async()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
+    expect(keyboard.querySelector('.symbol-browser')!.hasAttribute('hidden')).toBe(false);
+    await act(async()=>keyboard.querySelector<HTMLButtonElement>('[aria-label="Close symbol keyboard"]')!.click());
     expect(keyboard.querySelector('.symbol-browser')!.hasAttribute('hidden')).toBe(true);
     expect(mocks.ai).not.toHaveBeenCalled();expect(mocks.write).not.toHaveBeenCalled();
   });
@@ -449,7 +451,7 @@ describe('image problem review',()=>{
     await click('Use this problem',host.querySelector('[role="alertdialog"]')!);
     expect(host.querySelector('[role="dialog"]')).toBeNull();
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain('x+1=2');
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe('Original notes');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe(String.raw`\text{Original notes}`);
     expect(host.textContent).not.toContain('Original essentials');
     expect(stored().exercises[0].statement).toBe('x^2+2x=0');
     expect(mocks.ai).not.toHaveBeenCalled();

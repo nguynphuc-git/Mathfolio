@@ -5,7 +5,7 @@ export interface Attachment { id: string; name: string; data: string; kind: 'pro
 export interface Exercise {
   id: string; title: string; folderId: string; subject?: 'calculus' | 'discrete' | 'algorithms';
   statement: string; statementFormat?: 'latex'; confirmed: boolean; knowledge?: Answer; hints: Answer[];
-  notes: string; messages: Message[]; attachments: Attachment[]; completed: boolean; updatedAt: string;
+  notes: string; notesFormat?: 'latex'; messages: Message[]; attachments: Attachment[]; completed: boolean; updatedAt: string;
 }
 export interface Notebook { folders: { id: string; name: string }[]; exercises: Exercise[] }
 export function notebookKey(project: string, uid: string) {
@@ -30,11 +30,11 @@ export function putExercise(book: Notebook, exercise: Exercise): Notebook {
   return { ...book, exercises: [snapshot, ...book.exercises.filter(e => e.id !== exercise.id)] };
 }
 /** A library note edit must never overwrite other saved fields with a workspace draft. */
-export function putExerciseNotes(book: Notebook, id: string, notes: string): Notebook {
+export function putExerciseNotes(book: Notebook, id: string, notes: string, notesFormat?:'latex'): Notebook {
   if (notes.length > 30000) throw new Error('Notes can contain up to 30,000 characters.');
   if (!book.exercises.some(exercise => exercise.id === id)) throw new Error('Exercise not found.');
   return { ...book, exercises: book.exercises.map(exercise => exercise.id === id
-    ? { ...exercise, notes, updatedAt: new Date().toISOString() } : exercise) };
+    ? { ...exercise, notes, notesFormat, updatedAt: new Date().toISOString() } : exercise) };
 }
 export async function readAttachment(file: File, kind: Attachment['kind']): Promise<Attachment> {
   if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error('Choose a PNG, JPG or WebP image.');

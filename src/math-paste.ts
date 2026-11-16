@@ -1,7 +1,7 @@
 import { convertAsciiMathToLatex } from 'mathlive';
 import { normalizeProblemText } from './problem-text';
 
-function prose(value: string): string {
+export function prose(value: string): string {
   if (!value) return '';
   return `\\text{${value.replace(/\\/g, '\\textbackslash{}').replace(/[{}%&#_^$]/g, '\\$&')}}`;
 }
@@ -35,8 +35,8 @@ function formula(value: string): string {
 /** Conservative local parsing: ordinary words stay text; formulas get math structure.
  * Explicit $...$, \(...\), \[...\] and LaTeX clipboard data take precedence.
  */
-export function mixedTextToLatex(value: string): string {
-  const normalized = normalizeProblemText(value);
+export function mixedTextToLatex(value: string, preserveLines=false): string {
+  const normalized = preserveLines ? value.normalize('NFC').replace(/\r\n?/g,'\n') : normalizeProblemText(value);
   const converted = [''];
   for (const part of normalized.split(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\])/g).filter(Boolean)) {
     let explicit: string | undefined;
@@ -44,7 +44,7 @@ export function mixedTextToLatex(value: string): string {
     else if (part.startsWith('$') && part.endsWith('$')) explicit = part.slice(1,-1);
     else if (/^\\[([]/.test(part)) explicit = part.slice(2,-2);
     if (explicit !== undefined) { converted[converted.length-1] += explicit; continue; }
-    part.split(/\n+/).forEach((line,index) => { if(index) converted.push(''); converted[converted.length-1] += undelimited(line); });
+    part.split(preserveLines?/\n/:/\n+/).forEach((line,index) => { if(index) converted.push(''); converted[converted.length-1] += undelimited(line); });
   }
   return converted.length <= 1 ? converted.join('') : converted.map(line => `\\class{mathfolio-line}{${line}}`).join('\n');
 }
@@ -76,4 +76,12 @@ function undelimited(value: string): string {
     cursor = last.end; index++;
   }
   return output + prose(value.slice(cursor));
+}
+
+/** Explicit editor modes override ambiguous clipboard guesses; structured LaTeX wins. */
+export function editorPaste(value:string, mode:'math'|'text'|null, preserveLines=false):string {
+  if(mode===null)return mixedTextToLatex(value,preserveLines);
+  const lines=value.replace(/\r\n?/g,'\n').split('\n');
+  const converted=lines.map(line=>mode==='text'?prose(line):formula(line.replace(/^\$\$?([\s\S]*?)\$\$?$/,'$1').replace(/^\\[([]([\s\S]*?)\\[)\]]$/,'$1')));
+  return converted.length===1?converted[0]:converted.map(line=>`\\class{mathfolio-line}{${line}}`).join('\n');
 }
