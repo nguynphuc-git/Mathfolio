@@ -1,7 +1,7 @@
 import {inExerciseFolder,type Exercise} from './notebook';
 import { stripProblemLayout } from './problem-text';
 export type ExerciseSort = 'recent'|'oldest'|'name';
-const searchable=(value:string)=>value.normalize('NFD').replace(/\p{M}/gu,'').toLocaleLowerCase();
+const searchable=(value:string)=>value.normalize('NFD').replace(/\p{M}/gu,'').toLocaleLowerCase().replace(/đ/g,'d');
 export function findExercises(exercises:Exercise[], options:{folder:string|null;query:string;sort:ExerciseSort;completion:'all'|'progress'|'completed'}):Exercise[] {
   const query=searchable(options.query.trim());
   return exercises.filter(exercise=>(!options.folder || inExerciseFolder(exercise,options.folder))

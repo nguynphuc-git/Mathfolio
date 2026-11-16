@@ -701,3 +701,26 @@ describe('new workspace rows and selected visual context',()=>{
     expect(mocks.ai).not.toHaveBeenCalled();
   });
 });
+
+describe('library browsing improvements',()=>{
+  it('shows all exercises directly and restores results after clearing a search',async()=>{
+    await click('Exercise library');await click('All exercises',host.querySelector('.library-view')!);
+    expect(host.querySelectorAll('.exercise-card')).toHaveLength(2);
+    expect(host.querySelector('.library-results')?.textContent).toContain('2 of 2 exercises');
+    await type('[aria-label="Search exercises"]','nothing matches');
+    expect(host.querySelectorAll('.exercise-card')).toHaveLength(0);
+    expect(host.querySelector('.library-results')?.textContent).toContain('0 of 2 exercises');
+    await click('Clear filters');
+    expect(host.querySelectorAll('.exercise-card')).toHaveLength(2);
+    await click('Folders',host.querySelector('.library-view')!);
+    expect(host.querySelector('.folder-grid')).not.toBeNull();
+    expect(mocks.write).not.toHaveBeenCalled();expect(mocks.ai).not.toHaveBeenCalled();
+  });
+  it('makes sorting from the folder overview immediately show ordered exercises',async()=>{
+    await click('Exercise library');
+    const select=host.querySelector<HTMLSelectElement>('[aria-label="Sort exercises"]')!;
+    await act(async()=>{select.value='oldest';select.dispatchEvent(new Event('change',{bubbles:true}));});
+    expect([...host.querySelectorAll('.exercise-card h2')].map(e=>e.textContent)).toEqual(['Second page','Quadratic page']);
+    expect(host.querySelector('nav [aria-current="page"]')?.textContent).toContain('Exercise library');
+  });
+});

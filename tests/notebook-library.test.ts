@@ -17,3 +17,10 @@ describe('exercise library search and ordering',()=>{
     expect(pages.map(x=>x.id)).toEqual(['a','b']);
   });
 });
+
+it('finds Vietnamese đ and Đ with an unaccented query',()=>{
+  const exercises=[{...newExercise(),title:'Đường thẳng',notes:'đạo hàm'}];
+  for(const query of ['duong thang','DAO HAM','ĐƯỜNG']){
+    expect(findExercises(exercises,{...defaults,query})).toHaveLength(1);
+  }
+});
