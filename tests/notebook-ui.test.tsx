@@ -5,8 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NotebookRequest } from '../src/ai';
 import type { Answer, Notebook } from '../src/notebook';
 
-const mocks = vi.hoisted(() => ({ values: new Map<string, unknown>(), ai: vi.fn(), write: vi.fn(), pdf: vi.fn(), pdfPreview: vi.fn(), prepareImage:vi.fn(), readImage:vi.fn(),insert:vi.fn() }));
-vi.mock('idb-keyval', () => ({ get: vi.fn(async (key: string) => structuredClone(mocks.values.get(key))), del: async (key:string) => { mocks.values.delete(key); }, set: async (key: string, value: unknown) => { mocks.write(key, value); mocks.values.set(key, structuredClone(value)); } }));
+const mocks = vi.hoisted(() => ({ values: new Map<string, unknown>(), ai: vi.fn(), imageCloud: vi.fn(), imageLocal: vi.fn(), readAttachment: vi.fn(), write: vi.fn(), pdf: vi.fn(), pdfPreview: vi.fn(), prepareImage: vi.fn(), readImage: vi.fn(), insert: vi.fn() }));
+vi.mock('idb-keyval', () => ({ get: vi.fn(async (key: string) => structuredClone(mocks.values.get(key))), del: async (key: string) => { mocks.values.delete(key); }, set: async (key: string, value: unknown) => { mocks.write(key, value); mocks.values.set(key, structuredClone(value)); } }));
+vi.mock('../src/notebook', async () => ({ ...(await vi.importActual<typeof import('../src/notebook')>('../src/notebook')), readAttachment: mocks.readAttachment }));
 vi.mock('../src/firebase', () => ({ getFirebaseApp: () => ({}) }));
 vi.mock('firebase/auth', () => ({
   getAuth: () => ({ app: { options: { projectId: 'test' } } }),
@@ -15,14 +16,16 @@ vi.mock('firebase/auth', () => ({
 }));
 vi.mock('../src/ai', () => ({
   notebookAI: mocks.ai,
+  recognizeImageWithCloud: mocks.imageCloud,
   friendlyError: (error: Error) => error.message,
   recommendsCloudForProblem: (statement: string) => /\bprove\b/i.test(statement)
 }));
 vi.mock('../src/image-import',async original=>({...await original<typeof import('../src/image-import')>(),prepareProblemImage:mocks.prepareImage,readProblemImage:mocks.readImage}));
 vi.mock('../src/pdf', () => ({ extractPdfQuestions: mocks.pdf, renderPdfPagePreview: mocks.pdfPreview }));
+vi.mock('../src/pdf-ocr', () => ({ recognizeImageLocally: mocks.imageLocal }));
 vi.mock('../src/components/PdfFormulaCropper', () => ({
-  PdfFormulaCropper: ({ onInsert }: { onInsert: (latex: string) => void }) =>
-    <button type="button" onClick={() => onInsert(String.raw`\frac{x^2}{2}`)}>Mock recognize formula</button>
+  PdfFormulaCropper: ({ onInsert, onCloudRead }: { onInsert: (latex: string) => void; onCloudRead?: (image: string) => Promise<void> }) =>
+    <><button type="button" onClick={() => onInsert(String.raw`\frac{x^2}{2}`)}>Mock recognize formula</button><button type="button" onClick={() => void onCloudRead?.('data:image/png;base64,AA==')}>Mock read whole PDF page</button></>
 }));
 // MathLive caret/layout is tested manually in Chrome; these tests exercise page state and persistence.
 vi.mock('../src/components/MathInput', () => ({ MathInput: forwardRef(function Field(props: { value: string; onChange?: (value: string) => void; readOnly?: boolean; disabled?: boolean; label?: string }, ref) {
@@ -55,9 +58,13 @@ async function openWorkspace() { await library(); await click('Open exercise'); 
 beforeEach(async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
-  mocks.ai.mockReset();mocks.insert.mockReset(); mocks.write.mockReset(); mocks.pdf.mockReset(); mocks.pdfPreview.mockReset(); mocks.values.clear();
-  mocks.prepareImage.mockReset().mockResolvedValue({data:'data:image/jpeg;base64,AA==',name:'problem.jpg'});mocks.readImage.mockReset();
+  mocks.ai.mockReset(); mocks.imageCloud.mockReset(); mocks.imageLocal.mockReset(); mocks.readAttachment.mockReset(); mocks.insert.mockReset(); mocks.write.mockReset(); mocks.pdf.mockReset(); mocks.pdfPreview.mockReset(); mocks.values.clear();
+  mocks.prepareImage.mockReset().mockResolvedValue({ data: 'data:image/jpeg;base64,AA==', name: 'problem.jpg' });
+  mocks.readImage.mockReset();
   mocks.pdfPreview.mockResolvedValue('data:image/png;base64,AA==');
+  mocks.imageCloud.mockResolvedValue(String.raw`Cloud transcription: \(x^2 + \sqrt{2}\)`);
+  mocks.imageLocal.mockResolvedValue('Local transcription: x squared plus root two');
+  mocks.readAttachment.mockImplementation(async (file: File, kind: 'problem' | 'solution') => ({ id: 'uploaded-image', name: file.name, data: 'data:image/png;base64,SGVsbG8=', kind }));
   const first = { ...newExercise(), id: 'first', updatedAt:'2001-01-01T12:00:00Z', title: 'Quadratic page', statement: 'x^2+2x=0', confirmed: true, notes: 'Original notes', knowledge: { text: 'Original essentials', source: 'local_reference' }, hints: [{ text: 'Original hint', source: 'on_device' }], messages: [{ role: 'user' as const, text: 'Original question' }], attachments: [{ id: 'image', name: 'solution.png', data: 'data:image/png;base64,AA==', kind: 'solution' as const }] };
   mocks.values.set(storageKey, { ...emptyNotebook(), exercises: [first, { ...newExercise(), id: 'second', updatedAt:'2000-01-01T12:00:00Z', title: 'Second page', statement: 'x=1', confirmed: true }] });
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
@@ -123,6 +130,59 @@ describe('saved page previews and workspace copies', () => {
     expect(mocks.pdfPreview).toHaveBeenCalledWith(file, 2);
   });
 
+  it('reads an attached image locally without sending it to Cloud AI', async () => {
+    const upload = host.querySelector<HTMLInputElement>('[aria-label="Attach a problem illustration"]')!;
+    const file = new File(['image'], 'problem.png', { type: 'image/png' });
+    Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
+    await act(async () => {
+      upload.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    await click('Read locally');
+    expect(mocks.imageLocal).toHaveBeenCalledOnce();
+    expect(mocks.imageCloud).not.toHaveBeenCalled();
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain('Local transcription');
+    expect(host.textContent).toContain('Review the transcription before analyzing');
+  });
+
+  it('asks separate consent before sending a selected image to Cloud AI', async () => {
+    const upload = host.querySelector<HTMLInputElement>('[aria-label="Attach a problem illustration"]')!;
+    const file = new File(['image'], 'problem.png', { type: 'image/png' });
+    Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
+    await act(async () => {
+      upload.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    await click('Read with Cloud AI');
+    expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain('The selected problem image will be sent');
+    expect(mocks.imageCloud).not.toHaveBeenCalled();
+    await click('Not now');
+    expect(mocks.imageCloud).not.toHaveBeenCalled();
+
+    await click('Read with Cloud AI');
+    await click('Send image to Cloud AI');
+    expect(mocks.imageCloud).toHaveBeenCalledWith(expect.stringMatching(/^data:image\/png;base64,/));
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain('Cloud transcription');
+  });
+
+  it('requires image consent before Cloud AI reads a full PDF page', async () => {
+    mocks.pdf.mockResolvedValue([{ page: 1, text: '1. OCR text from this page.' }]);
+    const upload = host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
+    const file = new File(['mock pdf'], 'scan.pdf', { type: 'application/pdf' });
+    Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
+    await act(async () => { upload.dispatchEvent(new Event('change', { bubbles: true })); });
+    await act(async () => { await Promise.resolve(); });
+
+    await click('Mock read whole PDF page');
+    expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain('The selected PDF page image will be sent');
+    expect(mocks.imageCloud).not.toHaveBeenCalled();
+    await click('Send image to Cloud AI');
+    expect(mocks.imageCloud).toHaveBeenCalledWith('data:image/png;base64,AA==');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Selected PDF question"]')!.value).toContain('Cloud transcription');
+  });
+
   it('keeps PDF upload available and confirms replacement of an analyzed problem', async () => {
     await openWorkspace();
     mocks.pdf.mockResolvedValue([{ page: 1, text: '1. Integrate x dx' }]);
@@ -137,6 +197,7 @@ describe('saved page previews and workspace copies', () => {
     await click('Replace with PDF text');
 
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain('Integrate');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain(String.raw`x\differentialD x`);
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.readOnly).toBe(false);
     expect(host.textContent).not.toContain('Original essentials');
     expect(host.textContent).not.toContain('Original hint');

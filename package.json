@@ -19,7 +19,6 @@
 },
 "dependencies": {
 "@tesseract.js-data/eng": "1.0.0",
-"@tesseract.js-data/vie": "1.0.0",
 "firebase": "13.3.0",
 "idb-keyval": "6.3.0",
 "katex": "0.19.1",

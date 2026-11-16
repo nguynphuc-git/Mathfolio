@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ getDocument: vi.fn(), recognizePdfPages: vi.fn
 vi.mock('pdfjs-dist', () => ({ getDocument: mocks.getDocument, GlobalWorkerOptions: {} }));
 vi.mock('../src/pdf-ocr', () => ({ recognizePdfPages: mocks.recognizePdfPages }));
 
-import { extractPdfQuestions } from '../src/pdf';
+import { extractPdfQuestions, splitPdfQuestions } from '../src/pdf';
 
 function configurePdf(pageTexts: string[][]) {
   const pages = pageTexts.map(items => ({
@@ -22,6 +22,12 @@ function configurePdf(pageTexts: string[][]) {
 afterEach(() => vi.clearAllMocks());
 
 describe('PDF extraction with local OCR fallback', () => {
+  it('keeps introductory text when OCR misses the first question number', () => {
+    expect(splitPdfQuestions([{ page: 1, text: 'Instructions: show your work.\nLet f(x) contain e^(-x²) and ∫.\n2. Evaluate the next expression.' }])).toEqual([
+      { page: 1, text: 'Instructions: show your work.\nLet f(x) contain e^(-x²) and ∫.\n2. Evaluate the next expression.' }
+    ]);
+  });
+
   it('recognizes scanned pages locally and reports OCR page progress', async () => {
     const { pages, loadingTask } = configurePdf([[]]);
     mocks.recognizePdfPages.mockImplementation(async (scanned: { page: number }[], onProgress: (page: number, total: number) => void) => {

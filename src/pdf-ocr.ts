@@ -14,20 +14,36 @@ export async function recognizeImageText(image:string, signal?:AbortSignal):Prom
   finally {signal?.removeEventListener('abort',terminate);terminate();}
 }
 
-export async function recognizePdfPages(
-  pages: { page: number; source: PDFPageProxy }[],
-  onProgress?: (page: number, total: number) => void,
-  signal?:AbortSignal
-): Promise<{ page: number; text: string }[]> {
-  signal?.throwIfAborted();
+async function createEnglishWorker() {
   const assetBase = new URL(import.meta.env.BASE_URL, window.location.href);
   const ocrBase = new URL('ocr/', assetBase);
-  const pending = createWorker('vie+eng', OEM.LSTM_ONLY, {
+  return createWorker('eng', OEM.LSTM_ONLY, {
     workerPath: new URL('worker.min.js', ocrBase).href,
     corePath: new URL('tesseract-core-simd-lstm.wasm.js', ocrBase).href,
     langPath: new URL('lang-data/', ocrBase).href,
     gzip: true
   });
+}
+
+export async function recognizeImageLocally(image: Blob): Promise<string> {
+  const worker = await createEnglishWorker();
+  try {
+    const { data } = await worker.recognize(image);
+    const text = data.text.trim();
+    if (!text) throw new Error('No readable English text was found in the image. Try a clearer crop or use Cloud AI after consent.');
+    return text;
+  } finally {
+    await worker.terminate();
+  }
+}
+
+export async function recognizePdfPages(
+  pages: { page: number; source: PDFPageProxy }[],
+  onProgress?: (page: number, total: number) => void,
+  signal?: AbortSignal
+): Promise<{ page: number; text: string }[]> {
+  signal?.throwIfAborted();
+  const pending = createEnglishWorker();
   void pending.then(worker=>{if(signal?.aborted)void worker.terminate().catch(()=>{});}).catch(()=>{});
   const worker=await abortable(pending,signal);let ended=false;
   const terminate=()=>{if(!ended){ended=true;void worker.terminate().catch(()=>{});}};

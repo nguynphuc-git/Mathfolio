@@ -12,8 +12,7 @@ const assets = [
   [join(worker, 'worker.min.js'), join(output, 'worker.min.js')],
   [join(core, 'tesseract-core-simd-lstm.wasm.js'), join(output, 'tesseract-core-simd-lstm.wasm.js')],
   [join(core, 'tesseract-core-simd-lstm.wasm'), join(output, 'tesseract-core-simd-lstm.wasm')],
-  [require.resolve('@tesseract.js-data/eng/4.0.0/eng.traineddata.gz'), join(output, 'lang-data', 'eng.traineddata.gz')],
-  [require.resolve('@tesseract.js-data/vie/4.0.0/vie.traineddata.gz'), join(output, 'lang-data', 'vie.traineddata.gz')]
+  [require.resolve('@tesseract.js-data/eng/4.0.0/eng.traineddata.gz'), join(output, 'lang-data', 'eng.traineddata.gz')]
 ];
 
 for (const [, destination] of assets) await mkdir(dirname(destination), { recursive: true });

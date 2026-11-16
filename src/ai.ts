@@ -1,5 +1,6 @@
 import { getAI, GoogleAIBackend, getGenerativeModel, InferenceMode, Schema } from 'firebase/ai';
 import {validateIllustrations,localVisionParts,type ProblemIllustration} from './problem-vision';
+import type { Part } from 'firebase/ai';
 import { formulaReference, referenceContext } from './math-knowledge';
 import {hasEditorContent} from './math-input';
 import {hintProblems,scopedHint} from './hint-problems';
@@ -40,6 +41,25 @@ maxOutputTokens: r.action === 'quiz' ? 4096 : 3072,
 if (!signal) models.set(key, model);
 }
 return model;
+}
+export async function recognizeImageWithCloud(dataUrl: string): Promise<string> {
+const match = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl);
+if (!match) throw new Error('Choose a valid PNG, JPG or WebP image.');
+const [, mimeType, data] = match;
+const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
+if (Math.floor(data.length * 3 / 4) - padding > 3 * 1024 * 1024)
+  throw new Error('Each image must be smaller than 3 MB.');
+const model = modelFor({ action: 'deep', policy: 'hybrid', language: 'en' });
+const parts: Part[] = [
+  { type: 'text', text: 'Transcribe all readable text and mathematical notation from this image. Preserve question numbering and layout. Write equations as valid LaTeX inside \\(…\\) or \\[...\\]. Do not solve the problems. If something is unclear, mark it [unclear] instead of guessing. Return only the transcription.' },
+  { type: 'inlineData', inlineData: { mimeType, data } }
+];
+const { response } = await model.generateContent(parts);
+if (response.candidates?.some(candidate => candidate.finishReason === 'MAX_TOKENS'))
+  throw new Error('Cloud image transcription was cut off. Try a smaller crop.');
+const text = response.text().trim();
+if (!text) throw new Error('Cloud AI did not return readable text. Try a clearer image.');
+return text;
 }
 // Call directly from a button click, BEFORE any await that loses user activation.
 export async function prepareLocal(language: 'vi' | 'en', progress: (value: number) => void) {

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createUserWithEmailAndPassword, getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth';
 import { getFirebaseApp } from './firebase';
-import { friendlyError, notebookAI, recommendsCloudForProblem, type NotebookRequest } from './ai';
+import { friendlyError, notebookAI, recognizeImageWithCloud, recommendsCloudForProblem, type NotebookRequest } from './ai';
 import { MarkdownView } from './components/MarkdownView';
 import { PdfFormulaCropper } from './components/PdfFormulaCropper';
 import { addFolder, removeFolder, emptyNotebook, loadNotebook, newExercise, notebookKey, putExercise, putExerciseNotes, readAttachment, saveNotebook, type Exercise, type Notebook, type Attachment } from './notebook';
@@ -52,6 +52,8 @@ export default function App() {
   const [pdfPreview, setPdfPreview] = useState<{ page: number; image: string } | null>(null);
   const [pdfPreviewBusy, setPdfPreviewBusy] = useState(false);
   const pdfPreviewRequest = useRef(0);
+  const pdfCloudReadRequest = useRef(0);
+  const [imageBusy, setImageBusy] = useState(false);
   const [collapsedHints, setCollapsedHints] = useState<number[]>([]);
   const [preview, setPreview] = useState<{ id: string; notes: string; notesFormat?:'latex' } | null>(null);
   const [viewingImage,setViewingImage]=useState<Attachment|null>(null);
@@ -65,8 +67,16 @@ export default function App() {
   const epoch = useRef(0); const key = useRef(''); const input = useRef<MathInputHandle>(null);const chatInput=useRef<MathInputHandle>(null);
   const illustrations=selectedIllustrations(draft.attachments);
   const activeAI = useRef<{ controller: AbortController; status: string; error: string } | null>(null);
-  const blocked = !!busy || saving || pdfBusy || imagePreparing || !!recovery;
+  const blocked = !!busy || saving || pdfBusy || imagePreparing || imageBusy || !!recovery;
   useEffect(()=>{if(!busy)return;const tick=()=>setElapsed(Math.floor((performance.now()-runStarted.current)/1000));tick();const timer=setInterval(tick,1000);return()=>clearInterval(timer);},[busy]);
+  const problemPanel = useRef<HTMLElement>(null);
+  const [problemHeight, setProblemHeight] = useState(520);
+  useLayoutEffect(() => {
+    if (!problemPanel.current) return;
+    const observer = new ResizeObserver(entries => setProblemHeight(entries[0].target.getBoundingClientRect().height));
+    observer.observe(problemPanel.current);
+    return () => observer.disconnect();
+  }, [ready, user?.uid, tab]);
 
   useEffect(() => {
     const on = () => setOnline(navigator.onLine);
@@ -179,12 +189,30 @@ export default function App() {
   }
   function closePdfPicker() {
     pdfPreviewRequest.current++;
+    pdfCloudReadRequest.current++;
     setPdfQuestions(null); setPdfSelected(null); setPdfSelectedIndex(0);
     setPdfFile(null); setPdfPreview(null); setPdfPreviewBusy(false); setPdfReplacePending(false);
   }
   function appendRecognizedFormula(latex: string) {
     setPdfSelected(current => current ? { ...current, text: `${current.text.trim()}${current.text.trim() ? '\n' : ''}\\(${latex}\\)` } : current);
     setStatus('Formula recognized as LaTeX locally. Review it in the selected text.');
+  }
+  async function readPdfPageWithCloud(image: string) {
+    const request = ++pdfCloudReadRequest.current;
+    const version = epoch.current;
+    setImageBusy(true); setError(''); setStatus('');
+    try {
+      if (!await confirmCloudImageRead('PDF page')) return;
+      const text = await recognizeImageWithCloud(image);
+      if (request !== pdfCloudReadRequest.current || version !== epoch.current) return;
+      if (text.length > 6000) throw new Error('Cloud transcription is longer than the 6,000-character limit. Select a smaller PDF question.');
+      setPdfSelected(current => current ? { ...current, text } : current);
+      setStatus('Cloud AI transcribed the whole page. Review the text and formulas before using it.');
+    } catch (reason) {
+      if (request === pdfCloudReadRequest.current && version === epoch.current) setError(friendlyError(reason));
+    } finally {
+      setImageBusy(false);
+    }
   }
   function usePdfQuestion() {
     if (!pdfSelected) return;
@@ -239,14 +267,26 @@ export default function App() {
     try { if(draftTimer.current)clearTimeout(draftTimer.current);await clearWorkspaceDraft(key.current);await signOut(getAuth(getFirebaseApp())); } catch (e) { setError(friendlyError(e)); }
     finally { setAuthBusy(false); }
   }
-  async function allowCloud(reason = ''): Promise<boolean> {
-    const description=[reason,'Cloud AI actions send the problem, selected problem illustrations and tutoring context to the AI service. Notes and solution images are not sent. Allow Cloud AI for this session?'].filter(Boolean).join(' ');
+  async function allowCloud(description = 'Cloud AI can send the current problem, selected problem illustrations, essentials, opened hints and recent conversation to the AI service. Notes and solution images are not sent; reading an image asks for separate consent each time. Allow Cloud AI for this session?'): Promise<boolean> {
     if (!online) { setError('Cloud AI needs an internet connection. Local AI is still available.'); return false; }
     if (cloudAllowed) return true;
     const version = epoch.current;
     const accepted = await confirmChange({ title:'Allow Cloud AI?', description, action:'Allow Cloud AI', cancel:'Not now' });
     if (!accepted || version !== epoch.current || !navigator.onLine) return false;
     setCloudAllowed(true); return true;
+  }
+  async function confirmCloudImageRead(label: string): Promise<boolean> {
+    if (!navigator.onLine) { setError('Cloud image reading needs an internet connection. Local OCR is still available.'); return false; }
+    const version = epoch.current;
+    const accepted = await confirmChange({
+      title: 'Send this image to Cloud AI?',
+      description: `The selected ${label} image will be sent to Google AI through Firebase for text and math transcription. No notes, chat, or other attachments are sent. Review the result before using it.`,
+      action: 'Send image to Cloud AI',
+      cancel: 'Not now'
+    });
+    if (!accepted || version !== epoch.current) return false;
+    if (!navigator.onLine) { setError('Cloud image reading needs an internet connection. Local OCR is still available.'); return false; }
+    return true;
   }
   async function toggleCloud() {
     if (blocked) return;
@@ -323,6 +363,33 @@ export default function App() {
         return { ...current, attachments: [...current.attachments, attachment] };
       }); setDirty(true);setDraftSave('idle');
     } catch (e) { if (version === epoch.current) setError(friendlyError(e)); }
+  }
+  async function readProblemImage(attachment: Attachment, route: 'local' | 'cloud') {
+    if (imageBusy || blocked) return;
+    const version = epoch.current;
+    const id = draft.id;
+    setImageBusy(true); setError(''); setStatus(route === 'local' ? 'Reading image locally…' : '');
+    try {
+      let text: string;
+      if (route === 'cloud') {
+        if (!await confirmCloudImageRead('problem')) return;
+        text = await recognizeImageWithCloud(attachment.data);
+      } else {
+        const image = await fetch(attachment.data).then(response => response.blob());
+        const { recognizeImageLocally } = await import('./pdf-ocr');
+        text = await recognizeImageLocally(image);
+      }
+      if (version !== epoch.current) return;
+      const statement = [draft.statement.trim(), mixedTextToLatex(text)].filter(Boolean).join('\n\n');
+      if (statement.length > 6000) throw new Error('The transcription would exceed the 6,000-character problem limit. Shorten the current problem or read a smaller crop.');
+      setDraft(current => current.id === id ? { ...current, statement, statementFormat: 'latex' } : current);
+      setDirty(true);
+      setStatus(`Image read ${route === 'local' ? 'locally' : 'with Cloud AI'}. Review the transcription before analyzing.`);
+    } catch (reason) {
+      if (version === epoch.current) setError(friendlyError(reason));
+    } finally {
+      setImageBusy(false);
+    }
   }
   function insertMath(latex: string) { input.current?.insert(latex); }
   async function editStatement() {
@@ -484,7 +551,6 @@ export default function App() {
           {!draft.confirmed && <><p className="subtle">Type your problem or paste LaTeX. Insert symbols directly below.</p><MathKeyboard disabled={blocked} onActivate={()=>input.current?.focus()} onInsert={symbol => insertMath(symbol.latex)}/></>}
           {!cloudAllowed && online && draft.statement.trim() && recommendsCloudForProblem(draft.statement) && <aside className="cloud-recommendation" aria-label="Cloud AI recommendation"><p>This may need several reasoning steps. Cloud AI can provide deeper analysis; your problem is sent only after you enable it and run analysis.</p><button type="button" disabled={blocked} onClick={() => void allowCloud('Cloud AI may provide deeper reasoning for this problem. Your problem and related tutoring context are sent only when you choose to run an AI action with Cloud AI enabled. Allow Cloud AI for this session?')}>Consider Cloud AI</button></aside>}
 
-
           <div className="row">{draft.confirmed && <button disabled={blocked} onClick={editStatement}>Edit problem</button>}<button className="primary" title="Analyze problem (Ctrl+Enter)" disabled={blocked || !hasEditorContent(draft.statement)} onClick={() => void ask('knowledge')}>{draft.confirmed ? 'Refresh knowledge' : 'Confirm & analyze'}</button></div>
         </section>
         <aside className="paper problem-images" aria-label="Problem illustrations"><div className="panel-heading"><h2>Illustrations</h2><span className="tag">{illustrations.length} FOR AI</span></div>
@@ -492,6 +558,7 @@ export default function App() {
           <p className="subtle">Selected illustrations are included in new AI requests. Refresh knowledge to update earlier analysis. Notes and solution images are excluded.</p>
           <div className="illustrations-scroll">{!draft.attachments.some(image=>image.kind==='problem')&&<p className="empty-illustrations">Add a diagram, graph or image needed to understand the problem. Click any image to zoom.</p>}
             <AttachmentGallery images={draft.attachments.filter(image=>image.kind==='problem')} onOpen={setViewingImage} disabled={blocked} onRemove={id=>void reviseIllustrations(draft.attachments.filter(image=>image.id!==id))} onAISelection={(id,included)=>void reviseIllustrations(draft.attachments.map(image=>image.id===id?{...image,useForAI:included}:image))}/>
+            {draft.attachments.filter(image=>image.kind==='problem').map(image=><div className="row" key={`read-${image.id}`}><span className="subtle">{image.name}</span><button type="button" disabled={blocked} onClick={()=>void readProblemImage(image,'local')}>Read locally</button><button type="button" disabled={blocked||!online} onClick={()=>void readProblemImage(image,'cloud')}>Read with Cloud AI</button></div>)}
           </div>
           <p className="subtle">{cloudAllowed&&online?'Cloud actions send selected illustrations. Local chat stays on your device.':'Local AI needs a compatible device to understand illustrations. Images are not sent to cloud while Cloud AI is off.'}</p>
         </aside>
@@ -525,21 +592,21 @@ export default function App() {
     <p className="eyebrow">1 · SOURCE　2 · REVIEW　3 · USE</p><h2 id="pdf-title">Choose a question from your PDF</h2>
     {!pdfQuestions.length ? <p role="status">No readable text was found after local OCR.</p> : <div className="pdf-picker">
       <details className="pdf-question-menu" open><summary>Choose a problem · {pdfSelectedIndex+1} of {pdfQuestions.length}</summary><div className="pdf-question-list" role="list" aria-label="Extracted PDF text">
-        {pdfQuestions.map((item, index) => <button type="button" role="listitem" key={`${item.page}-${index}`} aria-pressed={pdfSelectedIndex === index} onClick={() => { setPdfSelected({ ...item, text:normalizeProblemText(item.text) }); setPdfSelectedIndex(index); if (pdfFile && pdfPreview?.page !== item.page) void showPdfPage(pdfFile, item.page); }}>
+        {pdfQuestions.map((item, index) => <button type="button" role="listitem" key={`${item.page}-${index}`} disabled={imageBusy} aria-pressed={pdfSelectedIndex === index} onClick={() => { setPdfSelected({ ...item, text:normalizeProblemText(item.text) }); setPdfSelectedIndex(index); if (pdfFile && pdfPreview?.page !== item.page) void showPdfPage(pdfFile, item.page); }}>
           <strong>Page {item.page} · Text {index + 1}</strong><span>{item.text.slice(0, 180)}{item.text.length > 180 ? '…' : ''}</span>
         </button>)}
       </div></details>
       {pdfSelected && <div className="import-review-columns">
-        <div className="import-source"><h3>Original PDF · Page {pdfSelected.page}</h3>{pdfPreviewBusy&&<p className="subtle" role="status">Rendering the source page…</p>}{pdfPreview?.page===pdfSelected.page&&<PdfFormulaCropper key={pdfPreview.page} image={pdfPreview.image} onInsert={appendRecognizedFormula}/>}</div>
+        <div className="import-source"><h3>Original PDF · Page {pdfSelected.page}</h3>{pdfPreviewBusy&&<p className="subtle" role="status">Rendering the source page…</p>}{pdfPreview?.page===pdfSelected.page&&<PdfFormulaCropper key={pdfPreview.page} image={pdfPreview.image} onInsert={appendRecognizedFormula} onCloudRead={readPdfPageWithCloud} onBusyChange={setImageBusy} disabled={imageBusy}/>}</div>
         <div className="import-edit"><h3>Your problem · check before using</h3><div className="pdf-typeset-preview"><MathInput label="Formatted PDF question" value={mixedTextToLatex(pdfSelected.text)} readOnly/></div>
-          <details className="raw-text-editor"><summary>Edit recognized text</summary><label className="pdf-selection">Selected text — edit before using<textarea aria-label="Selected PDF question" maxLength={6000} value={pdfSelected.text} onChange={event=>setPdfSelected({...pdfSelected,text:event.target.value})}/></label><div className="row pdf-format-actions"><button type="button" onClick={()=>setPdfSelected({...pdfSelected,text:normalizeProblemText(pdfSelected.text)})}>Format text</button><button type="button" onClick={()=>setPdfSelected({...pdfSelected,text:pdfQuestions[pdfSelectedIndex].text})}>Restore extracted text</button></div></details>
+          <details className="raw-text-editor"><summary>Edit recognized text</summary><label className="pdf-selection">Selected text — edit before using<textarea aria-label="Selected PDF question" disabled={imageBusy} maxLength={6000} value={pdfSelected.text} onChange={event=>setPdfSelected({...pdfSelected,text:event.target.value})}/></label><div className="row pdf-format-actions"><button type="button" disabled={imageBusy} onClick={()=>setPdfSelected({...pdfSelected,text:normalizeProblemText(pdfSelected.text)})}>Format text</button><button type="button" disabled={imageBusy} onClick={()=>setPdfSelected({...pdfSelected,text:pdfQuestions[pdfSelectedIndex].text})}>Restore extracted text</button></div></details>
           {pdfSelected.text.length>6000&&<p className="error" role="alert">Select a shorter question to stay within the 6,000-character limit.</p>}
           {importError&&<p className="notice error" role="alert">{importError}</p>}
         </div>
       </div>}
     </div>}
-    <p className="subtle">Drag over a formula to recognize it as LaTeX; the formula image is processed by the local OCR service. The problem editor stores LaTeX and displays formatted math.</p>
+    <p className="subtle">Local formula OCR processes only the selected crop. Whole-page Cloud AI transcription sends the selected page only after separate consent; review its output before using it.</p>
     {pdfReplacePending && <div className="pdf-replace-confirm" role="alert"><p>This replaces the current problem and clears its knowledge, hints, and chat so they match the PDF. Your notes and attached images will be kept.</p><div className="row"><button type="button" onClick={() => setPdfReplacePending(false)}>Keep current problem</button><button type="button" className="primary" disabled={!pdfSelected || mixedTextToLatex(pdfSelected.text).length > 6000} onClick={() => { if (pdfSelected) applyPdfQuestion(mixedTextToLatex(pdfSelected.text)); }}>Replace with PDF text</button></div></div>}
-    <div className="row"><button type="button" onClick={closePdfPicker}>Cancel</button><button type="button" className="primary" disabled={pdfReplacePending || !pdfSelected?.text.trim() || pdfSelected.text.length > 6000} onClick={usePdfQuestion}>Use this text</button></div>
+    <div className="row"><button type="button" disabled={imageBusy} onClick={closePdfPicker}>Cancel</button><button type="button" className="primary" disabled={imageBusy || pdfReplacePending || !pdfSelected?.text.trim() || pdfSelected.text.length > 6000} onClick={usePdfQuestion}>Use this text</button></div>
   </section></div>} {imageProblem&&<ImageProblemReview image={imageProblem} onClose={()=>{setImageProblem(null);setImportError('');}} onApply={applyImageText} suspended={!!confirmation} error={importError} canKeepImage={draft.attachments.length<4}/>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={book.folders.find(value => value.id === previewExercise.folderId)?.name ?? 'My exercises'} notes={preview.notes} notesFormat={preview.notesFormat} saving={saving} onImage={setViewingImage} suspended={!!confirmation || !!viewingImage} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes,notesFormat:'latex' } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {viewingImage&&<ImageViewer key={viewingImage.id} image={viewingImage} onClose={()=>setViewingImage(null)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</MathKeyboardProvider>;
 }
