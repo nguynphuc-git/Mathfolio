@@ -30,6 +30,7 @@ export default function App() {
   const [pdfSelectedIndex, setPdfSelectedIndex] = useState(0);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfProgress, setPdfProgress] = useState<PdfProgress | null>(null);
+  const [pdfReplacePending, setPdfReplacePending] = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfPreview, setPdfPreview] = useState<{ page: number; image: string } | null>(null);
   const [pdfPreviewBusy, setPdfPreviewBusy] = useState(false);
@@ -91,7 +92,7 @@ export default function App() {
     if (!saveOpen && !folderDialog && pdfQuestions === null) return;
     const previous = documentActiveElement();
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !saving) { event.preventDefault(); setSaveOpen(false); setFolderDialog(false); setPdfQuestions(null); }
+      if (event.key === 'Escape' && !saving) { event.preventDefault(); setSaveOpen(false); setFolderDialog(false); closePdfPicker(); }
       if (event.key !== 'Tab') return;
       const nodes = [...window.document.querySelectorAll<HTMLElement>('[role="dialog"] button:not(:disabled), [role="dialog"] input:not(:disabled), [role="dialog"] select:not(:disabled), [role="dialog"] textarea:not(:disabled)')];
       const first = nodes[0], last = nodes.at(-1);
@@ -107,7 +108,7 @@ export default function App() {
   function edit(update: Partial<Exercise>) { setDraft(value => ({ ...value, ...update })); setDirty(true); }
   async function loadPdf(file?: File) {
     if (!file) return;
-    setPdfBusy(true); setPdfProgress(null); setError(''); setStatus('');
+    setPdfBusy(true); setPdfProgress(null); setPdfReplacePending(false); setError(''); setStatus('');
     try {
       const { extractPdfQuestions } = await import('./pdf');
       const questions = await extractPdfQuestions(file, setPdfProgress);
@@ -133,7 +134,7 @@ export default function App() {
   function closePdfPicker() {
     pdfPreviewRequest.current++;
     setPdfQuestions(null); setPdfSelected(null); setPdfSelectedIndex(0);
-    setPdfFile(null); setPdfPreview(null); setPdfPreviewBusy(false);
+    setPdfFile(null); setPdfPreview(null); setPdfPreviewBusy(false); setPdfReplacePending(false);
   }
   function appendRecognizedFormula(latex: string) {
     setPdfSelected(current => current ? { ...current, text: `${current.text.trim()}${current.text.trim() ? '\n' : ''}\\(${latex}\\)` } : current);
@@ -143,9 +144,20 @@ export default function App() {
     if (!pdfSelected) return;
     const statement = mixedTextToLatex(pdfSelected.text);
     if (statement.length > 6000) { setError('This text is longer than the 6,000-character problem limit. Select a shorter question.'); return; }
-    edit({ statement, statementFormat: 'latex' });
-    setPdfQuestions(null); setPdfSelected(null); setPdfSelectedIndex(0);
-    setStatus('PDF text added to the problem editor. Review it before analyzing.');
+    if (draft.confirmed) { setPdfReplacePending(true); return; }
+    applyPdfQuestion(statement);
+  }
+  function applyPdfQuestion(statement: string) {
+    if (statement.length > 6000) { setError('This text is longer than the 6,000-character problem limit. Select a shorter question.'); return; }
+    edit({
+      statement,
+      statementFormat: 'latex',
+      ...(draft.confirmed ? { confirmed: false, knowledge: undefined, hints: [], messages: [] } : {})
+    });
+    closePdfPicker();
+    setStatus(draft.confirmed
+      ? 'PDF text replaced the previous problem. Review it and analyze again; your notes and attachments were kept.'
+      : 'PDF text added to the problem editor. Review it before analyzing.');
   }
   function confirmChange(value: Confirmation) {
     return new Promise<boolean>(resolve => { confirmationResult.current?.(false); confirmationResult.current=resolve; setConfirmation(value); });
@@ -364,7 +376,7 @@ export default function App() {
     </section>}
     {user && !ready && <p role="status">Opening your notebook…</p>}
     {user && ready && tab === 'solve' && <>
-      <div className="page-heading"><div><p className="eyebrow">YOUR THINKING SPACE</p><h1>{draft.title || 'One problem. One discovery.'}</h1><p>Understand it. Try it. Open a hint when you need one.</p></div><div className="workspace-actions"><div className="row"><button disabled={blocked} onClick={() => changeExercise(newExercise())}>＋ New exercise</button>{savedDraft && <button disabled={blocked} onClick={() => beginSave(true)}>Rename / move</button>}<button className="primary" disabled={blocked || !draft.statement.trim()} onClick={() => beginSave()}>Save exercise {dirty ? '•' : ''}</button></div><button className="cloud-switch" role="switch" aria-checked={cloudAllowed} aria-label="Cloud AI" disabled={blocked} onClick={() => void toggleCloud()}><span className="switch-track" aria-hidden="true"><span/></span>Cloud AI <strong>{cloudAllowed ? 'On' : 'Off'}</strong></button></div></div>
+      <div className="page-heading"><div><p className="eyebrow">YOUR THINKING SPACE</p><h1>{draft.title || 'One problem. One discovery.'}</h1><p>Start by uploading a PDF or typing your problem.</p></div><div className="workspace-actions"><div className="row"><label className="attachment-button pdf-upload-button">＋ Choose PDF<input aria-label="Choose a PDF" type="file" accept="application/pdf,.pdf" disabled={blocked || pdfBusy} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void loadPdf(file); }}/></label><button disabled={blocked} onClick={() => changeExercise(newExercise())}>＋ New exercise</button>{savedDraft && <button disabled={blocked} onClick={() => beginSave(true)}>Rename / move</button>}<button className="primary" disabled={blocked || !draft.statement.trim()} onClick={() => beginSave()}>Save exercise {dirty ? '•' : ''}</button></div><button className="cloud-switch" role="switch" aria-checked={cloudAllowed} aria-label="Cloud AI" disabled={blocked} onClick={() => void toggleCloud()}><span className="switch-track" aria-hidden="true"><span/></span>Cloud AI <strong>{cloudAllowed ? 'On' : 'Off'}</strong></button></div></div>
       <div className="workspace">
         <section ref={problemPanel} className="paper problem"><div className="panel-heading"><span className="step">01</span><h2>Problem</h2><span className="tag">YOUR PROBLEM</span></div>
           <MathInput ref={input} value={statementLatex(draft.statement, draft.statementFormat)} readOnly={draft.confirmed} disabled={blocked} onChange={value => edit({ statement: value, statementFormat: 'latex' })}/>
@@ -372,7 +384,6 @@ export default function App() {
           {!cloudAllowed && online && draft.statement.trim() && recommendsCloudForProblem(draft.statement) && <aside className="cloud-recommendation" aria-label="Cloud AI recommendation"><p>This may need several reasoning steps. Cloud AI can provide deeper analysis; your problem is sent only after you enable it and run analysis.</p><button type="button" disabled={blocked} onClick={() => void allowCloud('Cloud AI may provide deeper reasoning for this problem. Your problem and related tutoring context are sent only when you choose to run an AI action with Cloud AI enabled. Allow Cloud AI for this session?')}>Consider Cloud AI</button></aside>}
 
           <div className="row problem-import">
-            {!draft.confirmed && <label className="attachment-button">＋ Choose PDF<input aria-label="Choose a PDF" type="file" accept="application/pdf,.pdf" disabled={blocked || pdfBusy} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void loadPdf(file); }}/></label>}
             {pdfBusy && <span role="status" className="subtle">{pdfProgress?.stage === 'ocr' ? `Local OCR · page ${pdfProgress.page} of ${pdfProgress.total}…` : pdfProgress ? `Reading PDF · page ${pdfProgress.page} of ${pdfProgress.total}…` : 'Preparing local OCR…'}</span>}
             <label className="attachment-button">＋ Attach problem image<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'problem'); }}/></label>
           </div><p className="subtle">Selectable PDF text is extracted directly. Scanned pages are recognized locally in Vietnamese and English; check formulas because OCR can misread math. Images are attachments only; automatic image reading is not available.</p>
@@ -417,6 +428,7 @@ export default function App() {
       </div>}
     </div>}
     <p className="subtle">Drag over a formula to recognize it as LaTeX; the formula image is processed by the local OCR service. The problem editor stores LaTeX and displays formatted math.</p>
-    <div className="row"><button type="button" onClick={closePdfPicker}>Cancel</button><button type="button" className="primary" disabled={!pdfSelected?.text.trim() || pdfSelected.text.length > 6000} onClick={usePdfQuestion}>Use this text</button></div>
+    {pdfReplacePending && <div className="pdf-replace-confirm" role="alert"><p>This replaces the current problem and clears its knowledge, hints, and chat so they match the PDF. Your notes and attached images will be kept.</p><div className="row"><button type="button" onClick={() => setPdfReplacePending(false)}>Keep current problem</button><button type="button" className="primary" disabled={!pdfSelected || mixedTextToLatex(pdfSelected.text).length > 6000} onClick={() => { if (pdfSelected) applyPdfQuestion(mixedTextToLatex(pdfSelected.text)); }}>Replace with PDF text</button></div></div>}
+    <div className="row"><button type="button" onClick={closePdfPicker}>Cancel</button><button type="button" className="primary" disabled={pdfReplacePending || !pdfSelected?.text.trim() || pdfSelected.text.length > 6000} onClick={usePdfQuestion}>Use this text</button></div>
   </section></div>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={book.folders.find(value => value.id === previewExercise.folderId)?.name ?? 'My exercises'} notes={preview.notes} saving={saving} suspended={!!confirmation} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</>;
 }

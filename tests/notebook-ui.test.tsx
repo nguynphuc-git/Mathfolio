@@ -103,6 +103,26 @@ describe('saved page previews and workspace copies', () => {
     expect(mocks.pdfPreview).toHaveBeenCalledWith(file, 2);
   });
 
+  it('keeps PDF upload available and confirms replacement of an analyzed problem', async () => {
+    await openWorkspace();
+    mocks.pdf.mockResolvedValue([{ page: 1, text: '1. Integrate x dx' }]);
+    const upload = host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
+    const file = new File(['mock pdf'], 'replacement.pdf', { type: 'application/pdf' });
+    Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
+    await act(async () => { upload.dispatchEvent(new Event('change', { bubbles: true })); });
+    await click('Use this text');
+
+    expect(host.querySelector('.pdf-replace-confirm')?.textContent).toContain('clears its knowledge, hints, and chat');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe('x^2+2x=0');
+    await click('Replace with PDF text');
+
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain('Integrate x dx');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.readOnly).toBe(false);
+    expect(host.textContent).not.toContain('Original essentials');
+    expect(host.textContent).not.toContain('Original hint');
+    expect(host.textContent).toContain('your notes and attachments were kept');
+  });
+
   it('reports PDF extraction errors without opening an empty question picker', async () => {
     mocks.pdf.mockRejectedValue(new Error('Could not recognize text in this PDF.'));
     const upload = host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
