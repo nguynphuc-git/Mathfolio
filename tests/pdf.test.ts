@@ -20,4 +20,8 @@ describe('PDF question selection', () => {
     expect(splitPdfQuestions([{ page: 1, text: 'Chapter 1: Algebra\nQuestion 3: Solve 2x = 8' }]))
       .toEqual([{ page: 1, text: 'Question 3: Solve 2x = 8' }]);
   });
+  it('recognizes Vietnamese exercise headings with chapter question numbers', () => {
+    expect(splitPdfQuestions([{page:1,text:'Chương 2. Tập hợp\nBài 2.1. Chọn khẳng định đúng.\na) 0 ∈ ∅\nBài 2.2. Tìm tập hợp.'}]))
+      .toEqual([{page:1,text:'Bài 2.1. Chọn khẳng định đúng.\na) 0 ∈ ∅'},{page:1,text:'Bài 2.2. Tìm tập hợp.'}]);
+  });
 });

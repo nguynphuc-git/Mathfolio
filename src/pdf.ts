@@ -1,5 +1,6 @@
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { reconstructPdfText } from './pdf-layout';
 GlobalWorkerOptions.workerSrc = workerUrl;
 
 export interface PdfQuestion { page: number; text: string }
@@ -10,7 +11,7 @@ export function splitPdfQuestions(pages: { page: number; text: string }[]): PdfQ
   for (const page of pages) {
     const lines = page.text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
     const starts = lines.flatMap((line, index) =>
-      /^(?:(?:question|problem|exercise)\s+\d{1,3}\s*[:.)]?|\(?\d{1,3}[.)])\s+\S/i.test(line) ? [index] : []);
+      /^(?:(?:question|problem|exercise|bài(?:\s+tập)?|câu)\s*\d{1,3}(?:\.\d{1,3})*\s*[:.)]?|\(?\d{1,3}[.)])\s+\S/iu.test(line) ? [index] : []);
     const boundaries = starts.length ? starts : [0];
     for (let i = 0; i < boundaries.length; i++) {
       const end = boundaries[i + 1] ?? lines.length;
@@ -33,15 +34,7 @@ for (let n = 1; n <= pdf.numPages; n++) {
 const page = await pdf.getPage(n);
 onProgress?.({ stage: 'text', page: n, total: pdf.numPages });
 const content = await page.getTextContent();
-let text = '';
-let lastY = Number.NaN;
-for (const item of content.items) {
-if (!('str' in item)) continue;
-const y = item.transform[5];
-if (text && Math.abs(y - lastY) > 2) text += '\n';
-text += item.str + ('hasEOL' in item && item.hasEOL ? '\n' : ' ');
-lastY = y;
-}
+const text = reconstructPdfText(content.items.filter(item => 'str' in item));
 total += text.length;
 if (total > 150000) throw new Error('PDF có quá nhiều văn bản; hãy tách thành chương nhỏ.');
 pages.push({ page: n, text, source: page });

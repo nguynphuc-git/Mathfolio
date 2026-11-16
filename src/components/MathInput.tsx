@@ -21,11 +21,14 @@ export const MathInput = forwardRef<MathInputHandle, { value: string; onChange?:
     const flowStyle = window.document.createElement('style');
     // Limit these overrides to the top-level equation. Fraction/root internals keep their layout.
     flowStyle.textContent = `
-      .ML__container { display:block!important; min-width:0!important; width:100%!important; }
-      .ML__content { display:block!important; overflow:visible!important; width:auto!important; min-width:0!important; }
+      .ML__container { display:block!important; min-width:0!important; width:100%!important; padding:0!important; align-items:flex-start!important; }
+      .ML__content { display:block!important; overflow:visible!important; width:auto!important; min-width:0!important; padding:0!important; align-self:flex-start!important; }
       .ML__content > .ML__latex { display:block!important; width:100%!important; min-width:0!important; box-sizing:border-box; white-space:normal!important; max-width:100%; }
-      .ML__content > .ML__latex > .ML__base { display:inline!important; width:auto!important; white-space:normal!important; overflow-wrap:anywhere; line-height:2.3; }
+      .ML__content > .ML__latex > .ML__strut, .ML__content > .ML__latex > .ML__strut--bottom { display:none!important; }
+      .ML__content > .ML__latex > .ML__base { display:block!important; width:auto!important; white-space:normal!important; overflow-wrap:anywhere; line-height:1.9; }
       .ML__content > .ML__latex > .ML__base .ML__text { white-space:pre-wrap!important; overflow-wrap:break-word; }
+      .ML__content > .ML__latex > .ML__base .mathfolio-line { display:block!important; width:auto!important; white-space:normal!important; min-height:1.9em; margin:0 0 .2em; }
+      .ML__content-placeholder { position:absolute; top:0; left:0; }
     `;
     field.shadowRoot?.appendChild(flowStyle);
     field.setAttribute('aria-label', label); field.setAttribute('role', 'textbox');
@@ -50,7 +53,9 @@ export const MathInput = forwardRef<MathInputHandle, { value: string; onChange?:
       field.insert(insertion, { format:'latex', mode:'math', selectionMode:'after' }); handleInput();
     };
     const handleKey = (event: KeyboardEvent) => {
-      if (field.readOnly || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.key !== '^') return;
+      if (field.readOnly || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (/^[\p{Script=Latin}]$/u.test(event.key) && /[^\x00-\x7f]/.test(event.key)) field.mode = 'text';
+      if (event.key !== '^') return;
       event.preventDefault(); event.stopImmediatePropagation(); insertPower(field); handleInput();
     };
     field.addEventListener('input', handleInput);

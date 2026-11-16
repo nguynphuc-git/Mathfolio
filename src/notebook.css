@@ -126,3 +126,15 @@ button.cloud-switch:hover:not(:disabled){background:transparent}.cloud-switch st
 .notes-math-keys[hidden]{display:none}.notes-math-keys{margin:10px 0}
 @media(max-width:650px){.workspace-actions{align-items:flex-start}.workspace-actions>.row{justify-content:flex-start}.chat-routes{margin-left:0;width:100%}.chat-routes button{flex:1}}
 @media(hover:none){.notes-editor textarea{scrollbar-color:#9baa92 transparent}}
+.math-input math-field{padding:7px 10px 12px;vertical-align:top}
+.math-keyboard{margin:10px 0 16px}.math-keyboard>.math-keys{margin:8px 0}
+.math-keyboard .more-symbols{padding:5px 10px;font-size:11px;background:#f0f3e9}
+.symbol-browser{margin-top:10px;border:1px solid #dde4d4;border-radius:8px;padding:10px;background:#f7f8f1}
+.symbol-browser[hidden]{display:none}.symbol-categories{display:flex;flex-wrap:wrap;gap:5px;padding-bottom:9px;border-bottom:1px solid #e0e6d8}
+.symbol-categories button{font-size:10px;padding:4px 7px;background:transparent}.symbol-categories button[aria-pressed=true]{background:#236b59;color:#fff;border-color:#236b59}
+.symbol-category-content{max-height:210px;overflow-y:auto;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:#9baa92 transparent}
+.symbol-category-content .math-keys{margin:10px 0 0}.symbol-category-content .math-keys button{min-width:39px}
+.pdf-format-actions{margin:10px 0}.pdf-format-actions button{font-size:11px;padding:5px 9px}
+.pdf-selection textarea{min-height:150px;max-height:240px;white-space:pre-wrap;overflow-wrap:break-word;line-height:1.7}
+.pdf-typeset-preview{margin:16px 0;padding:14px;border:1px solid #dde4d4;border-radius:8px;background:#f8f9f3}
+.pdf-typeset-preview h3{font-size:12px;font-weight:600;margin:0 0 10px}.pdf-typeset-preview .math-input{height:210px;background:#fffefa}

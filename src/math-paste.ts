@@ -1,4 +1,5 @@
 import { convertAsciiMathToLatex } from 'mathlive';
+import { normalizeProblemText } from './problem-text';
 
 function prose(value: string): string {
   if (!value) return '';
@@ -8,8 +9,10 @@ const mathNames = /\b(?:sin|cos|tan|cot|sec|csc|sinh|cosh|tanh|arcsin|arccos|arc
 function isMath(value: string): boolean {
   if (/^\\(?:text|mathrm|operatorname)\{/.test(value)) return true;
   const letters = value.replace(/\\[a-zA-Z]+/g, '').replace(mathNames, '');
-  return !/[A-Za-z]{2,}/.test(letters) && !/["'$]/.test(value)
-    && /[\dA-Za-zα-ωΑ-Ω=+*/^_<>|!()\[\]{}≤≥≠∈∑∫√∞²³-]/.test(value);
+  // Accented Latin words are prose too: e.g. “là”, “và”, “đề”, not variables.
+  if (/[^\x00-\x7F]/.test(letters.replace(/[α-ωΑ-Ωℕℤℚℝℂ∅Ø∈∉⊂⊆⊃⊇∪∩∖∀∃¬∧∨⇒⇔≤≥≠≈∑∏∫√∞²³⁰¹⁴⁵⁶⁷⁸⁹₀-₉−×÷±·]/g, ''))) return false;
+  return !/\p{L}{2,}/u.test(letters.replace(/[α-ωΑ-Ω]/g,'')) && !/["'$]/.test(value)
+    && /[\dA-Za-zα-ωΑ-Ωℕℤℚℝℂ∅Ø∈∉⊂⊆⊃⊇∪∩∖∀∃¬∧∨⇒⇔=+*/^_<>|!()\[\]{}≤≥≠∈∑∫√∞²³-]/.test(value);
 }
 function formula(value: string): string {
   if (/\\[a-zA-Z]+/.test(value)) return value;
@@ -17,18 +20,33 @@ function formula(value: string): string {
     .replace(/²/g, '^2').replace(/³/g, '^3')
     // MathLive recognizes (n)/(n+3) as a fraction; bare n/(n+3) stays a slash.
     .replace(/(?<![\w\\])([A-Za-z]|\d+(?:\.\d+)?)\s*\/\s*(?=\()/g, '($1)/');
+  // Preserve visible sets and their braces instead of interpreting them as TeX groups.
+  const groups: boolean[] = []; let sets = '';
+  for (let index = 0; index < normalized.length; index++) {
+    const char = normalized[index];
+    if (char === '{') { const group = /[\^_]/.test(normalized[index - 1] ?? '') || groups.at(-1) === true; groups.push(group); sets += group ? '{' : '\\{'; }
+    else if (char === '}') sets += groups.pop() === true ? '}' : '\\}';
+    else sets += char;
+  }
+  const unicode: Record<string,string> = { '∅':'\\emptyset ', '∈':'\\in ', '∉':'\\notin ', '⊆':'\\subseteq ', '⊂':'\\subset ', '⊇':'\\supseteq ', '⊃':'\\supset ', '∪':'\\cup ', '∩':'\\cap ', 'ℕ':'\\mathbb{N}', 'ℤ':'\\mathbb{Z}', 'ℚ':'\\mathbb{Q}', 'ℝ':'\\mathbb{R}', 'ℂ':'\\mathbb{C}' };
+  if (/[∅∈∉⊆⊂⊇⊃∪∩ℕℤℚℝℂ{}]/.test(normalized)) return sets.replace(/[∅∈∉⊆⊂⊇⊃∪∩ℕℤℚℝℂ]/g, symbol => unicode[symbol]).replace(/[\t ]+/g,' ').trim();
   return convertAsciiMathToLatex(normalized);
 }
 /** Conservative local parsing: ordinary words stay text; formulas get math structure.
  * Explicit $...$, \(...\), \[...\] and LaTeX clipboard data take precedence.
  */
 export function mixedTextToLatex(value: string): string {
-  return value.split(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\])/g).filter(Boolean).map(part => {
-    if (part.startsWith('$$') && part.endsWith('$$')) return part.slice(2, -2);
-    if (part.startsWith('$') && part.endsWith('$')) return part.slice(1, -1);
-    if (/^\\[([]/.test(part)) return part.slice(2, -2);
-    return undelimited(part);
-  }).join('');
+  const normalized = normalizeProblemText(value);
+  const converted = [''];
+  for (const part of normalized.split(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\])/g).filter(Boolean)) {
+    let explicit: string | undefined;
+    if (part.startsWith('$$') && part.endsWith('$$')) explicit = part.slice(2,-2);
+    else if (part.startsWith('$') && part.endsWith('$')) explicit = part.slice(1,-1);
+    else if (/^\\[([]/.test(part)) explicit = part.slice(2,-2);
+    if (explicit !== undefined) { converted[converted.length-1] += explicit; continue; }
+    part.split(/\n+/).forEach((line,index) => { if(index) converted.push(''); converted[converted.length-1] += undelimited(line); });
+  }
+  return converted.length <= 1 ? converted.join('') : converted.map(line => `\\class{mathfolio-line}{${line}}`).join('\n');
 }
 function undelimited(value: string): string {
   const tokens: { start: number; end: number; fullEnd: number; math: boolean }[] = [];
@@ -41,11 +59,12 @@ function undelimited(value: string): string {
       index++;
     } while (index < value.length && (braces > 0 || !/\s/.test(value[index])));
     const core = value.slice(start, index).replace(/[.,;:!?]+$/, '');
-    tokens.push({ start, end: start + core.length, fullEnd: index, math: isMath(core) });
+    const label = /^(?:\([a-hA-H]\)|[a-hA-H][.)]|\d{1,3}[.)])$/.test(value.slice(start,index));
+    tokens.push({ start, end: start + core.length, fullEnd: index, math: !label && isMath(core) });
   }
   // Avoid turning the English article “a” into a variable in otherwise ordinary prose.
   tokens.forEach((token, index) => {
-    if (value.slice(token.start, token.end) === 'a' && !tokens[index - 1]?.math && !tokens[index + 1]?.math) token.math = false;
+    if (/^(?:a|A|I)$/.test(value.slice(token.start, token.end)) && !tokens[index - 1]?.math && !tokens[index + 1]?.math) token.math = false;
   });
   let output = '', cursor = 0;
   for (let index = 0; index < tokens.length;) {

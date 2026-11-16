@@ -63,6 +63,22 @@ beforeEach(async () => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('saved page previews and workspace copies', () => {
+  it('normalizes fragmented PDF text, previews the result and can restore the extracted source', async () => {
+    const raw='Bài 2.1. Những khẳng định\nnào sau đây là đúng?\na)0 ∈ ∅ b)∅ ⊆ {0}';
+    mocks.pdf.mockResolvedValue([{page:1,text:raw}]);
+    const upload=host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
+    Object.defineProperty(upload,'files',{configurable:true,value:[new File(['pdf'],'sets.pdf',{type:'application/pdf'})]});
+    await act(async()=>upload.dispatchEvent(new Event('change',{bubbles:true})));
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Selected PDF question"]')!.value)
+      .toBe('Bài 2.1. Những khẳng định nào sau đây là đúng?\na) 0 ∈ ∅\nb) ∅ ⊆ {0}');
+    expect(host.querySelector('[aria-label="Formatted PDF question"]')).not.toBeNull();
+    await click('Restore extracted text');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Selected PDF question"]')!.value).toBe(raw);
+    await click('Format text'); await click('Use this text');
+    const value=host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value;
+    expect(value).toContain(String.raw`\class{mathfolio-line}`); expect(value).toContain(String.raw`\subseteq`);
+    expect(mocks.ai).not.toHaveBeenCalled();
+  });
   it('suggests Cloud AI for a complex problem without enabling it or sending data', async () => {
     await type('[aria-label="Problem statement"]', 'Prove that the sequence converges and justify each step.');
     expect(host.querySelector('.cloud-recommendation')?.textContent).toContain('Cloud AI can provide deeper analysis');
@@ -116,7 +132,7 @@ describe('saved page previews and workspace copies', () => {
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe('x^2+2x=0');
     await click('Replace with PDF text');
 
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain('Integrate x dx');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain('Integrate');
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.readOnly).toBe(false);
     expect(host.textContent).not.toContain('Original essentials');
     expect(host.textContent).not.toContain('Original hint');
@@ -320,6 +336,19 @@ describe('Cloud AI permission and chat controls', () => {
 });
 
 describe('notes math keyboard', () => {
+  it('keeps common symbols visible and expands categorized symbols without changing the draft', async () => {
+    const keyboard=host.querySelector('.problem .math-keyboard')!;
+    expect(keyboard.textContent).toContain('∅'); expect(keyboard.textContent).toContain('⊆');
+    await click('More symbols',keyboard);
+    expect(button('Fewer symbols',keyboard).getAttribute('aria-expanded')).toBe('true');
+    expect(keyboard.querySelector('.symbol-browser')!.hasAttribute('hidden')).toBe(false);
+    await click('Greek letters',keyboard);
+    expect(keyboard.querySelector('.symbol-category-content')!.getAttribute('aria-label')).toBe('Greek letters');
+    expect(keyboard.querySelector('.symbol-category-content')!.textContent).toContain('Ω');
+    await click('Fewer symbols',keyboard);
+    expect(keyboard.querySelector('.symbol-browser')!.hasAttribute('hidden')).toBe(true);
+    expect(mocks.ai).not.toHaveBeenCalled(); expect(mocks.write).not.toHaveBeenCalled();
+  });
   it('toggles without changing notes and inserts a real symbol at the cursor', async () => {
     await openWorkspace();
     const original = stored().exercises[0].notes;

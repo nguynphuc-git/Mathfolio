@@ -11,10 +11,11 @@ import { NotesEditor } from './components/NotesEditor';
 import { MathInput, type MathInputHandle } from './components/MathInput';
 import { statementLatex } from './math-input';
 import { mixedTextToLatex } from './math-paste';
+import { normalizeProblemText } from './problem-text';
+import { MathKeyboard } from './components/MathKeyboard';
 import type { PdfProgress, PdfQuestion } from './pdf';
 import './notebook.css';
 
-const symbols = [ ['x²', '^{2}'], ['xⁿ', '^{#?}'], ['√', '\\sqrt{#?}'], ['a/b', '\\frac{#?}{#?}'], ['∑', '\\sum_{i=1}^{n}'], ['∫', '\\int_{}^{}'], ['lim', '\\lim_{x\\to 0}'], ['∞', '\\infty'], ['≤', '\\leq'], ['≥', '\\geq'], ['≠', '\\neq'], ['∈', '\\in'], ['∀', '\\forall'], ['⇒', '\\Rightarrow'], ['α', '\\alpha'], ['π', '\\pi'] ];
 const labels = ['A starting point', 'The method', 'Full solution'];
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -113,7 +114,7 @@ export default function App() {
       const { extractPdfQuestions } = await import('./pdf');
       const questions = await extractPdfQuestions(file, setPdfProgress);
       setPdfFile(file); setPdfPreview(null);
-      setPdfQuestions(questions); setPdfSelected(questions[0] ?? null); setPdfSelectedIndex(0);
+      setPdfQuestions(questions); setPdfSelected(questions[0] ? { ...questions[0], text: normalizeProblemText(questions[0].text) } : null); setPdfSelectedIndex(0);
       if (questions[0]) void showPdfPage(file, questions[0].page);
     } catch (e) { setError(friendlyError(e)); }
     finally { setPdfBusy(false); setPdfProgress(null); }
@@ -380,7 +381,7 @@ export default function App() {
       <div className="workspace">
         <section ref={problemPanel} className="paper problem"><div className="panel-heading"><span className="step">01</span><h2>Problem</h2><span className="tag">YOUR PROBLEM</span></div>
           <MathInput ref={input} value={statementLatex(draft.statement, draft.statementFormat)} readOnly={draft.confirmed} disabled={blocked} onChange={value => edit({ statement: value, statementFormat: 'latex' })}/>
-          {!draft.confirmed && <><p className="subtle">Type your problem or paste LaTeX. Insert symbols directly below.</p><div className="math-keys">{symbols.map(([label, latex]) => <button key={label} disabled={blocked} onMouseDown={e => e.preventDefault()} onClick={() => insertMath(latex)} aria-label={`Insert ${label}`}>{label}</button>)}</div></>}
+          {!draft.confirmed && <><p className="subtle">Type your problem or paste LaTeX. Insert symbols directly below.</p><MathKeyboard disabled={blocked} onInsert={symbol => insertMath(symbol.latex)}/></>}
           {!cloudAllowed && online && draft.statement.trim() && recommendsCloudForProblem(draft.statement) && <aside className="cloud-recommendation" aria-label="Cloud AI recommendation"><p>This may need several reasoning steps. Cloud AI can provide deeper analysis; your problem is sent only after you enable it and run analysis.</p><button type="button" disabled={blocked} onClick={() => void allowCloud('Cloud AI may provide deeper reasoning for this problem. Your problem and related tutoring context are sent only when you choose to run an AI action with Cloud AI enabled. Allow Cloud AI for this session?')}>Consider Cloud AI</button></aside>}
 
           <div className="row problem-import">
@@ -417,12 +418,13 @@ export default function App() {
     <p className="eyebrow">IMPORT A PROBLEM</p><h2 id="pdf-title">Choose a question from your PDF</h2>
     {!pdfQuestions.length ? <p role="status">No readable text was found after local OCR.</p> : <div className="pdf-picker">
       <div className="pdf-question-list" role="list" aria-label="Extracted PDF text">
-        {pdfQuestions.map((item, index) => <button type="button" role="listitem" key={`${item.page}-${index}`} aria-pressed={pdfSelectedIndex === index} onClick={() => { setPdfSelected(item); setPdfSelectedIndex(index); if (pdfFile && pdfPreview?.page !== item.page) void showPdfPage(pdfFile, item.page); }}>
+        {pdfQuestions.map((item, index) => <button type="button" role="listitem" key={`${item.page}-${index}`} aria-pressed={pdfSelectedIndex === index} onClick={() => { setPdfSelected({ ...item, text:normalizeProblemText(item.text) }); setPdfSelectedIndex(index); if (pdfFile && pdfPreview?.page !== item.page) void showPdfPage(pdfFile, item.page); }}>
           <strong>Page {item.page} · Text {index + 1}</strong><span>{item.text.slice(0, 180)}{item.text.length > 180 ? '…' : ''}</span>
         </button>)}
       </div>
       {pdfSelected && <div className="pdf-import-content">
         <label className="pdf-selection">Selected text — edit before using<textarea aria-label="Selected PDF question" maxLength={6000} value={pdfSelected.text} onChange={event => setPdfSelected({ ...pdfSelected, text: event.target.value })}/>{pdfSelected.text.length > 6000 && <small className="error">Select a shorter question to stay within the 6,000-character limit.</small>}</label>
+        <div className="row pdf-format-actions"><button type="button" onClick={() => setPdfSelected({ ...pdfSelected, text: normalizeProblemText(pdfSelected.text) })}>Format text</button><button type="button" onClick={() => setPdfSelected({ ...pdfSelected, text: pdfQuestions[pdfSelectedIndex].text })}>Restore extracted text</button></div><div className="pdf-typeset-preview"><h3>Formatted problem preview</h3><MathInput label="Formatted PDF question" value={mixedTextToLatex(pdfSelected.text)} readOnly/></div>
         {pdfPreviewBusy && <p role="status" className="subtle">Rendering page {pdfSelected.page}…</p>}
         {pdfPreview?.page === pdfSelected.page && <PdfFormulaCropper key={pdfPreview.page} image={pdfPreview.image} onInsert={appendRecognizedFormula}/>}
       </div>}
