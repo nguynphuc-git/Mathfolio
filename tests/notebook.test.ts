@@ -5,7 +5,7 @@ const getModel = vi.hoisted(()=>vi.fn());
 vi.mock('firebase/ai', async original => ({...await original<typeof import('firebase/ai')>(),getAI:vi.fn(),getGenerativeModel:getModel}));
 vi.mock('../src/firebase',()=>({getCloudFirebaseApp:vi.fn(()=>({}))}));
 import { InferenceMode } from 'firebase/ai';
-vi.mock('idb-keyval', () => ({get: vi.fn(async (key: string) => values.get(key)), set: vi.fn(async (key: string, value: unknown) => { values.set(key, structuredClone(value)); })}));
+vi.mock('idb-keyval', () => ({get: vi.fn(async (key: string) => values.get(key)), del:vi.fn(async(key:string)=>{values.delete(key);}), set: vi.fn(async (key: string, value: unknown) => { values.set(key, structuredClone(value)); })}));
 import { emptyNotebook, newExercise, notebookKey, putExercise, putExerciseNotes, loadNotebook, saveNotebook } from '../src/notebook';
 import { notebookAI, notebookPrompt, recommendsCloudForProblem, type NotebookRequest } from '../src/ai';
 afterEach(() => vi.unstubAllGlobals());

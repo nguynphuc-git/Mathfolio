@@ -63,3 +63,13 @@ describe('PDF extraction with local OCR fallback', () => {
     expect(mocks.recognizePdfPages.mock.calls[0][0].map((page: { page: number }) => page.page)).toEqual([2]);
   });
 });
+describe('stopping PDF import',()=>{
+  it('destroys a loading PDF once and never reads pages after cancellation',async()=>{
+    let finish!:(value:unknown)=>void;const getPage=vi.fn();const destroy=vi.fn(async()=>{});
+    mocks.getDocument.mockReturnValue({promise:new Promise(resolve=>{finish=resolve;}),destroy});
+    const controller=new AbortController();const pending=extractPdfQuestions(new File(['pdf'],'p.pdf'),undefined,controller.signal);
+    await vi.waitFor(()=>expect(mocks.getDocument).toHaveBeenCalledOnce());
+    controller.abort();await expect(pending).rejects.toMatchObject({name:'AbortError'});
+    finish({numPages:1,getPage});await Promise.resolve();expect(destroy).toHaveBeenCalledOnce();expect(getPage).not.toHaveBeenCalled();
+  });
+});

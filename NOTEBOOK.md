@@ -1,3 +1,16 @@
+## Workspace refinement and local image import
+
+- The header and favicon use **Σ**. The discussion card is on the left and notes on the right, retaining their previous desktop proportions (1.9:1.1) and input heights. On narrow screens they stack in that order.
+- A workspace toolbar keeps import, save, Cloud AI permission and math-size controls together; it stays visible on wide screens. Source attachments are collapsed by default. Knowledge and hints remain bounded, with stable scrollbar gutters and per-level Show/Hide controls. AI runs show elapsed seconds and retain Stop AI.
+- Workspace changes autosave after 750 ms to a separate, account/project-scoped IndexedDB draft. Reload offers **Resume draft** or **Start fresh**. This never updates a saved library exercise: **Save exercise / Ctrl+S** remains the explicit commit. Draft writes and deletion are serialized so late writes cannot resurrect discarded copies. Manual sign-out/open-another-page confirms discard. This stores one workspace draft per account on this browser; cross-tab merging and cloud backup are not provided.
+- The library can search names, problem text and notes (accent-insensitive), filter completion status and sort by updated date or name. Opening a saved result still opens the notes-editable preview first.
+- The keyboard keeps 16 common symbols visible. **More symbols** opens a floating, categorized drawer with search and six recently used symbols, without stretching the cards. The drawer closes on Escape/outside click; insertion keeps the editor caret. **Ctrl+Enter** analyzes the problem or sends the focused discussion question. Math size changes affect display, not saved formulas.
+- **Read image** accepts PNG/JPG/WebP up to 10 MB, resizes locally and opens a source/transcription review. **Read image on this device** invokes Firebase ONLY_ON_DEVICE with image input; there is no cloud fallback. If the device cannot process images, bilingual Tesseract OCR runs locally using bundled engine/language assets. **Read printed text** selects that path directly and works without Firebase AI quota after app/OCR assets are available. The optional loopback formula cropper remains available for corrections.
+- Images and PDFs are compared with a formatted transcription side by side; raw text editing is available before use. Image reading, printed OCR, PDF import and formula recognition have cancellation. Closing an image review aborts its job. No partial or late recognition is applied. Replacing an analyzed problem requires confirmation, clears only its knowledge/hints/chat and preserves notes. Saving the source image is optional and respects the four-image limit.
+- Local image-AI availability depends on Chrome, device and the downloaded model. Printed OCR cannot reliably reconstruct every fraction, handwritten formula or page layout. Review against the source before analysis. No claim of universal math OCR accuracy is made. Formula OCR may download its model on first use, but the selected crop is processed only by the loopback service.
+
+Validation covers draft isolation/recovery/deletion races, search/sort, shortcut/modal boundaries, image review/Stop, typed on-device-only image calls, browser OCR fallback and worker cleanup, plus existing notebook regression tests. A real bilingual Tesseract smoke test reads a synthetic printed equation; spacing still needs review. Browser layout, MathLive caret/hover geometry and physical Chrome image-model inference require acceptance testing on a supported device.
+
 ## Problem and PDF normalization; expanded math keyboard
 
 - Mixed text recognition now checks Unicode words, including short Vietnamese words such as “là”, “và”, “đề”. Lettered options are text labels, while set relations, empty sets, number sets and literal set braces are mathematical content. Zero, Latin O and the empty set are never substituted for one another.
@@ -5,7 +18,7 @@
 - The editor aligns content at the top with less padding. Only root layout struts are suppressed; fraction/root internals retain their native layout. Logical lines use block layout and normal text wrapping inside the bounded viewport. Actual caret/hover geometry still requires Chrome acceptance testing.
 - Selectable PDF extraction now groups fragments by position and relative font size, rather than inserting a newline for every changed baseline or hasEOL flag. Small raised/lowered fragments adjacent to a math base can be reconstructed as scripts. Vietnamese Bài/Câu and chapter-number exercise headings are recognized. This does not infer missing fraction bars, radicals or symbols from damaged OCR; use the existing local formula cropper and compare against the PDF page when needed.
 - The PDF picker opens with normalized editable text, a formatted mathematical preview, Format text and Restore extracted text. Choosing or formatting a question does not call AI. Original extracted text remains available for comparison before import.
-- A shared keyboard keeps 20 common symbols visible and offers More symbols with seven categories: powers/arithmetic, sets/logic, relations/arrows, calculus/series, functions, Greek letters, and vectors/matrices. It contains over 100 symbols/templates, also available in the notes keyboard. Notes remain plain text with Unicode symbols/templates.
+- A shared keyboard keeps 16 common symbols visible and offers More symbols with seven categories: powers/arithmetic, sets/logic, relations/arrows, calculus/series, functions, Greek letters, and vectors/matrices. It contains over 100 symbols/templates, also available in the notes keyboard. Notes remain plain text with Unicode symbols/templates.
 - Regression coverage includes Vietnamese prose, set notation, literal braces, zero versus empty set, option boundaries, explicit multiline LaTeX, geometric PDF script reconstruction, categorized keyboard interactions and all symbol templates. Testing uses supplied examples and synthetic PDF fragments; no original PDF was attached in this request. Visual acceptance and OCR accuracy must still be checked against the source document.
 
 ## Khởi động nhanh và lưu bài đang làm
@@ -83,10 +96,10 @@ Trên Windows dùng `firebase.cmd` nếu PowerShell chặn firebase.ps1. Giữ d
 
 ## Luồng dùng thử
 
-1. Nhập đề, chọn môn, chèn ký hiệu tại con trỏ; xem trước công thức.
-2. Đính kèm ảnh đề nếu muốn (chỉ xem/lưu, không OCR và không gửi ảnh tới AI).
+1. Nhập/dán đề, chèn ký hiệu tại con trỏ; công thức hiển thị trực tiếp trong đề.
+2. Chọn Read image để đọc ảnh bằng local AI hoặc OCR cục bộ, kiểm tra rồi dùng đề. Có thể chỉ đính kèm ảnh nguồn nếu muốn.
 3. Xác nhận đề & phân tích: gửi text cho local AI để nhận kiến thức cần biết. Người dùng chịu trách nhiệm kiểm tra đề. Bản đầu chưa tự chuẩn hóa đề bằng AI.
-4. Mở hint 1 local. Chỉ sau khi có hint trước mới mở được tầng tiếp theo. Hint 2 (phương pháp) và hint 3 (lời giải) dùng cloud, cần bật đồng ý và có mạng. Chưa mở thì không gọi AI hay tạo trước nội dung.
+4. Mở hint 1 local. Chỉ sau khi có hint trước mới mở được tầng tiếp theo. Hint 2 (phương pháp) và hint 3 (lời giải) dùng local mặc định; có thể dùng cloud khi bật Cloud AI và có mạng. Chưa mở thì không gọi AI hay tạo trước nội dung.
 5. Chat chọn local hoặc cloud; cloud cần đồng ý. Khi offline tự chọn local. Prompt dùng đề, kiến thức, hint đã mở và tối đa 6 tin nhắn gần nhất (mỗi tin tối đa 1.500 ký tự). Cả lịch sử vẫn được lưu trong sổ.
 6. Viết ghi chú/bài làm, đính kèm ảnh giải (PNG/JPG/WebP, tối đa 3 MB/ảnh, tổng 4 ảnh/bài).
 7. Lưu bài: đặt tên, chọn/tạo thư mục, đánh dấu đang làm/đã hoàn thành. Chỉ thông báo đã lưu sau khi IndexedDB ghi thành công.

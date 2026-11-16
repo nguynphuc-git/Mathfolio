@@ -7,7 +7,7 @@ registerType: 'prompt',
 injectRegister: 'auto',
 manifest: false,
 workbox: {
-globPatterns: ['**/*.{js,mjs,css,html,woff,woff2,ttf,wasm,gz}'],
+globPatterns: ['**/*.{js,mjs,css,html,svg,woff,woff2,ttf,wasm,gz}'],
 maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
 navigateFallback: 'index.html',
 // No runtime caching of AI, App Check, or user documents.

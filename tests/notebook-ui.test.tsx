@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NotebookRequest } from '../src/ai';
 import type { Answer, Notebook } from '../src/notebook';
 
-const mocks = vi.hoisted(() => ({ values: new Map<string, Notebook>(), ai: vi.fn(), write: vi.fn(), pdf: vi.fn(), pdfPreview: vi.fn() }));
-vi.mock('idb-keyval', () => ({ get: vi.fn(async (key: string) => structuredClone(mocks.values.get(key))), set: async (key: string, value: Notebook) => { mocks.write(key, value); mocks.values.set(key, structuredClone(value)); } }));
+const mocks = vi.hoisted(() => ({ values: new Map<string, unknown>(), ai: vi.fn(), write: vi.fn(), pdf: vi.fn(), pdfPreview: vi.fn(), prepareImage:vi.fn(), readImage:vi.fn() }));
+vi.mock('idb-keyval', () => ({ get: vi.fn(async (key: string) => structuredClone(mocks.values.get(key))), del: async (key:string) => { mocks.values.delete(key); }, set: async (key: string, value: unknown) => { mocks.write(key, value); mocks.values.set(key, structuredClone(value)); } }));
 vi.mock('../src/firebase', () => ({ getFirebaseApp: () => ({}) }));
 vi.mock('firebase/auth', () => ({
   getAuth: () => ({ app: { options: { projectId: 'test' } } }),
@@ -18,6 +18,7 @@ vi.mock('../src/ai', () => ({
   friendlyError: (error: Error) => error.message,
   recommendsCloudForProblem: (statement: string) => /\bprove\b/i.test(statement)
 }));
+vi.mock('../src/image-import',async original=>({...await original<typeof import('../src/image-import')>(),prepareProblemImage:mocks.prepareImage,readProblemImage:mocks.readImage}));
 vi.mock('../src/pdf', () => ({ extractPdfQuestions: mocks.pdf, renderPdfPagePreview: mocks.pdfPreview }));
 vi.mock('../src/components/PdfFormulaCropper', () => ({
   PdfFormulaCropper: ({ onInsert }: { onInsert: (latex: string) => void }) =>
@@ -29,11 +30,12 @@ vi.mock('../src/components/MathInput', () => ({ MathInput: forwardRef(function F
   return <textarea aria-label={props.label ?? 'Problem statement'} readOnly={props.readOnly} disabled={props.disabled} value={props.value} onChange={event => props.onChange?.(event.target.value)}/>;
 }) }));
 import App from '../src/App';
+import {workspaceDraftKey} from '../src/workspace-draft';
 import { emptyNotebook, newExercise, notebookKey } from '../src/notebook';
 
 let root: Root; let host: HTMLDivElement;
 const storageKey = notebookKey('test', 'alice');
-function stored() { return mocks.values.get(storageKey)!; }
+function stored() { return mocks.values.get(storageKey)! as Notebook; }
 function button(text: string, scope: ParentNode = host): HTMLButtonElement {
   const found = [...scope.querySelectorAll('button')].find(value => value.textContent?.trim().startsWith(text));
   if (!found) throw new Error(`Missing button: ${text}`);
@@ -54,9 +56,10 @@ beforeEach(async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   mocks.ai.mockReset(); mocks.write.mockReset(); mocks.pdf.mockReset(); mocks.pdfPreview.mockReset(); mocks.values.clear();
+  mocks.prepareImage.mockReset().mockResolvedValue({data:'data:image/jpeg;base64,AA==',name:'problem.jpg'});mocks.readImage.mockReset();
   mocks.pdfPreview.mockResolvedValue('data:image/png;base64,AA==');
-  const first = { ...newExercise(), id: 'first', title: 'Quadratic page', statement: 'x^2+2x=0', confirmed: true, notes: 'Original notes', knowledge: { text: 'Original essentials', source: 'local_reference' }, hints: [{ text: 'Original hint', source: 'on_device' }], messages: [{ role: 'user' as const, text: 'Original question' }], attachments: [{ id: 'image', name: 'solution.png', data: 'data:image/png;base64,AA==', kind: 'solution' as const }] };
-  mocks.values.set(storageKey, { ...emptyNotebook(), exercises: [first, { ...newExercise(), id: 'second', title: 'Second page', statement: 'x=1', confirmed: true }] });
+  const first = { ...newExercise(), id: 'first', updatedAt:'2001-01-01T12:00:00Z', title: 'Quadratic page', statement: 'x^2+2x=0', confirmed: true, notes: 'Original notes', knowledge: { text: 'Original essentials', source: 'local_reference' }, hints: [{ text: 'Original hint', source: 'on_device' }], messages: [{ role: 'user' as const, text: 'Original question' }], attachments: [{ id: 'image', name: 'solution.png', data: 'data:image/png;base64,AA==', kind: 'solution' as const }] };
+  mocks.values.set(storageKey, { ...emptyNotebook(), exercises: [first, { ...newExercise(), id: 'second', updatedAt:'2000-01-01T12:00:00Z', title: 'Second page', statement: 'x=1', confirmed: true }] });
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
   await act(async () => { root.render(<App/>); });
 });
@@ -372,5 +375,94 @@ describe('notes math keyboard', () => {
     await click('x²',host.querySelector('.notes-math-keys')!); await click('Save notes');
     expect(stored().exercises[0].notes).toBe('Original notes²');
     expect(stored().exercises[0].statement).toBe(statement);
+  });
+});
+
+describe('workspace recovery and library tools',()=>{
+  it('autosaves a separate copy, recovers it after reload, and replaces the saved page only on Save',async()=>{
+    await openWorkspace();await type('[aria-label="Notes"]','Recovered notes');
+    await act(async()=>{await new Promise(resolve=>setTimeout(resolve,850));});
+    expect(host.querySelector('.save-state')?.textContent).toContain('Draft saved');
+    expect(stored().exercises[0].notes).toBe('Original notes');
+    expect(mocks.values.has(workspaceDraftKey(storageKey))).toBe(true);
+    await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));
+    expect(host.querySelector('[aria-label="Recover workspace draft"]')).not.toBeNull();
+    await click('Resume draft');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe('Recovered notes');
+    expect(stored().exercises[0].notes).toBe('Original notes');
+    await act(async()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'s',ctrlKey:true,bubbles:true,cancelable:true})));
+    expect(stored().exercises[0]).toMatchObject({id:'first',notes:'Recovered notes'});
+    expect(stored().exercises).toHaveLength(2);
+    expect(mocks.values.has(workspaceDraftKey(storageKey))).toBe(false);
+  });
+  it('discards recovery without changing a saved exercise',async()=>{
+    const before=structuredClone(stored());
+    mocks.values.set(workspaceDraftKey(storageKey),{version:1,exercise:{...before.exercises[0],notes:'Unwanted draft'},savedAt:new Date().toISOString()});
+    await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));
+    await click('Start fresh');
+    expect(host.querySelector('[aria-label="Recover workspace draft"]')).toBeNull();
+    expect(stored()).toEqual(before);expect(mocks.values.has(workspaceDraftKey(storageKey))).toBe(false);
+  });
+  it('filters saved pages across folders while keeping preview-first navigation',async()=>{
+    await click('Exercise library');await type('[aria-label="Search exercises"]','Original notes');
+    expect(host.querySelectorAll('.exercise-card')).toHaveLength(1);
+    await click('Open exercise');expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Quadratic page');
+    await click('Close',host.querySelector('[role="dialog"]')!);
+    await type('[aria-label="Search exercises"]','no matching page');
+    expect(host.textContent).toContain('No matching exercises');
+    expect(mocks.ai).not.toHaveBeenCalled();
+  });
+  it('uses sigma branding, places discussion before notes, and keeps zoom and symbol search local',async()=>{
+    expect(host.querySelector('.brand-mark')?.textContent).toBe('Σ');
+    expect([...host.querySelector('.workbench')!.children].map(x=>x.className)).toEqual(['paper discussion','paper notes']);
+    await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Increase math size"]')!.click());
+    expect(host.querySelector<HTMLElement>('main')!.style.getPropertyValue('--problem-font-size')).toBe('18px');
+    const keyboard=host.querySelector('.problem .math-keyboard')!;await click('More symbols',keyboard);
+    await type('.problem [aria-label="Search math symbols"]','integral');
+    expect(keyboard.querySelector('[aria-label="Search results"]')?.textContent).toContain('∫');
+    await act(async()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
+    expect(keyboard.querySelector('.symbol-browser')!.hasAttribute('hidden')).toBe(true);
+    expect(mocks.ai).not.toHaveBeenCalled();expect(mocks.write).not.toHaveBeenCalled();
+  });
+  it('does not analyze behind a Save dialog when using Ctrl+Enter',async()=>{
+    await type('[aria-label="Problem statement"]','x=1');await click('Save exercise');
+    await act(async()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true,cancelable:true})));
+    expect(mocks.ai).not.toHaveBeenCalled();
+  });
+});
+async function uploadImage(){
+  const upload=host.querySelector<HTMLInputElement>('[aria-label="Read a problem image"]')!;
+  Object.defineProperty(upload,'files',{configurable:true,value:[new File(['image'],'problem.jpg',{type:'image/jpeg'})]});
+  await act(async()=>upload.dispatchEvent(new Event('change',{bubbles:true})));
+}
+describe('image problem review',()=>{
+  it('requires review and confirmation before replacing an analyzed problem; leaves the saved original intact',async()=>{
+    await openWorkspace();await uploadImage();
+    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Your image stays on this device');
+    expect(mocks.readImage).not.toHaveBeenCalled();
+    mocks.readImage.mockResolvedValue({text:'Solve x+1=2',source:'on_device'});
+    await click('Read image on this device');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Recognized image text"]')!.value).toBe('Solve x+1=2');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe('x^2+2x=0');
+    await click('Use this problem');
+    expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain('clears its essentials');
+    await click('Use this problem',host.querySelector('[role="alertdialog"]')!);
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain('x+1=2');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe('Original notes');
+    expect(host.textContent).not.toContain('Original essentials');
+    expect(stored().exercises[0].statement).toBe('x^2+2x=0');
+    expect(mocks.ai).not.toHaveBeenCalled();
+  });
+  it('stops image reading, ignores late results, and never applies anything when closing',async()=>{
+    await uploadImage();let finish!:(result:{text:string;source:string})=>void;let signal!:AbortSignal;
+    mocks.readImage.mockImplementation((_:unknown,__:unknown,stop:AbortSignal)=>{signal=stop;return new Promise(resolve=>{finish=resolve;});});
+    await click('Read image on this device');await click('Stop reading');
+    expect(signal.aborted).toBe(true);
+    await act(async()=>finish({text:'LATE IMAGE RESULT',source:'on_device'}));
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Recognized image text"]')!.value).toBe('');
+    await click('Cancel',host.querySelector('[role="dialog"]')!);
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe('');
+    expect(mocks.write).not.toHaveBeenCalled();
   });
 });

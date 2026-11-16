@@ -1,14 +1,18 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { recognizeMathFormula } from '../pdf-ocr-local';
 
 interface Crop { x: number; y: number; width: number; height: number }
 
-export function PdfFormulaCropper({ image, onInsert }: { image: string; onInsert: (latex: string) => void }) {
+export function PdfFormulaCropper({ image, onInsert, imageLabel='Source page for formula selection', disabled=false, onBusyChange }: { image: string; onInsert: (latex: string) => void; imageLabel?:string; disabled?:boolean; onBusyChange?:(busy:boolean)=>void }) {
   const imageRef = useRef<HTMLImageElement>(null);
   const [crop, setCrop] = useState<Crop | null>(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const operation=useRef<AbortController|null>(null);const busyCallback=useRef(onBusyChange);busyCallback.current=onBusyChange;
+  useEffect(()=>{busyCallback.current?.(busy);},[busy]);
+  useEffect(()=>()=>{operation.current?.abort();operation.current=null;},[image]);
+  function stop(){const current=operation.current;operation.current=null;current?.abort();setBusy(false);setError('');}
 
   function point(event: React.PointerEvent<HTMLDivElement>) {
     const bounds = imageRef.current?.getBoundingClientRect() ?? event.currentTarget.getBoundingClientRect();
@@ -18,7 +22,7 @@ export function PdfFormulaCropper({ image, onInsert }: { image: string; onInsert
     };
   }
   function start(event: React.PointerEvent<HTMLDivElement>) {
-    if (busy) return;
+    if (busy||disabled) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     const origin = point(event);
@@ -36,7 +40,8 @@ export function PdfFormulaCropper({ image, onInsert }: { image: string; onInsert
   }
   async function recognize() {
     const imageElement = imageRef.current;
-    if (!crop || !imageElement || crop.width < 0.01 || crop.height < 0.01) return;
+    if (busy||disabled||!crop || !imageElement || crop.width < 0.01 || crop.height < 0.01) return;
+    const controller=new AbortController();operation.current=controller;
     setBusy(true); setError('');
     const canvas = window.document.createElement('canvas');
     const left = Math.round(crop.x * imageElement.naturalWidth);
@@ -48,22 +53,24 @@ export function PdfFormulaCropper({ image, onInsert }: { image: string; onInsert
       if (!context) throw new Error('Could not crop the selected formula.');
       context.drawImage(imageElement, left, top, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
       const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Could not prepare the formula image.')), 'image/png'));
-      const latex = await recognizeMathFormula(blob);
+      controller.signal.throwIfAborted();
+      const latex = await recognizeMathFormula(blob,controller.signal);
+      if(operation.current!==controller || controller.signal.aborted)return;
       onInsert(latex);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Local formula recognition failed.');
+      if(operation.current===controller)setError(reason instanceof Error ? reason.message : 'Local formula recognition failed.');
     } finally {
-      canvas.width = 0; canvas.height = 0; setBusy(false);
+      canvas.width = 0; canvas.height = 0; if(operation.current===controller){operation.current=null;setBusy(false);}
     }
   }
 
   return <section className="formula-cropper" aria-label="Local formula OCR">
     <p className="subtle">Drag over one formula, then recognize it as LaTeX locally.</p>
     <div className="formula-crop-stage" onPointerDown={start} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}>
-      <img ref={imageRef} src={image} alt="PDF page for formula selection" draggable={false}/>
+      <img ref={imageRef} src={image} alt={imageLabel} draggable={false}/>
       {crop && <span className="formula-crop-box" style={{ left: `${crop.x * 100}%`, top: `${crop.y * 100}%`, width: `${crop.width * 100}%`, height: `${crop.height * 100}%` }}/>}
     </div>
-    <div className="row"><button type="button" disabled={busy || !crop || crop.width < 0.01 || crop.height < 0.01} onClick={() => void recognize()}>{busy ? 'Recognizing locally…' : 'Recognize formula as LaTeX'}</button></div>
+    <div className="row"><button type="button" disabled={disabled || busy || !crop || crop.width < 0.01 || crop.height < 0.01} onClick={() => void recognize()}>{busy ? 'Recognizing locally…' : 'Recognize formula as LaTeX'}</button>{busy&&<button type="button" className="stop-ai" onClick={stop}>Stop recognition</button>}</div>
     {error && <p role="alert" className="error">{error}</p>}
   </section>;
 }

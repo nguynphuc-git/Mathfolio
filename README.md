@@ -16,6 +16,8 @@ Trình khởi động cài dependency từ lockfile, khởi động Auth Emulato
 - Nhập đề và viết vào **Your working notes**. Chọn **Save exercise**, đặt tên rồi chọn **Save on this device**. Bạn có thể lưu cả bài đang làm dở.
 - Mở **Exercise library → My exercises → Open exercise** để xem bài và sửa ghi chú. **Open in workspace** mở bản nháp để tiếp tục làm. Tải lại trang rồi mở thư viện để kiểm tra dữ liệu.
 - Thử `2x+3=7` và chọn **Confirm & analyze** để xem thẻ công thức cục bộ. Các bài ngoài phạm vi công thức, hint và chat dùng Firebase AI Logic. Gemini cần project thật, App Check và thiết bị tương thích cho chế độ on-device.
+- Chọn **Read image** để đọc đề trên thiết bị rồi kiểm tra với ảnh nguồn. Nếu local AI không hỗ trợ ảnh, dùng OCR chữ in cục bộ; công thức cần được soát lại. Không gửi ảnh tới cloud.
+- Bản đang làm được tự lưu riêng; tải lại trang rồi chọn **Resume draft** để tiếp tục. **Save exercise** mới cập nhật bài gốc trong thư viện.
 - Xem [các tính năng Mathfolio](NOTEBOOK.md) và [checklist sprint chung](https://github.com/nguynphuc-git/StudyLens/issues/2).
 
 ## Môi trường Firebase khi được cấp quota
