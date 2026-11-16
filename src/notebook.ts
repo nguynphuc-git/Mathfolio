@@ -1,7 +1,7 @@
 import { get, set } from 'idb-keyval';
 export interface Answer { text: string; source: string }
-export interface Message { role: 'user' | 'assistant'; text: string; source?: string }
-export interface Attachment { id: string; name: string; data: string; kind: 'problem' | 'solution' }
+export interface Message { role: 'user' | 'assistant'; text: string; source?: string; format?:'latex' }
+export interface Attachment { id: string; name: string; data: string; kind: 'problem' | 'solution'; useForAI?:boolean }
 export interface Exercise {
   id: string; title: string; folderId: string; subject?: 'calculus' | 'discrete' | 'algorithms';
   statement: string; statementFormat?: 'latex'; confirmed: boolean; knowledge?: Answer; hints: Answer[];

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createUserWithEmailAndPassword, getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth';
 import { getFirebaseApp } from './firebase';
 import { friendlyError, notebookAI, recommendsCloudForProblem, type NotebookRequest } from './ai';
@@ -11,9 +11,11 @@ import { AttachmentGallery } from './components/AttachmentGallery';
 import { ExercisePreview } from './components/ExercisePreview';
 import { NotesEditor } from './components/NotesEditor';
 import { MathInput, type MathInputHandle } from './components/MathInput';
-import { statementLatex } from './math-input';
+import { statementLatex,hasEditorContent } from './math-input';
 import { mixedTextToLatex } from './math-paste';
 import { normalizeProblemText } from './problem-text';
+import {MathKeyboardProvider} from './components/MathKeyboardContext';
+import {selectedIllustrations,sameIllustrations} from './problem-vision';
 import { MathKeyboard } from './components/MathKeyboard';
 import { ImageProblemReview } from './components/ImageProblemReview';
 import { prepareProblemImage, type ProblemImage } from './image-import';
@@ -60,18 +62,11 @@ export default function App() {
   const [partial, setPartial] = useState(''); const [question, setQuestion] = useState('');
   const [cloudAllowed, setCloudAllowed] = useState(false); const [chatRoute, setChatRoute] = useState<'local' | 'cloud'>('local');
   const [online, setOnline] = useState(navigator.onLine); const [error, setError] = useState(''); const [status, setStatus] = useState('');
-  const epoch = useRef(0); const key = useRef(''); const input = useRef<MathInputHandle>(null);
+  const epoch = useRef(0); const key = useRef(''); const input = useRef<MathInputHandle>(null);const chatInput=useRef<MathInputHandle>(null);
+  const illustrations=selectedIllustrations(draft.attachments);
   const activeAI = useRef<{ controller: AbortController; status: string; error: string } | null>(null);
   const blocked = !!busy || saving || pdfBusy || imagePreparing || !!recovery;
   useEffect(()=>{if(!busy)return;const tick=()=>setElapsed(Math.floor((performance.now()-runStarted.current)/1000));tick();const timer=setInterval(tick,1000);return()=>clearInterval(timer);},[busy]);
-  const problemPanel = useRef<HTMLElement>(null);
-  const [problemHeight, setProblemHeight] = useState(520);
-  useLayoutEffect(() => {
-    if (!problemPanel.current) return;
-    const observer = new ResizeObserver(entries => setProblemHeight(entries[0].target.getBoundingClientRect().height));
-    observer.observe(problemPanel.current);
-    return () => observer.disconnect();
-  }, [ready, user?.uid, tab]);
 
   useEffect(() => {
     const on = () => setOnline(navigator.onLine);
@@ -244,7 +239,8 @@ export default function App() {
     try { if(draftTimer.current)clearTimeout(draftTimer.current);await clearWorkspaceDraft(key.current);await signOut(getAuth(getFirebaseApp())); } catch (e) { setError(friendlyError(e)); }
     finally { setAuthBusy(false); }
   }
-  async function allowCloud(description = 'Cloud AI can send the current problem, essentials, opened hints and recent conversation to the AI service. Notes and attached images are not sent. Allow cloud for this notebook session? Keep Cloud AI off to use the on-device model.'): Promise<boolean> {
+  async function allowCloud(reason = ''): Promise<boolean> {
+    const description=[reason,'Cloud AI actions send the problem, selected problem illustrations and tutoring context to the AI service. Notes and solution images are not sent. Allow Cloud AI for this session?'].filter(Boolean).join(' ');
     if (!online) { setError('Cloud AI needs an internet connection. Local AI is still available.'); return false; }
     if (cloudAllowed) return true;
     const version = epoch.current;
@@ -266,7 +262,7 @@ export default function App() {
     if (!ready || blocked || activeAI.current) return;
     const version = epoch.current; const id = draft.id; const askedQuestion = question.trim();
     if (purpose !== 'knowledge' && !draft.confirmed) { setError('Confirm the problem before asking for help.'); return; }
-    if (purpose === 'chat' && !askedQuestion) return;
+    if (purpose === 'chat' && !hasEditorContent(askedQuestion)) return;
     if (purpose === 'hint2' && draft.hints.length < 1 || purpose === 'hint3' && draft.hints.length < 2) return;
     const requestsCloudChat = purpose === 'chat' && chatRoute === 'cloud';
     const permitted = requestsCloudChat ? await allowCloud() : cloudAllowed && online;
@@ -277,15 +273,15 @@ export default function App() {
     runStarted.current=performance.now();setElapsed(0);setBusy(purpose); setPartial(''); setError(''); setStatus('Waiting for AI…');
     try {
       const route = purpose === 'chat' ? chatRoute
-        : purpose !== 'hint1' && permitted ? 'cloud' : 'local';
-      const answer = await notebookAI({ purpose, statement: draft.statement, knowledge: draft.knowledge?.text ?? '', hints: draft.hints.map(h => h.text), messages: draft.messages, question: askedQuestion, cloudAllowed: permitted, route }, text => {
+        : (purpose !== 'hint1'||illustrations.length>0) && permitted ? 'cloud' : 'local';
+      const answer = await notebookAI({ purpose, statement: draft.statement, knowledge: draft.knowledge?.text ?? '', hints: draft.hints.map(h => h.text), messages: draft.messages, question: askedQuestion, cloudAllowed: permitted, route,images:illustrations }, text => {
         if (currentOperation()) { setPartial(text); setStatus('AI is answering…'); }
       }, operation.controller.signal);
       if (!currentOperation()) return;
       setDraft(current => {
         if (current.id !== id) return current;
         if (purpose === 'knowledge') return { ...current, confirmed: true, knowledge: answer };
-        if (purpose === 'chat') return { ...current, messages: [...current.messages, { role: 'user', text: askedQuestion }, { role: 'assistant', text: answer.text, source: answer.source }] };
+        if (purpose === 'chat') return { ...current, messages: [...current.messages, { role: 'user', text: askedQuestion,format:'latex' }, { role: 'assistant', text: answer.text, source: answer.source }] };
         return { ...current, hints: [...current.hints, answer] };
       });
       if (purpose.startsWith('hint')) setCollapsedHints(current => current.filter(level => level !== Number(purpose.slice(-1)) - 1));
@@ -299,13 +295,22 @@ export default function App() {
     operation.controller.abort();
     setPartial(''); setBusy(null); setStatus(operation.status); setError(operation.error);
   }
+  async function reviseIllustrations(next:Attachment[]){
+    if(blocked||activeAI.current)return;
+    const version=epoch.current,changed=!sameIllustrations(draft.attachments,next);
+    if(changed&&draft.confirmed&&!await confirmChange({title:'Update problem illustrations?',description:'The problem context changes. Its essentials, hints and conversation will be cleared for a fresh analysis. Notes and saved library pages stay.',action:'Update illustrations'}))return;
+    if(version!==epoch.current||activeAI.current)return;
+    edit({attachments:next,...(changed?{confirmed:false,knowledge:undefined,hints:[],messages:[]}: {})});
+    if(changed)setCollapsedHints([]);
+  }
   async function attach(file: File | undefined, kind: Attachment['kind']) {
     if (!file || blocked) return;
     const version = epoch.current;
     try {
       if (draft.attachments.length >= 4) throw new Error('Each exercise supports up to 4 images.');
       const attachment = await readAttachment(file, kind);
-      if (version !== epoch.current) return;
+      if (version !== epoch.current||activeAI.current) return;
+      if(kind==='problem'){await reviseIllustrations([...draft.attachments,attachment]);return;}
       setDraft(current => {
         if (current.attachments.length >= 4) return current;
         return { ...current, attachments: [...current.attachments, attachment] };
@@ -431,17 +436,18 @@ export default function App() {
         event.preventDefault();
         if(viewingImage||confirmation||saveOpen||folderDialog||pdfQuestions!==null||imageProblem||blocked)return;
         if(preview){void savePreviewNotes();return;}
-        if(tab==='solve'&&draft.statement.trim())beginSave();
+        if(tab==='solve'&&hasEditorContent(draft.statement))beginSave();
       }
+      if(event.target instanceof Element&&event.target.closest('.symbol-browser'))return;
       if(event.key==='Enter'&&tab==='solve'&&!preview&&!viewingImage&&!confirmation&&!saveOpen&&!folderDialog&&pdfQuestions===null&&!imageProblem&&!blocked){
         event.preventDefault();
         if((event.target as HTMLElement)?.getAttribute('aria-label')==='Discussion question')void ask('chat');
-        else if(draft.statement.trim())void ask('knowledge');
+        else if(hasEditorContent(draft.statement))void ask('knowledge');
       }
     };
     window.addEventListener('keydown',keydown);return()=>window.removeEventListener('keydown',keydown);
   });
-  return <><main className="notebook-app" style={{'--problem-font-size':`${mathSize}px`} as React.CSSProperties} inert={!!confirmation || !!preview || pdfQuestions !== null || !!imageProblem || !!viewingImage}>
+  return <MathKeyboardProvider><main className="notebook-app" style={{'--problem-font-size':`${mathSize}px`} as React.CSSProperties} inert={!!confirmation || !!preview || pdfQuestions !== null || !!imageProblem || !!viewingImage}>
     <header className="notebook-header"><a className="brand" href="#" onClick={e => { e.preventDefault(); setTab('solve'); }}><span className="brand-mark" aria-hidden="true">Σ</span><span>Mathfolio<small>YOUR DIGITAL EXERCISE BOOK</small></span></a>
       <nav aria-label="Navigation"><button className={tab === 'solve' ? 'active' : ''} onClick={() => setTab('solve')}>Workspace</button><button className={tab === 'library' ? 'active' : ''} onClick={() => setTab('library')}>Exercise library <span>{book.exercises.length}</span></button><button className={tab === 'account' ? 'active' : ''} onClick={() => setTab('account')}>{user ? 'Account' : 'Sign in'}</button></nav>
     </header>
@@ -463,28 +469,33 @@ export default function App() {
         <div className="import-actions row"><label className="attachment-button pdf-upload-button">＋ Choose PDF<input aria-label="Choose a PDF" type="file" accept="application/pdf,.pdf" disabled={blocked} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void loadPdf(file);}}/></label><label className="attachment-button">＋ Read image<input aria-label="Read a problem image" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void loadImage(file);}}/></label>
           <div className="math-zoom" role="group" aria-label="Math size"><button aria-label="Decrease math size" disabled={mathSize<=14} onClick={()=>setMathSize(size=>Math.max(14,size-1))}>A−</button><span>{mathSize}</span><button aria-label="Increase math size" disabled={mathSize>=23} onClick={()=>setMathSize(size=>Math.min(23,size+1))}>A+</button></div>
         </div>
-        <div className="workspace-actions"><div className="row"><span className={`save-state ${dirty?'draft':'saved'}`} role="status">{dirty ? draftSave==='saved'?`Draft saved · ${new Date(draftSavedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`:draftSave==='saving'?'Saving draft…':'Unsaved changes' : savedDraft?'Saved on this device':'New exercise'}</span><button disabled={blocked} onClick={()=>changeExercise(newExercise())}>＋ New exercise</button>{savedDraft&&<button disabled={blocked} onClick={()=>beginSave(true)}>Rename / move</button>}<button title="Save exercise (Ctrl+S)" className="primary" disabled={blocked||!draft.statement.trim()} onClick={()=>beginSave()}>Save exercise {dirty?'•':''}</button></div><button className="cloud-switch" role="switch" aria-checked={cloudAllowed} aria-label="Cloud AI" disabled={blocked} onClick={()=>void toggleCloud()}><span className="switch-track" aria-hidden="true"><span/></span>Cloud AI <strong>{cloudAllowed?'On':'Off'}</strong></button></div>
+        <div className="workspace-actions"><div className="row"><span className={`save-state ${dirty?'draft':'saved'}`} role="status">{dirty ? draftSave==='saved'?`Draft saved · ${new Date(draftSavedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`:draftSave==='saving'?'Saving draft…':'Unsaved changes' : savedDraft?'Saved on this device':'New exercise'}</span><button disabled={blocked} onClick={()=>changeExercise(newExercise())}>＋ New exercise</button>{savedDraft&&<button disabled={blocked} onClick={()=>beginSave(true)}>Rename / move</button>}<button title="Save exercise (Ctrl+S)" className="primary" disabled={blocked||!hasEditorContent(draft.statement)} onClick={()=>beginSave()}>Save exercise {dirty?'•':''}</button></div><button className="cloud-switch" role="switch" aria-checked={cloudAllowed} aria-label="Cloud AI" disabled={blocked} onClick={()=>void toggleCloud()}><span className="switch-track" aria-hidden="true"><span/></span>Cloud AI <strong>{cloudAllowed?'On':'Off'}</strong></button></div>
       </div>
-      <div className="workspace">
-        <section ref={problemPanel} className="paper problem"><div className="panel-heading"><span className="step">01</span><h2>Problem</h2><span className="tag">YOUR PROBLEM</span></div>
+      <div className="problem-row">
+        <section className="paper problem"><div className="panel-heading"><span className="step">01</span><h2>Problem</h2><span className="tag">YOUR PROBLEM</span></div>
           <MathInput ref={input} value={statementLatex(draft.statement, draft.statementFormat)} readOnly={draft.confirmed} disabled={blocked} onChange={value => edit({ statement: value, statementFormat: 'latex' })}/>
-          {!draft.confirmed && <><p className="subtle">Type your problem or paste LaTeX. Insert symbols directly below.</p><MathKeyboard disabled={blocked} onInsert={symbol => insertMath(symbol.latex)}/></>}
+          {!draft.confirmed && <><p className="subtle">Type your problem or paste LaTeX. Insert symbols directly below.</p><MathKeyboard disabled={blocked} onActivate={()=>input.current?.focus()} onInsert={symbol => insertMath(symbol.latex)}/></>}
           {!cloudAllowed && online && draft.statement.trim() && recommendsCloudForProblem(draft.statement) && <aside className="cloud-recommendation" aria-label="Cloud AI recommendation"><p>This may need several reasoning steps. Cloud AI can provide deeper analysis; your problem is sent only after you enable it and run analysis.</p><button type="button" disabled={blocked} onClick={() => void allowCloud('Cloud AI may provide deeper reasoning for this problem. Your problem and related tutoring context are sent only when you choose to run an AI action with Cloud AI enabled. Allow Cloud AI for this session?')}>Consider Cloud AI</button></aside>}
 
-          <div className="problem-import">
-            {pdfBusy && <span role="status" className="subtle">{pdfProgress?.stage === 'ocr' ? `Local OCR · page ${pdfProgress.page} of ${pdfProgress.total}…` : pdfProgress ? `Reading PDF · page ${pdfProgress.page} of ${pdfProgress.total}…` : 'Preparing local OCR…'}</span>}
-            <details className="problem-attachments"><summary>Source images · {draft.attachments.filter(a=>a.kind==='problem').length}</summary>          <label className="attachment-button">＋ Attach problem image<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'problem'); }}/></label>
-          <AttachmentGallery images={draft.attachments.filter(a=>a.kind==='problem')} onOpen={setViewingImage} disabled={blocked} onRemove={id=>edit({attachments:draft.attachments.filter(a=>a.id!==id)})}/>
-</details></div>
-          <div className="row">{draft.confirmed && <button disabled={blocked} onClick={editStatement}>Edit problem</button>}<button className="primary" title="Analyze problem (Ctrl+Enter)" disabled={blocked || !draft.statement.trim()} onClick={() => void ask('knowledge')}>{draft.confirmed ? 'Refresh knowledge' : 'Confirm & analyze'}</button></div>
+
+          <div className="row">{draft.confirmed && <button disabled={blocked} onClick={editStatement}>Edit problem</button>}<button className="primary" title="Analyze problem (Ctrl+Enter)" disabled={blocked || !hasEditorContent(draft.statement)} onClick={() => void ask('knowledge')}>{draft.confirmed ? 'Refresh knowledge' : 'Confirm & analyze'}</button></div>
         </section>
-        <section className="paper knowledge" style={{ '--problem-height': `${problemHeight}px` } as React.CSSProperties}><div className="panel-heading"><span className="step">02</span><h2>What you need</h2></div><p className="subtle">Only the concepts needed for this exact problem.</p><div className="knowledge-scroll" role="region" aria-label="Knowledge for this problem" tabIndex={0}><span className="source-label">{draft.knowledge ? sourceLabel(draft.knowledge.source) : cloudAllowed&&online?'Cloud AI':'Local AI'}</span>{streaming('knowledge')}{draft.knowledge && busy !== 'knowledge' ? <><MarkdownView value={draft.knowledge.text}/><small className="subtle">Processed by: {sourceLabel(draft.knowledge.source)}</small></> : busy !== 'knowledge' && <div className="empty-panel"><span>∑</span><p>Confirm your problem to see<br/>the essentials here.</p></div>}</div></section>
-        <section className="paper hints" style={{ '--problem-height': `${problemHeight}px` } as React.CSSProperties}>
+        <aside className="paper problem-images" aria-label="Problem illustrations"><div className="panel-heading"><h2>Illustrations</h2><span className="tag">{illustrations.length} FOR AI</span></div>
+          <label className="attachment-button">＋ Add illustration<input aria-label="Attach a problem illustration" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked||draft.attachments.length>=4} onChange={event=>{const file=event.target.files?.[0];event.target.value='';void attach(file,'problem');}}/></label>
+          <p className="subtle">Selected illustrations are included in new AI requests. Refresh knowledge to update earlier analysis. Notes and solution images are excluded.</p>
+          <div className="illustrations-scroll">{!draft.attachments.some(image=>image.kind==='problem')&&<p className="empty-illustrations">Add a diagram, graph or image needed to understand the problem. Click any image to zoom.</p>}
+            <AttachmentGallery images={draft.attachments.filter(image=>image.kind==='problem')} onOpen={setViewingImage} disabled={blocked} onRemove={id=>void reviseIllustrations(draft.attachments.filter(image=>image.id!==id))} onAISelection={(id,included)=>void reviseIllustrations(draft.attachments.map(image=>image.id===id?{...image,useForAI:included}:image))}/>
+          </div>
+          <p className="subtle">{cloudAllowed&&online?'Cloud actions send selected illustrations. Local chat stays on your device.':'Local AI needs a compatible device to understand illustrations. Images are not sent to cloud while Cloud AI is off.'}</p>
+        </aside>
+      </div><div className="guidance-row">
+        <section className="paper knowledge"><div className="panel-heading"><span className="step">02</span><h2>What you need</h2></div><p className="subtle">Only the concepts needed for this exact problem.</p><div className="knowledge-scroll" role="region" aria-label="Knowledge for this problem" tabIndex={0}><span className="source-label">{draft.knowledge ? sourceLabel(draft.knowledge.source) : cloudAllowed&&online?'Cloud AI':'Local AI'}</span>{streaming('knowledge')}{draft.knowledge && busy !== 'knowledge' ? <><MarkdownView value={draft.knowledge.text}/><small className="subtle">Processed by: {sourceLabel(draft.knowledge.source)}</small></> : busy !== 'knowledge' && <div className="empty-panel"><span>∑</span><p>Confirm your problem to see<br/>the essentials here.</p></div>}</div></section>
+        <section className="paper hints">
           <div className="panel-heading"><span className="step">03</span><h2>A little help, your way</h2></div>
           <p className="subtle">Open the next level only when you need it.</p>
           <div className="hints-scroll" role="region" aria-label="Exercise hints" tabIndex={0}>
           {labels.map((label, i) => <div className="hint-tier" key={label}>
-            <div className="hint-title"><span className="hint-number">{i + 1}</span><strong>{label}</strong><span className="source-label">{i > 0 && cloudAllowed && online ? 'Cloud' : 'Local'}</span></div>
+            <div className="hint-title"><span className="hint-number">{i + 1}</span><strong>{label}</strong><span className="source-label">{(i>0||illustrations.length>0)&&cloudAllowed&&online?'Cloud':'Local'}</span></div>
             {draft.hints[i] ? <>
               <button className="hint-toggle" aria-expanded={!collapsedHints.includes(i)} aria-controls={`hint-content-${i}`} onClick={() => setCollapsedHints(current => current.includes(i) ? current.filter(level => level !== i) : [...current,i])}>{collapsedHints.includes(i) ? 'Show hint ▾' : 'Hide hint ▴'}</button>
               <div id={`hint-content-${i}`} hidden={collapsedHints.includes(i)}><MarkdownView value={draft.hints[i].text}/><small className="subtle">{sourceLabel(draft.hints[i].source)}</small></div>
@@ -495,7 +506,7 @@ export default function App() {
           {!online && <p className="subtle">Offline: on-device AI can work if the device model is ready.</p>}
         </section>
       </div><div className="workbench">
-        <section className="paper discussion"><div className="panel-heading"><span className="step">04</span><h2>Another way to think about it?</h2><div className="chat-routes" role="group" aria-label="Chat processing"><button type="button" aria-pressed={chatRoute === 'local'} disabled={blocked} onClick={() => void selectChatRoute('local')}>Local AI</button><button type="button" aria-pressed={chatRoute === 'cloud'} disabled={blocked || !online} onClick={() => void selectChatRoute('cloud')}>Cloud AI</button></div></div><p className="subtle">Discuss your approach. AI receives the problem, essentials, opened hints and up to 6 recent messages.</p><div className="messages">{!draft.messages.length && <div className="empty-chat">“What if I try a different approach?”<small>Start with what you are thinking.</small></div>}{draft.messages.map((m, i) => <div className={`message ${m.role}`} key={i}><small>{m.role === 'user' ? 'You' : `Mathfolio · ${sourceLabel(m.source)}`}</small><MarkdownView value={m.text}/></div>)}{streaming('chat')}</div><form className="chat-form" onSubmit={e => { e.preventDefault(); void ask('chat'); }}><input aria-label="Discussion question" maxLength={1000} value={question} disabled={blocked || !draft.confirmed} onChange={e => setQuestion(e.target.value)} placeholder="Ask a question or describe your approach…"/><button className="primary" disabled={blocked || !draft.confirmed || !question.trim()} type="submit">Send ↗</button></form></section>
+        <section className="paper discussion"><div className="panel-heading"><span className="step">04</span><h2>Another way to think about it?</h2><div className="chat-routes" role="group" aria-label="Chat processing"><button type="button" aria-pressed={chatRoute === 'local'} disabled={blocked} onClick={() => void selectChatRoute('local')}>Local AI</button><button type="button" aria-pressed={chatRoute === 'cloud'} disabled={blocked || !online} onClick={() => void selectChatRoute('cloud')}>Cloud AI</button></div></div><p className="subtle">Discuss your approach. AI receives the problem, essentials, opened hints and up to 6 recent messages.</p><div className="messages">{!draft.messages.length && <div className="empty-chat">“What if I try a different approach?”<small>Start with what you are thinking.</small></div>}{draft.messages.map((m, i) => <div className={`message ${m.role}`} key={i}><small>{m.role === 'user' ? 'You' : `Mathfolio · ${sourceLabel(m.source)}`}</small><>{m.role==='user'&&m.format==='latex'?<MathInput value={m.text} readOnly compact label="Your question"/>:<MarkdownView value={m.text}/>}</></div>)}{streaming('chat')}</div><form className="chat-form" onSubmit={e => { e.preventDefault(); void ask('chat'); }}><div className="chat-entry"><MathInput ref={chatInput} label="Discussion question" maxLength={1000} value={question} disabled={blocked||!draft.confirmed} initialMode="text" onChange={setQuestion} placeholder="Ask a question or describe your approach…"/><MathKeyboard showCommon={false} disabled={blocked||!draft.confirmed} onActivate={()=>chatInput.current?.focus()} onInsert={symbol=>chatInput.current?.insert(symbol.latex)}/></div><button className="primary" disabled={blocked || !draft.confirmed || !hasEditorContent(question)} type="submit">Send ↗</button></form></section>
         <section className="paper notes"><div className="panel-heading"><span className="step">05</span><h2>Your working notes</h2></div><NotesEditor label="Notes" value={draft.notes} format={draft.notesFormat} disabled={blocked} onChange={notes => edit({ notes,notesFormat:'latex' })}/><label className="attachment-button">＋ Attach my solution<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'solution'); }}/></label><AttachmentGallery images={draft.attachments.filter(a=>a.kind==='solution')} onOpen={setViewingImage} disabled={blocked} onRemove={id=>edit({attachments:draft.attachments.filter(a=>a.id!==id)})}/><label className="check"><input type="checkbox" checked={draft.completed} disabled={blocked} onChange={e => edit({ completed: e.target.checked })}/>I have completed this exercise</label><p className="subtle">Notes and images are stored when you select Save exercise.</p></section>
 
       </div><p className="footer-note">AI can be wrong. Check assumptions and steps. The work is yours.</p>
@@ -523,5 +534,5 @@ export default function App() {
     <p className="subtle">Drag over a formula to recognize it as LaTeX; the formula image is processed by the local OCR service. The problem editor stores LaTeX and displays formatted math.</p>
     {pdfReplacePending && <div className="pdf-replace-confirm" role="alert"><p>This replaces the current problem and clears its knowledge, hints, and chat so they match the PDF. Your notes and attached images will be kept.</p><div className="row"><button type="button" onClick={() => setPdfReplacePending(false)}>Keep current problem</button><button type="button" className="primary" disabled={!pdfSelected || mixedTextToLatex(pdfSelected.text).length > 6000} onClick={() => { if (pdfSelected) applyPdfQuestion(mixedTextToLatex(pdfSelected.text)); }}>Replace with PDF text</button></div></div>}
     <div className="row"><button type="button" onClick={closePdfPicker}>Cancel</button><button type="button" className="primary" disabled={pdfReplacePending || !pdfSelected?.text.trim() || pdfSelected.text.length > 6000} onClick={usePdfQuestion}>Use this text</button></div>
-  </section></div>} {imageProblem&&<ImageProblemReview image={imageProblem} onClose={()=>{setImageProblem(null);setImportError('');}} onApply={applyImageText} suspended={!!confirmation} error={importError} canKeepImage={draft.attachments.length<4}/>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={book.folders.find(value => value.id === previewExercise.folderId)?.name ?? 'My exercises'} notes={preview.notes} notesFormat={preview.notesFormat} saving={saving} onImage={setViewingImage} suspended={!!confirmation || !!viewingImage} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes,notesFormat:'latex' } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {viewingImage&&<ImageViewer key={viewingImage.id} image={viewingImage} onClose={()=>setViewingImage(null)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</>;
+  </section></div>} {imageProblem&&<ImageProblemReview image={imageProblem} onClose={()=>{setImageProblem(null);setImportError('');}} onApply={applyImageText} suspended={!!confirmation} error={importError} canKeepImage={draft.attachments.length<4}/>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={book.folders.find(value => value.id === previewExercise.folderId)?.name ?? 'My exercises'} notes={preview.notes} notesFormat={preview.notesFormat} saving={saving} onImage={setViewingImage} suspended={!!confirmation || !!viewingImage} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes,notesFormat:'latex' } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {viewingImage&&<ImageViewer key={viewingImage.id} image={viewingImage} onClose={()=>setViewingImage(null)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</MathKeyboardProvider>;
 }

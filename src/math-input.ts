@@ -6,3 +6,7 @@ export function statementLatex(value: string, format?: 'latex'): string {
     ? part.slice(1, -1)
     : `\\text{${part.replace(/\\/g, '\\textbackslash{}').replace(/[{}%&#_^]/g, '\\$&').replace(/\n/g, ' ')}}`).join('');
 }
+/** Rich text wrappers and blank line markers must not turn an empty question into content. */
+export function hasEditorContent(value:string):boolean {
+  return value.replace(/\\class\{mathfolio-line\}/g,'').replace(/\\placeholder\{[^{}]*\}/g,'').replace(/\\(?:text|mathrm)\{([^{}]*)\}/g,'$1').replace(/[{}\s]/g,'').length>0;
+}

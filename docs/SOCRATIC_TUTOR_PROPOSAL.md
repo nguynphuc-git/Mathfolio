@@ -1,6 +1,6 @@
 # Socratic tutoring in Mathfolio — proposal for discussion
 
-Status: research and proposed product behavior only. The image-viewer update does not alter AI prompts, consent, routing or saved exercise data.
+Status: deferred research and proposed product behavior only; retained while shared-input, layout and illustration support are refined. No Socratic tutoring behavior is enabled. Current prompts and consent separately support selected problem illustrations.
 
 ## What Jane Street provides
 
@@ -10,7 +10,7 @@ The repository uses the [MIT license](https://github.com/janestreet/agent_skills
 
 ## Recommended first experiment: one exercise
 
-Keep the current question/answer discussion and add an explicit **Learn step by step** option in the chat panel. This choice is independent of **Local AI / Cloud AI**. It receives the current problem and the learner's typed answer; it does not automatically share notes or attachments.
+Keep the current question/answer discussion and add an explicit **Learn step by step** option in the chat panel. This choice is independent of **Local AI / Cloud AI**. It receives the current problem and the learner's typed answer; it should follow the current selected-problem-illustration and cloud permission boundaries. Notes and solution images remain excluded.
 
 An initial question asks what the learner has tried or targets a prerequisite for that exact exercise. The tutor then asks one focused question, waits, checks the response and adapts. A wrong response leads to a narrower question; repeated difficulty can lead to a short explanation and a fresh check. The learner can pause, request a direct explanation or use the existing hint controls. Unlocked hints are not hidden or reset by changing discussion style.
 

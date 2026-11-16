@@ -42,9 +42,9 @@ function button(text: string, scope: ParentNode = host): HTMLButtonElement {
   return found;
 }
 async function click(text: string, scope?: ParentNode) { await act(async () => { button(text, scope).click(); }); }
-async function type(selector: string, value: string) {
+async function type(selector: string, value: string, scope:ParentNode=host) {
   await act(async () => {
-    const input = host.querySelector<HTMLInputElement | HTMLTextAreaElement>(selector)!;
+    const input = scope.querySelector<HTMLInputElement | HTMLTextAreaElement>(selector)!;
     const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(input, value);
     input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -343,13 +343,13 @@ describe('notes math keyboard', () => {
     const keyboard=host.querySelector('.problem .math-keyboard')!;
     expect(keyboard.textContent).toContain('∅'); expect(keyboard.textContent).toContain('⊆');
     await click('More symbols',keyboard);
-    expect(button('Fewer symbols',keyboard).getAttribute('aria-expanded')).toBe('true');
-    expect(keyboard.querySelector('.symbol-browser')!.hasAttribute('hidden')).toBe(false);
-    await click('Greek letters',keyboard);
-    expect(keyboard.querySelector('.symbol-category-content')!.getAttribute('aria-label')).toBe('Greek letters');
-    expect(keyboard.querySelector('.symbol-category-content')!.textContent).toContain('Ω');
-    await click('Fewer symbols',keyboard);
-    expect(keyboard.querySelector('.symbol-browser')!.hasAttribute('hidden')).toBe(true);
+    expect(button('Math symbols',keyboard).getAttribute('aria-expanded')).toBe('true');
+    expect(document.querySelector('.symbol-browser')).not.toBeNull();
+    await click('Greek letters',document.querySelector('.symbol-browser')!);
+    expect(document.querySelector('.symbol-category-content')!.getAttribute('aria-label')).toBe('Greek letters');
+    expect(document.querySelector('.symbol-category-content')!.textContent).toContain('Ω');
+    await act(async()=>document.querySelector<HTMLButtonElement>('[aria-label="Close symbol keyboard"]')!.click());
+    expect(document.querySelector('.symbol-browser')).toBeNull();
     expect(mocks.ai).not.toHaveBeenCalled(); expect(mocks.write).not.toHaveBeenCalled();
   });
   it('toggles without changing notes and inserts a real symbol at the cursor', async () => {
@@ -418,12 +418,12 @@ describe('workspace recovery and library tools',()=>{
     await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Increase math size"]')!.click());
     expect(host.querySelector<HTMLElement>('main')!.style.getPropertyValue('--problem-font-size')).toBe('18px');
     const keyboard=host.querySelector('.problem .math-keyboard')!;await click('More symbols',keyboard);
-    await type('.problem [aria-label="Search math symbols"]','integral');
-    expect(keyboard.querySelector('[aria-label="Search results"]')?.textContent).toContain('∫');
+    await type('[aria-label="Search math symbols"]','integral',document);
+    expect(document.querySelector('[aria-label="Search results"]')?.textContent).toContain('∫');
     await act(async()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
-    expect(keyboard.querySelector('.symbol-browser')!.hasAttribute('hidden')).toBe(false);
-    await act(async()=>keyboard.querySelector<HTMLButtonElement>('[aria-label="Close symbol keyboard"]')!.click());
-    expect(keyboard.querySelector('.symbol-browser')!.hasAttribute('hidden')).toBe(true);
+    expect(document.querySelector('.symbol-browser')).not.toBeNull();
+    await act(async()=>document.querySelector<HTMLButtonElement>('[aria-label="Close symbol keyboard"]')!.click());
+    expect(document.querySelector('.symbol-browser')).toBeNull();
     expect(mocks.ai).not.toHaveBeenCalled();expect(mocks.write).not.toHaveBeenCalled();
   });
   it('does not analyze behind a Save dialog when using Ctrl+Enter',async()=>{
@@ -440,7 +440,7 @@ async function uploadImage(){
 describe('image problem review',()=>{
   it('requires review and confirmation before replacing an analyzed problem; leaves the saved original intact',async()=>{
     await openWorkspace();await uploadImage();
-    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Your image stays on this device');
+    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Reading and transcription run on this device');
     expect(mocks.readImage).not.toHaveBeenCalled();
     mocks.readImage.mockResolvedValue({text:'Solve x+1=2',source:'on_device'});
     await click('Read image on this device');
@@ -494,8 +494,48 @@ describe('attachment zoom viewer across workspace and library',()=>{
   it('uses the same popup for source problem images',async()=>{
     stored().exercises[0].attachments.push({id:'problem-image',name:'question.png',kind:'problem',data:'data:image/png;base64,AA=='});
     await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));await openWorkspace();
-    const details=host.querySelector<HTMLDetailsElement>('.problem-attachments')!;await act(async()=>{details.open=true;});
     await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="View image: question.png"]')!.click());
     expect(host.querySelector('.image-viewer-header')?.textContent).toContain('PROBLEM IMAGE');expect(host.querySelector('.image-viewer-header')?.textContent).toContain('question.png');expect(mocks.ai).not.toHaveBeenCalled();
+  });
+});
+async function withDiagram(){
+  stored().exercises[0].attachments.push({id:'diagram',name:'triangle.png',data:'data:image/png;base64,AA==',kind:'problem'});
+  await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));await openWorkspace();
+}
+describe('new workspace rows and selected visual context',()=>{
+  it('places problem/images, knowledge/hints and discussion/notes in three separate rows',()=>{
+    expect([...host.querySelector('.problem-row')!.children].map(node=>node.className)).toEqual(['paper problem','paper problem-images']);
+    expect([...host.querySelector('.guidance-row')!.children].map(node=>node.className)).toEqual(['paper knowledge','paper hints']);
+    expect([...host.querySelector('.workbench')!.children].map(node=>node.className)).toEqual(['paper discussion','paper notes']);
+  });
+  it('includes selected diagrams on every AI request while excluding solution images',async()=>{
+    await withDiagram();mocks.ai.mockResolvedValue({text:'Read the marked dimensions.',source:'on_device'});
+    await click('Refresh knowledge');
+    expect(mocks.ai.mock.calls[0][0].images).toEqual([{name:'triangle.png',data:'data:image/png;base64,AA=='}]);
+    await type('[aria-label="Discussion question"]',String.raw`\text{Why is }a^2+b^2=c^2`);await click('Send');
+    expect(mocks.ai.mock.calls[1][0]).toMatchObject({purpose:'chat',route:'local',images:[{name:'triangle.png'}]});
+    expect(host.querySelector('[aria-label="Your question"]')).not.toBeNull();expect(stored().exercises[0].messages).toHaveLength(1);
+  });
+  it('requires confirmation before excluding an illustration and clears old tutoring only after acceptance',async()=>{
+    await withDiagram();const checkbox=host.querySelector<HTMLInputElement>('.image-ai-choice input')!;
+    await act(async()=>checkbox.click());expect(host.querySelector('[role="alertdialog"]')).not.toBeNull();await click('Keep working');
+    expect(checkbox.checked).toBe(true);expect(host.textContent).toContain('Original essentials');
+    await act(async()=>checkbox.click());await click('Update illustrations');
+    expect(checkbox.checked).toBe(false);expect(host.textContent).not.toContain('Original essentials');expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.readOnly).toBe(false);
+    expect(stored().exercises[0].attachments.find(image=>image.id==='diagram')!.useForAI).toBeUndefined();
+    mocks.ai.mockResolvedValue({text:'Text-only context',source:'on_device'});await click('Confirm & analyze');expect(mocks.ai.mock.calls[0][0].images).toEqual([]);
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe(String.raw`\text{Original notes}`);
+  });
+  it('discloses illustration sharing in cloud consent and allows a visual first hint in cloud after approval',async()=>{
+    stored().exercises[0].hints=[];await withDiagram();mocks.ai.mockResolvedValue({text:'Use the labelled angle',source:'in_cloud'});
+    await click('Cloud AI',host.querySelector('.workspace-actions')!);expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain('selected problem illustrations');expect(mocks.ai).not.toHaveBeenCalled();
+    await click('Allow Cloud AI');await click('Open level 1');expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'hint1',route:'cloud',cloudAllowed:true,images:[{name:'triangle.png'}]});
+  });
+  it('does not run AI for an empty rich chat question or when searching symbols with Ctrl+Enter',async()=>{
+    await openWorkspace();await type('[aria-label="Discussion question"]',String.raw`\text{   }`);expect(button('Send').disabled).toBe(true);
+    await click('Workspace');await click('Show math keyboard');await click('More symbols',host.querySelector('.notes')!);
+    const search=document.querySelector<HTMLInputElement>('[aria-label="Search math symbols"]')!;
+    await act(async()=>search.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true,cancelable:true})));
+    expect(mocks.ai).not.toHaveBeenCalled();
   });
 });

@@ -81,7 +81,16 @@ function undelimited(value: string): string {
 /** Explicit editor modes override ambiguous clipboard guesses; structured LaTeX wins. */
 export function editorPaste(value:string, mode:'math'|'text'|null, preserveLines=false):string {
   if(mode===null)return mixedTextToLatex(value,preserveLines);
-  const lines=value.replace(/\r\n?/g,'\n').split('\n');
-  const converted=lines.map(line=>mode==='text'?prose(line):formula(line.replace(/^\$\$?([\s\S]*?)\$\$?$/,'$1').replace(/^\\[([]([\s\S]*?)\\[)\]]$/,'$1')));
+  if(mode==='text'){
+    const lines=[''];
+    for(const part of value.replace(/\r\n?/g,'\n').split(/(\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\])/g).filter(Boolean)){
+      if(part.startsWith('$$')&&part.endsWith('$$'))lines[lines.length-1]+=part.slice(2,-2);
+      else if(part.startsWith('$')&&part.endsWith('$'))lines[lines.length-1]+=part.slice(1,-1);
+      else if(/^\\[([]/.test(part))lines[lines.length-1]+=part.slice(2,-2);
+      else part.split('\n').forEach((line,index)=>{if(index)lines.push('');lines[lines.length-1]+=prose(line);});
+    }
+    return lines.length===1?lines[0]:lines.map(line=>`\\class{mathfolio-line}{${line}}`).join('\n');
+  }
+  const converted=value.replace(/\r\n?/g,'\n').split('\n').map(line=>formula(line.replace(/^\$\$?([\s\S]*?)\$\$?$/,'$1').replace(/^\\[([]([\s\S]*?)\\[)\]]$/,'$1')));
   return converted.length===1?converted[0]:converted.map(line=>`\\class{mathfolio-line}{${line}}`).join('\n');
 }
