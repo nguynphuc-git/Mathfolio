@@ -45,6 +45,7 @@ export default function App() {
   const [pdfQuestions, setPdfQuestions] = useState<PdfQuestion[] | null>(null);
   const [pdfSelected, setPdfSelected] = useState<PdfQuestion | null>(null);
   const [pdfSelectedIndex, setPdfSelectedIndex] = useState(0);
+  const [pdfQuestionFilter, setPdfQuestionFilter] = useState('');
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfProgress, setPdfProgress] = useState<PdfProgress | null>(null);
   const [pdfReplacePending, setPdfReplacePending] = useState(false);
@@ -66,6 +67,7 @@ export default function App() {
   const [online, setOnline] = useState(navigator.onLine); const [error, setError] = useState(''); const [status, setStatus] = useState('');
   const epoch = useRef(0); const key = useRef(''); const input = useRef<MathInputHandle>(null);const chatInput=useRef<MathInputHandle>(null);
   const illustrations=selectedIllustrations(draft.attachments);
+  const filteredPdfQuestions=pdfQuestions?.map((question,index)=>({question,index})).filter(({question})=>`${question.text} page ${question.page}`.toLocaleLowerCase().includes(pdfQuestionFilter.trim().toLocaleLowerCase())) ?? [];
   const activeAI = useRef<{ controller: AbortController; status: string; error: string } | null>(null);
   const blocked = !!busy || saving || pdfBusy || imagePreparing || imageBusy || !!recovery;
   useEffect(()=>{if(!busy)return;const tick=()=>setElapsed(Math.floor((performance.now()-runStarted.current)/1000));tick();const timer=setInterval(tick,1000);return()=>clearInterval(timer);},[busy]);
@@ -168,7 +170,7 @@ export default function App() {
       controller.signal.throwIfAborted();
       const questions = await extractPdfQuestions(file, value=>{if(importOperation.current===controller)setPdfProgress(value);},controller.signal);
       if(importOperation.current!==controller||epoch.current!==version)return;
-      setPdfFile(file); setPdfPreview(null);
+      setPdfFile(file); setPdfPreview(null);setPdfQuestionFilter('');
       setPdfQuestions(questions); setPdfSelected(questions[0] ? { ...questions[0], text: normalizeProblemText(questions[0].text) } : null); setPdfSelectedIndex(0);
       if (questions[0]) void showPdfPage(file, questions[0].page);
     } catch (e) { if(importOperation.current===controller)setError(friendlyError(e)); }
@@ -190,12 +192,8 @@ export default function App() {
   function closePdfPicker() {
     pdfPreviewRequest.current++;
     pdfCloudReadRequest.current++;
-    setPdfQuestions(null); setPdfSelected(null); setPdfSelectedIndex(0);
+    setPdfQuestions(null); setPdfSelected(null); setPdfSelectedIndex(0);setPdfQuestionFilter('');
     setPdfFile(null); setPdfPreview(null); setPdfPreviewBusy(false); setPdfReplacePending(false);
-  }
-  function appendRecognizedFormula(latex: string) {
-    setPdfSelected(current => current ? { ...current, text: `${current.text.trim()}${current.text.trim() ? '\n' : ''}\\(${latex}\\)` } : current);
-    setStatus('Formula recognized as LaTeX locally. Review it in the selected text.');
   }
   async function readPdfPageWithCloud(image: string) {
     const request = ++pdfCloudReadRequest.current;
@@ -589,24 +587,30 @@ export default function App() {
     {folderDialog && <div className="modal-backdrop"><section className="paper save-dialog" role="dialog" aria-modal="true" aria-labelledby="folder-title"><p className="eyebrow">ORGANIZE YOUR THINKING</p><h2 id="folder-title">New folder</h2><form onSubmit={e => { e.preventDefault(); void createFolder(); }}><label>Folder name<input autoFocus required maxLength={80} value={folderName} disabled={saving} onChange={e => setFolderName(e.target.value)} placeholder="e.g. Algebra — week 1"/></label>{error && <p role="alert" className="error">{error}</p>}<div className="row"><button type="button" disabled={saving} onClick={() => setFolderDialog(false)}>Cancel</button><button className="primary" type="submit" disabled={saving || !folderName.trim()}>{saving ? 'Creating…' : 'Create folder'}</button></div></form></section></div>}
     {saveOpen && <div className="modal-backdrop"><section className="paper save-dialog" role="dialog" aria-modal="true" aria-labelledby="save-title"><p className="eyebrow">KEEP THIS PAGE</p><h2 id="save-title">Save to your notebook</h2><label>Exercise name<input autoFocus required maxLength={120} value={title} disabled={saving} onChange={e => setTitle(e.target.value)}/></label><label>Folder<select value={folderId} disabled={saving || !!newFolder.trim()} onChange={e => setFolderId(e.target.value)}>{book.folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><label>Or create a new folder<input maxLength={80} value={newFolder} disabled={saving} onChange={e => setNewFolder(e.target.value)} placeholder="e.g. Algebra — week 1"/></label><p className="subtle">The problem, essentials, opened hints, notes, images and chat stay on this browser. Cloud sync is not available yet.</p>{error && <p role="alert" className="error">{error}</p>}<div className="row"><button disabled={saving} onClick={() => setSaveOpen(false)}>Not now</button><button className="primary" disabled={saving || !title.trim()} onClick={() => void save()}>{saving ? 'Saving…' : 'Save on this device'}</button></div></section></div>}
   </main>{pdfQuestions !== null && <div className="modal-backdrop pdf-backdrop"><section className="paper save-dialog pdf-dialog" role="dialog" aria-modal="true" aria-labelledby="pdf-title">
-    <p className="eyebrow">1 · SOURCE　2 · REVIEW　3 · USE</p><h2 id="pdf-title">Choose a question from your PDF</h2>
+    <header className="pdf-dialog-header"><div><p className="eyebrow">PDF IMPORT · SELECT · REVIEW · USE</p><h2 id="pdf-title">Choose a question to solve</h2><p className="subtle">Select a detected question, review the extracted text, then add it to your workspace.</p></div><button type="button" aria-label="Close PDF import" disabled={imageBusy} onClick={closePdfPicker}>✕</button></header>
     {!pdfQuestions.length ? <p role="status">No readable text was found after local OCR.</p> : <div className="pdf-picker">
-      <details className="pdf-question-menu" open><summary>Choose a problem · {pdfSelectedIndex+1} of {pdfQuestions.length}</summary><div className="pdf-question-list" role="list" aria-label="Extracted PDF text">
-        {pdfQuestions.map((item, index) => <button type="button" role="listitem" key={`${item.page}-${index}`} disabled={imageBusy} aria-pressed={pdfSelectedIndex === index} onClick={() => { setPdfSelected({ ...item, text:normalizeProblemText(item.text) }); setPdfSelectedIndex(index); if (pdfFile && pdfPreview?.page !== item.page) void showPdfPage(pdfFile, item.page); }}>
-          <strong>Page {item.page} · Text {index + 1}</strong><span>{item.text.slice(0, 180)}{item.text.length > 180 ? '…' : ''}</span>
-        </button>)}
-      </div></details>
+      <section className="pdf-question-browser" aria-label="Questions found in PDF">
+        <div className="pdf-question-browser-heading"><div><h3>Questions found</h3><span>{filteredPdfQuestions.length} of {pdfQuestions.length} shown</span></div><label>Find a question<input aria-label="Search PDF questions" type="search" value={pdfQuestionFilter} onChange={event=>setPdfQuestionFilter(event.target.value)} placeholder="Search text or page number"/></label></div>
+        <div className="pdf-question-list" role="list" aria-label="Extracted PDF questions">
+          {!filteredPdfQuestions.length&&<p className="empty-import" role="status">No questions match this search. Try another word or clear the search.</p>}
+          {filteredPdfQuestions.map(({question,index})=><button type="button" role="listitem" key={`${question.page}-${index}`} disabled={imageBusy} aria-pressed={pdfSelectedIndex===index} onClick={()=>{setPdfSelected({...question,text:normalizeProblemText(question.text)});setPdfSelectedIndex(index);if(pdfFile&&pdfPreview?.page!==question.page)void showPdfPage(pdfFile,question.page);}}>
+            <strong><span>Question {index+1}</span><small>Page {question.page}</small></strong><span>{question.text.slice(0,220)}{question.text.length>220?'…':''}</span>
+          </button>)}
+        </div>
+      </section>
       {pdfSelected && <div className="import-review-columns">
-        <div className="import-source"><h3>Original PDF · Page {pdfSelected.page}</h3>{pdfPreviewBusy&&<p className="subtle" role="status">Rendering the source page…</p>}{pdfPreview?.page===pdfSelected.page&&<PdfFormulaCropper key={pdfPreview.page} image={pdfPreview.image} onInsert={appendRecognizedFormula} onCloudRead={readPdfPageWithCloud} onBusyChange={setImageBusy} disabled={imageBusy}/>}</div>
-        <div className="import-edit"><h3>Your problem · check before using</h3><div className="pdf-typeset-preview"><MathInput label="Formatted PDF question" value={mixedTextToLatex(pdfSelected.text)} readOnly/></div>
-          <details className="raw-text-editor"><summary>Edit recognized text</summary><label className="pdf-selection">Selected text — edit before using<textarea aria-label="Selected PDF question" disabled={imageBusy} maxLength={6000} value={pdfSelected.text} onChange={event=>setPdfSelected({...pdfSelected,text:event.target.value})}/></label><div className="row pdf-format-actions"><button type="button" disabled={imageBusy} onClick={()=>setPdfSelected({...pdfSelected,text:normalizeProblemText(pdfSelected.text)})}>Format text</button><button type="button" disabled={imageBusy} onClick={()=>setPdfSelected({...pdfSelected,text:pdfQuestions[pdfSelectedIndex].text})}>Restore extracted text</button></div></details>
+        <div className="import-source"><h3>Source page · {pdfSelected.page}</h3>{pdfPreviewBusy&&<p className="subtle" role="status">Rendering source page…</p>}{pdfPreview?.page===pdfSelected.page&&<PdfFormulaCropper key={pdfPreview.page} image={pdfPreview.image} imageLabel={`PDF page ${pdfSelected.page}`} cloudOnly onCloudRead={readPdfPageWithCloud} disabled={imageBusy}/>}</div>
+        <div className="import-edit"><h3>Review and edit question {pdfSelectedIndex+1}</h3>
+          <label className="pdf-selection">Extracted question<textarea aria-label="Selected PDF question" disabled={imageBusy} maxLength={6000} value={pdfSelected.text} onChange={event=>setPdfSelected({...pdfSelected,text:event.target.value})}/></label>
+          <div className="row pdf-format-actions"><button type="button" disabled={imageBusy} onClick={()=>setPdfSelected({...pdfSelected,text:normalizeProblemText(pdfSelected.text)})}>Format text</button><button type="button" disabled={imageBusy} onClick={()=>setPdfSelected({...pdfSelected,text:pdfQuestions[pdfSelectedIndex].text})}>Restore extracted text</button><span>{pdfSelected.text.length.toLocaleString()} / 6,000</span></div>
+          <details className="pdf-typeset-details"><summary>Preview formatted mathematics</summary><div className="pdf-typeset-preview"><MathInput label="Formatted PDF question" value={mixedTextToLatex(pdfSelected.text)} readOnly/></div></details>
           {pdfSelected.text.length>6000&&<p className="error" role="alert">Select a shorter question to stay within the 6,000-character limit.</p>}
           {importError&&<p className="notice error" role="alert">{importError}</p>}
         </div>
       </div>}
     </div>}
-    <p className="subtle">Local formula OCR processes only the selected crop. Whole-page Cloud AI transcription sends the selected page only after separate consent; review its output before using it.</p>
+    <p className="subtle pdf-privacy-note">Cloud reading sends only the selected PDF page after separate consent. Review the transcription and formulas before using them.</p>
     {pdfReplacePending && <div className="pdf-replace-confirm" role="alert"><p>This replaces the current problem and clears its knowledge, hints, and chat so they match the PDF. Your notes and attached images will be kept.</p><div className="row"><button type="button" onClick={() => setPdfReplacePending(false)}>Keep current problem</button><button type="button" className="primary" disabled={!pdfSelected || mixedTextToLatex(pdfSelected.text).length > 6000} onClick={() => { if (pdfSelected) applyPdfQuestion(mixedTextToLatex(pdfSelected.text)); }}>Replace with PDF text</button></div></div>}
-    <div className="row"><button type="button" disabled={imageBusy} onClick={closePdfPicker}>Cancel</button><button type="button" className="primary" disabled={imageBusy || pdfReplacePending || !pdfSelected?.text.trim() || pdfSelected.text.length > 6000} onClick={usePdfQuestion}>Use this text</button></div>
+    <div className="row pdf-dialog-actions"><button type="button" disabled={imageBusy} onClick={closePdfPicker}>Cancel</button><button type="button" className="primary" disabled={imageBusy || pdfReplacePending || !pdfSelected?.text.trim() || pdfSelected.text.length > 6000} onClick={usePdfQuestion}>Use this question</button></div>
   </section></div>} {imageProblem&&<ImageProblemReview image={imageProblem} onClose={()=>{setImageProblem(null);setImportError('');}} onApply={applyImageText} suspended={!!confirmation} error={importError} canKeepImage={draft.attachments.length<4}/>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={book.folders.find(value => value.id === previewExercise.folderId)?.name ?? 'My exercises'} notes={preview.notes} notesFormat={preview.notesFormat} saving={saving} onImage={setViewingImage} suspended={!!confirmation || !!viewingImage} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes,notesFormat:'latex' } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {viewingImage&&<ImageViewer key={viewingImage.id} image={viewingImage} onClose={()=>setViewingImage(null)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</MathKeyboardProvider>;
 }

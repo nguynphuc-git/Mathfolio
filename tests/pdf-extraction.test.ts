@@ -68,6 +68,13 @@ describe('PDF extraction with local OCR fallback', () => {
     ]);
     expect(mocks.recognizePdfPages.mock.calls[0][0].map((page: { page: number }) => page.page)).toEqual([2]);
   });
+
+  it('accepts PDFs up to 60 pages and clearly rejects larger files',async()=>{
+    const {pages,loadingTask}=configurePdf(Array.from({length:61},()=>[]));
+    await expect(extractPdfQuestions(new File(['large'],'large.pdf'))).rejects.toThrow('60 trang');
+    expect(pages[0].getTextContent).not.toHaveBeenCalled();
+    expect(loadingTask.destroy).toHaveBeenCalledOnce();
+  });
 });
 describe('stopping PDF import',()=>{
   it('destroys a loading PDF once and never reads pages after cancellation',async()=>{

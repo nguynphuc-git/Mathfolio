@@ -3,7 +3,7 @@ import { recognizeMathFormula } from '../pdf-ocr-local';
 
 interface Crop { x: number; y: number; width: number; height: number }
 
-export function PdfFormulaCropper({ image, onInsert, imageLabel = 'Source page for formula selection', onCloudRead, disabled = false, onBusyChange }: { image: string; onInsert: (latex: string) => void; imageLabel?: string; onCloudRead?: (image: string) => Promise<void>; disabled?: boolean; onBusyChange?: (busy: boolean) => void }) {
+export function PdfFormulaCropper({ image, onInsert, imageLabel = 'Source page for formula selection', onCloudRead, cloudOnly = false, disabled = false, onBusyChange }: { image: string; onInsert?: (latex: string) => void; imageLabel?: string; onCloudRead?: (image: string) => Promise<void>; cloudOnly?: boolean; disabled?: boolean; onBusyChange?: (busy: boolean) => void }) {
   const imageRef = useRef<HTMLImageElement>(null);
   const [crop, setCrop] = useState<Crop | null>(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
@@ -71,7 +71,7 @@ export function PdfFormulaCropper({ image, onInsert, imageLabel = 'Source page f
   }
   async function recognize() {
     const imageElement = imageRef.current;
-    if (busy || cloudBusy || disabled || !crop || !imageElement || crop.width < 0.01 || crop.height < 0.01 || crop.width * crop.height > 0.65) return;
+    if (busy || cloudBusy || disabled || !onInsert || !crop || !imageElement || crop.width < 0.01 || crop.height < 0.01 || crop.width * crop.height > 0.65) return;
     const controller=new AbortController();operation.current=controller;
     setBusy(true); setError('');
     const canvas = window.document.createElement('canvas');
@@ -104,17 +104,21 @@ export function PdfFormulaCropper({ image, onInsert, imageLabel = 'Source page f
     }
   }
 
-  return <section className="formula-cropper" aria-label="Local formula OCR">
-    <p className="subtle">Drag over one formula for local LaTeX OCR. Whole-page Cloud AI reading is optional and asks before sending the page.</p>
-    <div className="formula-crop-stage" onPointerDown={start} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}>
-      <div className="formula-crop-image">
-        <img ref={imageRef} src={image} alt={imageLabel} draggable={false}/>
-        {crop && <span className="formula-crop-box" style={{ left: `${crop.x * 100}%`, top: `${crop.y * 100}%`, width: `${crop.width * 100}%`, height: `${crop.height * 100}%` }}/>}
+  return <section className={`formula-cropper${cloudOnly ? ' cloud-only-reader' : ''}`} aria-label={cloudOnly ? 'Cloud PDF page reading' : 'Local formula OCR'}>
+    {cloudOnly ? <p className="subtle">Review the source page, then choose Cloud AI to transcribe its text and mathematical notation. You will be asked before the image is sent.</p> : <>
+      <p className="subtle">Drag over one formula for local LaTeX OCR. Whole-page Cloud AI reading is optional and asks before sending the page.</p>
+      <div className="formula-crop-stage" onPointerDown={start} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}>
+        <div className="formula-crop-image">
+          <img ref={imageRef} src={image} alt={imageLabel} draggable={false}/>
+          {crop && <span className="formula-crop-box" style={{ left: `${crop.x * 100}%`, top: `${crop.y * 100}%`, width: `${crop.width * 100}%`, height: `${crop.height * 100}%` }}/>}
+        </div>
       </div>
-    </div>
-    {crop && crop.width * crop.height > 0.65 && <p role="status" className="subtle">This crop covers most of the page. Select one formula only for better results.</p>}
-    {cropPreview && <figure className="formula-crop-preview"><figcaption>Only this crop is sent to the local formula OCR.</figcaption><img src={cropPreview} alt="Preview of the selected formula crop"/></figure>}
-    <div className="row"><button type="button" disabled={disabled || busy || cloudBusy || !crop || crop.width < 0.01 || crop.height < 0.01 || crop.width * crop.height > 0.65} onClick={() => void recognize()}>{busy ? 'Recognizing locally…' : 'Recognize formula as LaTeX'}</button>{busy&&<button type="button" className="stop-ai" onClick={stop}>Stop recognition</button>}{crop && <button type="button" disabled={disabled || busy || cloudBusy} onClick={() => { setCrop(null); setCropPreview(''); setError(''); }}>Clear selection</button>}{onCloudRead && <button type="button" disabled={disabled || busy || cloudBusy} onClick={() => void readWholePage()}>{cloudBusy ? 'Reading whole page…' : 'Read whole page with Cloud AI'}</button>}</div>
+      {crop && crop.width * crop.height > 0.65 && <p role="status" className="subtle">This crop covers most of the page. Select one formula only.</p>}
+      {cropPreview && <figure className="formula-crop-preview"><figcaption>Only this crop is sent to the local formula OCR.</figcaption><img src={cropPreview} alt="Preview of the selected formula crop"/></figure>}
+      <div className="row"><button type="button" disabled={disabled || busy || cloudBusy || !crop || crop.width < 0.01 || crop.height < 0.01 || crop.width * crop.height > 0.65} onClick={() => void recognize()}>{busy ? 'Recognizing locally…' : 'Recognize formula as LaTeX'}</button>{busy&&<button type="button" className="stop-ai" onClick={stop}>Stop recognition</button>}{crop && <button type="button" disabled={disabled || busy || cloudBusy} onClick={() => { setCrop(null); setCropPreview(''); setError(''); }}>Clear selection</button>}{onCloudRead && <button type="button" disabled={disabled || busy || cloudBusy} onClick={() => void readWholePage()}>{cloudBusy ? 'Reading whole page…' : 'Read whole page with Cloud AI'}</button>}</div>
+    </>}
+    {cloudOnly && <div className="formula-crop-image cloud-page-preview"><img src={image} alt={imageLabel} draggable={false}/></div>}
+    {cloudOnly && onCloudRead && <button className="primary cloud-page-read" type="button" disabled={disabled || cloudBusy} onClick={() => void readWholePage()}>{cloudBusy ? 'Reading page with Cloud AI…' : 'Read this page with Cloud AI'}</button>}
     {error && <p role="alert" className="error">{error}</p>}
   </section>;
 }

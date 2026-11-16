@@ -1,5 +1,5 @@
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
-const mock=vi.hoisted(()=>({model:vi.fn(),initialize:vi.fn(),stream:vi.fn()}));
+const mock=vi.hoisted(()=>({model:vi.fn(),initialize:vi.fn(),stream:vi.fn(),generate:vi.fn()}));
 vi.mock('../src/firebase',()=>({getCloudFirebaseApp:()=>({})}));
 vi.mock('firebase/ai',async original=>({...await original<typeof import('firebase/ai')>(),getAI:()=>({}),getGenerativeModel:mock.model}));
 import {InferenceMode} from 'firebase/ai';
@@ -10,7 +10,7 @@ function response(source='ON_DEVICE',text='Use the marked lengths in the attache
   const value={text:()=>text,inferenceSource:source,candidates:[]};return {stream:(async function*(){yield value;})(),response:Promise.resolve(value)};
 }
 afterEach(()=>vi.unstubAllGlobals());
-beforeEach(()=>{vi.stubGlobal('navigator',{onLine:true});mock.model.mockReset();mock.initialize.mockReset().mockResolvedValue(undefined);mock.stream.mockReset().mockResolvedValue(response());mock.model.mockReturnValue({initializeDeviceModel:mock.initialize,generateContentStream:mock.stream});});
+beforeEach(()=>{vi.stubGlobal('navigator',{onLine:true});mock.model.mockReset();mock.initialize.mockReset().mockResolvedValue(undefined);mock.stream.mockReset().mockResolvedValue(response());mock.generate.mockReset().mockResolvedValue({response:{text:()=> 'Cloud result',inferenceSource:'IN_CLOUD',candidates:[]}});mock.model.mockReturnValue({initializeDeviceModel:mock.initialize,generateContentStream:mock.stream,generateContent:mock.generate});});
 describe('illustrations are actual model input',()=>{
   const worksheet='Exercise 1. Prove a_n=n/(n+3) is Cauchy.\nExercise 2. Prove every Cauchy sequence is bounded.\nExercise 3. Prove a Cauchy sequence with a convergent subsequence converges.';
   it.each(['hint1','hint2'] as const)('generates %s separately for all three exercises and combines the complete result',async purpose=>{
@@ -47,9 +47,8 @@ describe('illustrations are actual model input',()=>{
     await expect(notebookAI({...base,purpose,route:'cloud',cloudAllowed:false},()=>{})).rejects.toThrow('Allow cloud AI');expect(mock.model).not.toHaveBeenCalled();expect(mock.stream).not.toHaveBeenCalled();
   });
   it('sends images to cloud only on the explicitly authorized second-hint route',async()=>{
-    mock.stream.mockResolvedValue(response('IN_CLOUD'));
     await notebookAI({...base,purpose:'hint2',route:'cloud',cloudAllowed:true},()=>{});
-    expect(mock.model.mock.calls.at(-1)?.[1].mode).toBe(InferenceMode.ONLY_IN_CLOUD);expect(mock.initialize).not.toHaveBeenCalled();expect(mock.stream.mock.calls[0][0][1].inlineData.mimeType).toBe('image/png');
+    expect(mock.model.mock.calls.at(-1)?.[1].mode).toBe(InferenceMode.ONLY_IN_CLOUD);expect(mock.initialize).not.toHaveBeenCalled();expect(mock.generate.mock.calls[0][0][1].inlineData.mimeType).toBe('image/png');expect(mock.stream).not.toHaveBeenCalled();
   });
   it('forces the visual first hint onto the device even if a caller requests cloud',async()=>{
     await notebookAI({...base,purpose:'hint1',route:'cloud',cloudAllowed:true},()=>{},new AbortController().signal);

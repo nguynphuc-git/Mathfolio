@@ -251,6 +251,16 @@ async function runNotebookAI(r: NotebookRequest, onText: (text: string) => void,
   signal?.throwIfAborted();
   const prompt=notebookPrompt(r,scope);
   const content=prepared.length?[{type:'text' as const,text:prompt},...prepared]:prompt;
+  if(cloud){
+    const result=await abortable(model.generateContent(content,{signal}),signal);
+    signal?.throwIfAborted();
+    const response=result.response;
+    if(response.candidates?.some(candidate=>candidate.finishReason==='MAX_TOKENS'))throw new Error('The response was cut off. Ask about a smaller part.');
+    const text=response.text().trim();
+    if(!text)throw new Error('No answer was returned. Try again or revise the problem.');
+    onText(text);
+    return {text,source:response.inferenceSource??'UNKNOWN'};
+  }
   const streamed = await abortable(model.generateContentStream(content, { signal }).then(result => {
     // Attach before waiting on cancellation, including when a provider returns late.
     void result.response.catch(() => {});

@@ -24,8 +24,8 @@ vi.mock('../src/image-import',async original=>({...await original<typeof import(
 vi.mock('../src/pdf', () => ({ extractPdfQuestions: mocks.pdf, renderPdfPagePreview: mocks.pdfPreview }));
 vi.mock('../src/pdf-ocr', () => ({ recognizeImageLocally: mocks.imageLocal }));
 vi.mock('../src/components/PdfFormulaCropper', () => ({
-  PdfFormulaCropper: ({ onInsert, onCloudRead }: { onInsert: (latex: string) => void; onCloudRead?: (image: string) => Promise<void> }) =>
-    <><button type="button" onClick={() => onInsert(String.raw`\frac{x^2}{2}`)}>Mock recognize formula</button><button type="button" onClick={() => void onCloudRead?.('data:image/png;base64,AA==')}>Mock read whole PDF page</button></>
+  PdfFormulaCropper: ({ onInsert, onCloudRead, cloudOnly }: { onInsert?: (latex: string) => void; onCloudRead?: (image: string) => Promise<void>; cloudOnly?: boolean }) =>
+    <>{!cloudOnly&&<button type="button" onClick={() => onInsert?.(String.raw`\frac{x^2}{2}`)}>Mock recognize formula</button>}<button type="button" onClick={() => void onCloudRead?.('data:image/png;base64,AA==')}>Mock read whole PDF page</button></>
 }));
 // MathLive caret/layout is tested manually in Chrome; these tests exercise page state and persistence.
 vi.mock('../src/components/MathInput', () => ({ MathInput: forwardRef(function Field(props: { value: string; onChange?: (value: string) => void; readOnly?: boolean; disabled?: boolean; label?: string }, ref) {
@@ -84,7 +84,7 @@ describe('saved page previews and workspace copies', () => {
     expect(host.querySelector('[aria-label="Formatted PDF question"]')).not.toBeNull();
     await click('Restore extracted text');
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Selected PDF question"]')!.value).toBe(raw);
-    await click('Format text'); await click('Use this text');
+    await click('Format text'); await click('Use this question');
     const value=host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value;
     expect(value).toContain(String.raw`\class{mathfolio-line}`); expect(value).toContain(String.raw`\subseteq`);
     expect(mocks.ai).not.toHaveBeenCalled();
@@ -111,23 +111,37 @@ describe('saved page previews and workspace copies', () => {
     const file = new File(['mock pdf'], 'questions.pdf', { type: 'application/pdf' });
     Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
     await act(async () => { upload.dispatchEvent(new Event('change', { bubbles: true })); });
-    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Choose a question from your PDF');
-    expect(host.querySelector<HTMLDetailsElement>('.pdf-question-menu')!.open).toBe(true);
+    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Choose a question to solve');
     await act(async () => { await Promise.resolve(); });
-    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Mock recognize formula');
-    await click('Mock recognize formula');
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Selected PDF question"]')!.value).toContain(String.raw`\(\frac{x^2}{2}\)`);
+    expect(host.querySelector('[role="dialog"]')?.textContent).not.toContain('Recognize formula as LaTeX');
+    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Mock read whole PDF page');
+    expect(host.querySelector('[aria-label="Search PDF questions"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Formatted PDF question"]')).not.toBeNull();
     const second = [...host.querySelectorAll<HTMLButtonElement>('[role="list"] button')].find(item => item.textContent?.includes('Page 2'))!;
     await act(async () => { second.click(); });
     await act(async () => { await Promise.resolve(); });
-    await type('[aria-label="Selected PDF question"]', String.raw`2. Find y when y+1=5. \(\frac{x^2}{2}\)`);
-    await click('Use this text');
+    await type('[aria-label="Selected PDF question"]', '2. Find y when y+1=5.');
+    await click('Use this question');
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain('y+1=5');
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain(String.raw`\frac{x^2}{2}`);
     expect(host.querySelector('[role="dialog"]')).toBeNull();
     expect(host.textContent).toContain('Review it before analyzing');
     expect(mocks.pdfPreview).toHaveBeenCalledWith(file, 1);
     expect(mocks.pdfPreview).toHaveBeenCalledWith(file, 2);
+  });
+
+  it('filters extracted PDF questions without losing the selected item', async () => {
+    mocks.pdf.mockResolvedValue([
+      { page: 1, text: '1. Solve x^2=4' },
+      { page: 2, text: '2. Find y when y+1=3' }
+    ]);
+    const upload=host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
+    Object.defineProperty(upload,'files',{configurable:true,value:[new File(['pdf'],'questions.pdf',{type:'application/pdf'})]});
+    await act(async()=>upload.dispatchEvent(new Event('change',{bubbles:true})));
+    await type('[aria-label="Search PDF questions"]','Page 2');
+    const visible=[...host.querySelectorAll<HTMLButtonElement>('[role="list"] button')];
+    expect(visible).toHaveLength(1);
+    expect(visible[0].textContent).toContain('Page 2');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Selected PDF question"]')!.value).toContain('Solve x^2=4');
   });
 
   it('reads an attached image locally without sending it to Cloud AI', async () => {
@@ -190,7 +204,7 @@ describe('saved page previews and workspace copies', () => {
     const file = new File(['mock pdf'], 'replacement.pdf', { type: 'application/pdf' });
     Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
     await act(async () => { upload.dispatchEvent(new Event('change', { bubbles: true })); });
-    await click('Use this text');
+    await click('Use this question');
 
     expect(host.querySelector('.pdf-replace-confirm')?.textContent).toContain('clears its knowledge, hints, and chat');
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe('x^2+2x=0');

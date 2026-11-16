@@ -36,7 +36,7 @@ const cancel=()=>{void destroy().catch(()=>{});};signal?.addEventListener('abort
 try {
 signal?.throwIfAborted();
 const pdf = await abortable(loadingTask.promise,signal);
-if (pdf.numPages > 30) throw new Error('Hãy tách PDF còn tối đa 30 trang cho bản mẫu.');
+if (pdf.numPages > 60) throw new Error('Hãy tách PDF còn tối đa 60 trang cho bản mẫu.');
 const pages: { page: number; text: string; source: Awaited<ReturnType<typeof pdf.getPage>> }[] = [];
 let total = 0;
 for (let n = 1; n <= pdf.numPages; n++) {

@@ -55,6 +55,7 @@ describe('private exercise notebook', () => {
   it('keeps hints and analysis on-device unless Cloud AI is explicitly enabled', async () => {
     vi.stubGlobal('navigator', {onLine:true});
     getModel.mockReturnValue(model);
+    model.generateContent.mockResolvedValue({response:{text:()=> 'Cloud result',inferenceSource:'in_cloud',candidates:[]}});
     model.generateContentStream.mockResolvedValue({
       stream: (async function*(){ yield { text: () => 'Local result' }; })(),
       response: Promise.resolve({ text: () => 'Local result', candidates: [] })
@@ -63,8 +64,9 @@ describe('private exercise notebook', () => {
     expect(getModel.mock.calls.at(-1)?.[1].mode).toBe(InferenceMode.ONLY_ON_DEVICE);
     await expect(notebookAI({...request,purpose:'chat',route:'cloud'},vi.fn())).rejects.toThrow('Allow cloud AI');
     await expect(notebookAI({...request,route:'cloud'},vi.fn())).rejects.toThrow('Allow cloud AI');
-    await expect(notebookAI({...request,route:'cloud',cloudAllowed:true},vi.fn())).resolves.toMatchObject({text:'Local result'});
+    await expect(notebookAI({...request,route:'cloud',cloudAllowed:true},vi.fn())).resolves.toMatchObject({text:'Cloud result',source:'in_cloud'});
     expect(getModel.mock.calls.at(-1)?.[1].mode).toBe(InferenceMode.ONLY_IN_CLOUD);
+    expect(model.generateContent).toHaveBeenCalledOnce();
   });
   it('streams local prerequisites and keeps cloud calls gated by purpose', async()=>{
     vi.stubGlobal('navigator', {onLine:true});
@@ -79,8 +81,12 @@ describe('private exercise notebook', () => {
     await notebookAI({...request,purpose:'hint2'},onText);
     expect(model.initializeDeviceModel).toHaveBeenCalled();
     model.initializeDeviceModel.mockClear();
+    model.generateContent.mockResolvedValue({response:{text:()=> 'Cloud hint',inferenceSource:'in_cloud',candidates:[]}});
+    const streamCalls=model.generateContentStream.mock.calls.length;
     await notebookAI({...request,purpose:'hint2',route:'cloud',cloudAllowed:true},onText);
     expect(model.initializeDeviceModel).not.toHaveBeenCalled();
+    expect(model.generateContentStream).toHaveBeenCalledTimes(streamCalls);
+    expect(onText).toHaveBeenLastCalledWith('Cloud hint');
     model.initializeDeviceModel.mockClear();
     await notebookAI({...request,route:'cloud',cloudAllowed:true},onText);
     expect(model.initializeDeviceModel).not.toHaveBeenCalled();
@@ -151,18 +157,18 @@ describe('provider cancellation', () => {
     expect(options.createOptions.signal).toBe(controller.signal);
     expect(options.promptOptions.signal).toBe(controller.signal);
   });
-  it('stops a stalled cloud stream, passes the HTTP signal and emits no late chunks', async () => {
+  it('stops a pending cloud generation, passes the HTTP signal and emits no late answer', async () => {
     vi.stubGlobal('navigator',{onLine:true}); getModel.mockReturnValue(model);
     let entered!:()=>void; const first=new Promise<void>(resolve=>{entered=resolve;});
-    let release!:()=>void; const stalled=new Promise<void>(resolve=>{release=resolve;});
+    let release!:(value:unknown)=>void; const stalled=new Promise<unknown>(resolve=>{release=resolve;});
     const response={text:()=> 'Final',inferenceSource:'in_cloud',candidates:[]};
-    model.generateContentStream.mockResolvedValueOnce({stream:(async function*(){yield {...response,text:()=> 'Partial'}; await stalled; yield {...response,text:()=> 'Late'};})(),response:Promise.resolve(response)});
-    const onText=vi.fn(()=>entered()); const controller=new AbortController();
-    const pending=notebookAI({...request,purpose:'hint2',cloudAllowed:true},onText,controller.signal);
+    model.generateContent.mockImplementationOnce(()=>{entered();return stalled;});
+    const onText=vi.fn(); const controller=new AbortController();
+    const pending=notebookAI({...request,purpose:'hint2',route:'cloud',cloudAllowed:true},onText,controller.signal);
     await first; controller.abort();
     await expect(pending).rejects.toMatchObject({name:'AbortError'});
-    expect(model.generateContentStream.mock.calls.at(-1)?.[1]).toEqual({signal:controller.signal});
-    release(); await Promise.resolve(); await Promise.resolve();
-    expect(onText.mock.calls).toEqual([['Partial']]);
+    expect(model.generateContent.mock.calls.at(-1)?.[1]).toEqual({signal:controller.signal});
+    release({response}); await Promise.resolve(); await Promise.resolve();
+    expect(onText).not.toHaveBeenCalled();
   });
 });
