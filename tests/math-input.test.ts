@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { convertLatexToMarkup } from 'mathlive/ssr';
-import { statementLatex } from '../src/math-input';
+import { statementLatex,editorPlaceholder } from '../src/math-input';
 describe('typeset problem statements', () => {
+  it('renders editor placeholders as words with spaces, never mathematical letters',()=>{
+    for(const text of ['Type your problem here','Write your approach, questions, or what you just learned…','Ask a question or describe your approach…']){
+      const markup=convertLatexToMarkup(editorPlaceholder(text));
+      expect(markup).toContain('ML__text');expect(markup).not.toContain('ML__error');expect(markup.replace(/<[^>]+>/g,'').replace(/&nbsp;|\u00a0/g,' ')).toContain(text);
+    }
+  });
   it('keeps new math values free of dollar-delimiter wrapping', () => {
     const value = String.raw`x^{2}+3=2`;
     expect(statementLatex(value, 'latex')).toBe(value);

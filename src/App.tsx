@@ -273,7 +273,7 @@ export default function App() {
     runStarted.current=performance.now();setElapsed(0);setBusy(purpose); setPartial(''); setError(''); setStatus('Waiting for AI…');
     try {
       const route = purpose === 'chat' ? chatRoute
-        : (purpose !== 'hint1'||illustrations.length>0) && permitted ? 'cloud' : 'local';
+        : purpose !== 'hint1' && permitted ? 'cloud' : 'local';
       const answer = await notebookAI({ purpose, statement: draft.statement, knowledge: draft.knowledge?.text ?? '', hints: draft.hints.map(h => h.text), messages: draft.messages, question: askedQuestion, cloudAllowed: permitted, route,images:illustrations }, text => {
         if (currentOperation()) { setPartial(text); setStatus('AI is answering…'); }
       }, operation.controller.signal);
@@ -294,6 +294,13 @@ export default function App() {
     activeAI.current = null;
     operation.controller.abort();
     setPartial(''); setBusy(null); setStatus(operation.status); setError(operation.error);
+  }
+  async function resetHints(){
+    if(blocked||activeAI.current)return;
+    const version=epoch.current;
+    if(!await confirmChange({title:'Reset hints?',description:'Clear all opened hint levels in this workspace so you can generate fresh hints for every exercise. Your problem, knowledge, notes and conversation stay. The library copy changes only when you save.',action:'Reset hints'}))return;
+    if(version!==epoch.current||activeAI.current)return;
+    edit({hints:[]});setCollapsedHints([]);
   }
   async function reviseIllustrations(next:Attachment[]){
     if(blocked||activeAI.current)return;
@@ -491,11 +498,11 @@ export default function App() {
       </div><div className="guidance-row">
         <section className="paper knowledge"><div className="panel-heading"><span className="step">02</span><h2>What you need</h2></div><p className="subtle">Only the concepts needed for this exact problem.</p><div className="knowledge-scroll" role="region" aria-label="Knowledge for this problem" tabIndex={0}><span className="source-label">{draft.knowledge ? sourceLabel(draft.knowledge.source) : cloudAllowed&&online?'Cloud AI':'Local AI'}</span>{streaming('knowledge')}{draft.knowledge && busy !== 'knowledge' ? <><MarkdownView value={draft.knowledge.text}/><small className="subtle">Processed by: {sourceLabel(draft.knowledge.source)}</small></> : busy !== 'knowledge' && <div className="empty-panel"><span>∑</span><p>Confirm your problem to see<br/>the essentials here.</p></div>}</div></section>
         <section className="paper hints">
-          <div className="panel-heading"><span className="step">03</span><h2>A little help, your way</h2></div>
+          <div className="panel-heading"><span className="step">03</span><h2>A little help, your way</h2>{draft.hints.length>0&&<button className="reset-hints" disabled={blocked} onClick={()=>void resetHints()}>Reset hints</button>}</div>
           <p className="subtle">Open the next level only when you need it.</p>
           <div className="hints-scroll" role="region" aria-label="Exercise hints" tabIndex={0}>
           {labels.map((label, i) => <div className="hint-tier" key={label}>
-            <div className="hint-title"><span className="hint-number">{i + 1}</span><strong>{label}</strong><span className="source-label">{(i>0||illustrations.length>0)&&cloudAllowed&&online?'Cloud':'Local'}</span></div>
+            <div className="hint-title"><span className="hint-number">{i + 1}</span><strong>{label}</strong><span className="source-label">{draft.hints[i]?sourceLabel(draft.hints[i].source):i>0&&cloudAllowed&&online?'Cloud':'Local'}</span></div>
             {draft.hints[i] ? <>
               <button className="hint-toggle" aria-expanded={!collapsedHints.includes(i)} aria-controls={`hint-content-${i}`} onClick={() => setCollapsedHints(current => current.includes(i) ? current.filter(level => level !== i) : [...current,i])}>{collapsedHints.includes(i) ? 'Show hint ▾' : 'Hide hint ▴'}</button>
               <div id={`hint-content-${i}`} hidden={collapsedHints.includes(i)}><MarkdownView value={draft.hints[i].text}/><small className="subtle">{sourceLabel(draft.hints[i].source)}</small></div>
@@ -517,7 +524,7 @@ export default function App() {
   </main>{pdfQuestions !== null && <div className="modal-backdrop pdf-backdrop"><section className="paper save-dialog pdf-dialog" role="dialog" aria-modal="true" aria-labelledby="pdf-title">
     <p className="eyebrow">1 · SOURCE　2 · REVIEW　3 · USE</p><h2 id="pdf-title">Choose a question from your PDF</h2>
     {!pdfQuestions.length ? <p role="status">No readable text was found after local OCR.</p> : <div className="pdf-picker">
-      <details className="pdf-question-menu"><summary>Choose a problem · {pdfSelectedIndex+1} of {pdfQuestions.length}</summary><div className="pdf-question-list" role="list" aria-label="Extracted PDF text">
+      <details className="pdf-question-menu" open><summary>Choose a problem · {pdfSelectedIndex+1} of {pdfQuestions.length}</summary><div className="pdf-question-list" role="list" aria-label="Extracted PDF text">
         {pdfQuestions.map((item, index) => <button type="button" role="listitem" key={`${item.page}-${index}`} aria-pressed={pdfSelectedIndex === index} onClick={() => { setPdfSelected({ ...item, text:normalizeProblemText(item.text) }); setPdfSelectedIndex(index); if (pdfFile && pdfPreview?.page !== item.page) void showPdfPage(pdfFile, item.page); }}>
           <strong>Page {item.page} · Text {index + 1}</strong><span>{item.text.slice(0, 180)}{item.text.length > 180 ? '…' : ''}</span>
         </button>)}

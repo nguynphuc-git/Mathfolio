@@ -105,6 +105,7 @@ describe('saved page previews and workspace copies', () => {
     Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
     await act(async () => { upload.dispatchEvent(new Event('change', { bubbles: true })); });
     expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Choose a question from your PDF');
+    expect(host.querySelector<HTMLDetailsElement>('.pdf-question-menu')!.open).toBe(true);
     await act(async () => { await Promise.resolve(); });
     expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Mock recognize formula');
     await click('Mock recognize formula');
@@ -284,6 +285,14 @@ describe('Stop AI restores the pre-request page', () => {
     await click('Confirm & analyze');
     expect(host.querySelector('[role="alertdialog"]')).toBeNull();
     expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'knowledge',route:'local',cloudAllowed:false});
+  });
+  it('resets old hint levels only after confirmation and preserves the saved original until Save',async()=>{
+    await openWorkspace();await click('Reset hints',host.querySelector('.hints')!);
+    await click('Keep working',host.querySelector('[role="alertdialog"]')!);expect(host.querySelector('.hints')!.textContent).toContain('Original hint');
+    await click('Reset hints',host.querySelector('.hints')!);await click('Reset hints',host.querySelector('[role="alertdialog"]')!);
+    expect(host.querySelector('.hints')!.textContent).not.toContain('Original hint');expect(button('Open level 1').disabled).toBe(false);
+    expect(host.querySelector('.knowledge')!.textContent).toContain('Original essentials');expect(stored().exercises[0].hints[0].text).toBe('Original hint');expect(mocks.ai).not.toHaveBeenCalled();
+    mocks.ai.mockResolvedValue({text:'Fresh complete hints',source:'ON_DEVICE'});await click('Open level 1');expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'hint1',route:'local'});
   });
 });
 
@@ -526,10 +535,10 @@ describe('new workspace rows and selected visual context',()=>{
     mocks.ai.mockResolvedValue({text:'Text-only context',source:'on_device'});await click('Confirm & analyze');expect(mocks.ai.mock.calls[0][0].images).toEqual([]);
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe(String.raw`\text{Original notes}`);
   });
-  it('discloses illustration sharing in cloud consent and allows a visual first hint in cloud after approval',async()=>{
+  it('discloses illustration sharing but keeps a visual first hint local after cloud approval',async()=>{
     stored().exercises[0].hints=[];await withDiagram();mocks.ai.mockResolvedValue({text:'Use the labelled angle',source:'in_cloud'});
     await click('Cloud AI',host.querySelector('.workspace-actions')!);expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain('selected problem illustrations');expect(mocks.ai).not.toHaveBeenCalled();
-    await click('Allow Cloud AI');await click('Open level 1');expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'hint1',route:'cloud',cloudAllowed:true,images:[{name:'triangle.png'}]});
+    await click('Allow Cloud AI');await click('Open level 1');expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'hint1',route:'local',cloudAllowed:true,images:[{name:'triangle.png'}]});
   });
   it('does not run AI for an empty rich chat question or when searching symbols with Ctrl+Enter',async()=>{
     await openWorkspace();await type('[aria-label="Discussion question"]',String.raw`\text{   }`);expect(button('Send').disabled).toBe(true);

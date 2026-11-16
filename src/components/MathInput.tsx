@@ -3,7 +3,8 @@ import { MathfieldElement } from 'mathlive';
 import { clipboardMathText } from '../clipboard-math';
 import { useMathKeyboard,editableMathTarget, type MathTarget } from './MathKeyboardContext';
 import { editorPaste } from '../math-paste';
-import { insertPower } from '../math-editor-actions';
+import { insertPower,insertSubscript } from '../math-editor-actions';
+import {editorPlaceholder} from '../math-input';
 import { doubleControl } from '../editor-mode';
 import 'mathlive/fonts.css';
 MathfieldElement.fontsDirectory = null;
@@ -38,7 +39,7 @@ export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({v
     `;
     const installStyle=()=>{if(!flowStyle.isConnected)field.shadowRoot?.appendChild(flowStyle);};
     field.addEventListener('mount',installStyle);
-    field.setAttribute('tabindex','0');field.setAttribute('aria-label',label);field.setAttribute('role','textbox');field.setAttribute('placeholder',placeholder);
+    field.setAttribute('tabindex','0');field.setAttribute('aria-label',label);field.setAttribute('role','textbox');field.setAttribute('placeholder',editorPlaceholder(placeholder));field.setAttribute('aria-placeholder',placeholder);
     const syncMode=()=>setMode(field.mode==='text'?'text':'math');
     const handleInput=()=>{
       if(field.value.length>options.current.maxLength){field.value=validValue.current;setInputError(`Keep this entry within ${options.current.maxLength.toLocaleString('en-US')} characters.`);return;}
@@ -52,7 +53,7 @@ export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({v
       // A mode change may convert selected content; a caret-only change is not an edit.
       if(field.value!==before)handleInput();
     };
-    const target:MathTarget={id:editorId,label,element:field,available:()=>!field.readOnly&&editableMathTarget(field),focus:()=>field.focus(),insert:latex=>{field.focus();const power=/^\^\{(.*)\}$/.exec(latex);if(power)insertPower(field,power[1]==='#?'?undefined:power[1]);else field.insert(latex,{format:'latex',mode:'math',selectionMode:'placeholder'});handleInput();}};
+    const target:MathTarget={id:editorId,label,element:field,available:()=>!field.readOnly&&editableMathTarget(field),focus:()=>field.focus(),insert:latex=>{field.focus();const power=/^\^\{(.*)\}$/.exec(latex);if(power)insertPower(field,power[1]==='#?'?undefined:power[1]);else if(latex==='_{#?}')insertSubscript(field);else field.insert(latex,{format:'latex',mode:'math',selectionMode:'placeholder'});handleInput();}};
     const activate=()=>{if(!field.readOnly)keyboardRef.current?.activate(target);};
     field.addEventListener('focusin',activate);field.addEventListener('focus',activate,true);field.addEventListener('pointerdown',activate,true);
     const taps=doubleControl(()=>toggleMode.current());
@@ -94,7 +95,7 @@ export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({v
   useImperativeHandle(ref,()=>({
     focus(){element.current?.focus();},
     insert(latex){const field=element.current;if(!field||field.readOnly)return;field.focus();const power=/^\^\{(.*)\}$/.exec(latex);
-      if(power)insertPower(field,power[1]==='#?'?undefined:power[1]);else field.insert(latex,{format:'latex',mode:'math',selectionMode:'placeholder'});notify.current();}
+      if(power)insertPower(field,power[1]==='#?'?undefined:power[1]);else if(latex==='_{#?}')insertSubscript(field);else field.insert(latex,{format:'latex',mode:'math',selectionMode:'placeholder'});notify.current();}
   }),[]);
   return <div className={`math-editor${compact?' compact-editor':''}`}>
     {!readOnly&&<div className="editor-mode-bar"><button type="button" className="editor-mode-toggle" disabled={disabled} aria-label={`Input mode for ${label}`} aria-description={`Current mode: ${mode}. Press Ctrl twice to switch.`} title="Switch Math / Text · press Ctrl twice" onMouseDown={event=>event.preventDefault()} onClick={()=>toggleMode.current()}><span aria-hidden="true">{mode==='math'?'𝑥':'Aa'}</span> {mode==='math'?'Math':'Text'} ↔</button><small>Ctrl twice to switch</small></div>}

@@ -20,7 +20,7 @@ import {NotesEditor} from '../src/components/NotesEditor';
 import { MathInput, type MathInputHandle } from '../src/components/MathInput';
 
 interface StubField extends HTMLElement {
-  value:string; mode:string; readOnly:boolean; smartMode:boolean; smartFence:boolean; smartSuperscript:boolean;
+  value:string; mode:string; readOnly:boolean; selectionIsCollapsed:boolean; smartMode:boolean; smartFence:boolean; smartSuperscript:boolean;
   insert:ReturnType<typeof vi.fn>; executeCommand:ReturnType<typeof vi.fn>;
 }
 let root:Root,host:HTMLDivElement; const change=vi.fn(); const handle=createRef<MathInputHandle>();
@@ -60,6 +60,13 @@ describe('math editor event integration',()=>{
     await act(async()=>handle.current!.insert('^{2}'));
     expect(field().executeCommand.mock.calls).toEqual([['moveToSuperscript'],['moveAfterParent']]);
     expect(field().insert).toHaveBeenCalledWith('2',expect.anything());
+  });
+  it('attaches a subscript to the current base or whole selected expression',async()=>{
+    await act(async()=>handle.current!.insert('_{#?}'));
+    expect(field().executeCommand).toHaveBeenCalledWith('moveToSubscript');
+    field().selectionIsCollapsed=false;
+    await act(async()=>handle.current!.insert('_{#?}'));
+    expect(field().insert).toHaveBeenLastCalledWith('{#0}_{#?}',expect.objectContaining({selectionMode:'placeholder'}));
   });
   it('never changes readonly problems or intercepts IME composition',async()=>{
     await act(async()=>root.render(<MathInput ref={handle} value="x" readOnly onChange={change}/>));

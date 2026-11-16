@@ -58,6 +58,8 @@ describe('PDF geometric reading order',()=>{
 describe('categorized math keyboard',()=>{
   it('has common symbols, unique keys per category and valid LaTeX templates',()=>{
     expect(commonSymbols.every(Boolean)).toBe(true);
+    expect(commonSymbols.slice(0,17).some(symbol=>symbol.label==='xₙ')).toBe(true);
+    expect(symbolCategories.find(category=>category.name==='Calculus & series')!.symbols.map(symbol=>symbol.latex)).toEqual(expect.arrayContaining([String.raw`\bigcup_{#?}^{#?} #?`,String.raw`\bigcap_{#?}^{#?} #?`]));
     expect(symbolCategories.length).toBeGreaterThanOrEqual(7);
     for (const category of symbolCategories) {
       expect(new Set(category.symbols.map(symbol=>symbol.label)).size).toBe(category.symbols.length);

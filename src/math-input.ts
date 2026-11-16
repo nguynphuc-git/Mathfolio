@@ -1,3 +1,7 @@
+/** MathLive placeholders are LaTeX too; prose must explicitly use text mode. */
+export function editorPlaceholder(value:string):string {
+  return `\\text{${value.replace(/[\\{}%&#_^$]/g,char=>char==='\\'?'\\textbackslash{}':`\\${char}`)}}`;
+}
 /** Older notebook pages stored text with $...$ fragments. Keep them readable. */
 export function statementLatex(value: string, format?: 'latex'): string {
   if (format === 'latex' || !value) return value;

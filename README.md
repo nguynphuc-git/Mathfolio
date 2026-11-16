@@ -16,10 +16,11 @@ Trình khởi động cài dependency từ lockfile, khởi động Auth Emulato
 - Nhập đề và viết vào **Your working notes**. Chọn **Save exercise**, đặt tên rồi chọn **Save on this device**. Bạn có thể lưu cả bài đang làm dở.
 - Mở **Exercise library → My exercises → Open exercise** để xem bài và sửa ghi chú. **Open in workspace** mở bản nháp để tiếp tục làm. Tải lại trang rồi mở thư viện để kiểm tra dữ liệu.
 - Thử `2x+3=7` và chọn **Confirm & analyze** để xem thẻ công thức cục bộ. Các bài ngoài phạm vi công thức, hint và chat dùng Firebase AI Logic. Gemini cần project thật, App Check và thiết bị tương thích cho chế độ on-device.
-- Chọn **Read image** để đọc đề trên thiết bị rồi kiểm tra với ảnh nguồn. Nếu local AI không hỗ trợ ảnh, dùng OCR chữ in cục bộ; công thức cần được soát lại. Bước đọc ảnh này chạy cục bộ. Ảnh minh họa được chọn có thể gửi khi bạn bật Cloud AI và chạy phân tích, hint hoặc chat.
+- Chọn **Read image** để đọc đề trên thiết bị rồi kiểm tra với ảnh nguồn. Nếu local AI không hỗ trợ ảnh, dùng OCR chữ in cục bộ; công thức cần được soát lại. Bước đọc ảnh này chạy cục bộ. Ảnh minh họa được chọn có thể gửi khi bạn bật Cloud AI và chạy phân tích, hint 2/3 hoặc chat. Hint 1 luôn chạy local.
 - Bản đang làm được tự lưu riêng; tải lại trang rồi chọn **Resume draft** để tiếp tục. **Save exercise** mới cập nhật bài gốc trong thư viện.
 - Đề, ghi chú và chat có nút **Math / Text**; nhấn **Ctrl hai lần** trong ô đang viết để chuyển nhanh. Nhận diện tự động khi gõ đã tắt. Một bàn phím nổi dùng chung sẽ nhập vào ô bạn đang chọn, có thể kéo thả và giữ mở khi bấm ra ngoài.
 - Hàng đầu gồm đề (2/3) và **Illustrations** (1/3); hàng tiếp là kiến thức/hint; hàng cuối là chat/notes. Chọn **Use this illustration for AI** ở những ảnh cần cho bài toán.
+- Hint bao quát từng bài/ý; chọn **Reset hints** để tạo lại các tầng cũ. Bàn phím thông dụng có **xₙ**, Calculus & series có **⋃ / ⋂**.
 - Nhấn ảnh đề/bài làm trong Workspace hoặc thư viện để xem lớn, zoom và kéo ảnh; nhấn Escape để quay lại.
 - Xem [các tính năng Mathfolio](NOTEBOOK.md) và [checklist sprint chung](https://github.com/nguynphuc-git/StudyLens/issues/2).
 

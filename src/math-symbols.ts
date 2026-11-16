@@ -8,6 +8,7 @@ export const symbolCategories = [
   { name:'Relations & arrows', symbols:[
     s('=','=','=', 'Equal'),s('≠','\\ne','≠','Not equal'),s('≤','\\le','≤','Less than or equal'),s('≥','\\ge','≥','Greater than or equal'),s('≈','\\approx','≈','Approximately equal'),s('≡','\\equiv','≡','Equivalent / congruent'),s('∝','\\propto','∝','Proportional'),s('→','\\to','→','Tends to / maps to'),s('↦','\\mapsto','↦','Maps to'),s('←','\\leftarrow','←','Left arrow'),s('↔','\\leftrightarrow','↔','Bidirectional arrow'),s('…','\\ldots','…','Ellipsis'),s('∴','\\therefore','∴','Therefore'),s('∵','\\because','∵','Because') ] },
   { name:'Calculus & series', symbols:[
+    s('⋃','\\bigcup_{#?}^{#?} #?','⋃','Indexed union / union of a family of sets'),s('⋂','\\bigcap_{#?}^{#?} #?','⋂','Indexed intersection / intersection of a family of sets'),
     s('∑','\\sum_{#?}^{#?}','∑','Sum'),s('∏','\\prod_{#?}^{#?}','∏','Product'),s('∫','\\int_{#?}^{#?}','∫','Definite integral'),s('∬','\\iint','∬','Double integral'),s('∮','\\oint','∮','Contour integral'),s('lim','\\lim_{#?}','lim','Limit'),s('∞','\\infty','∞','Infinity'),s('∂','\\partial','∂','Partial derivative'),s('∇','\\nabla','∇','Gradient'),s('d/dx','\\frac{d}{dx}#?','d/dx','Derivative'),s('f′',"'",'′','Prime'),s('dx','\\,dx','dx','Differential'),s('sup','\\sup','sup','Supremum'),s('inf','\\inf','inf','Infimum') ] },
   { name:'Functions', symbols:[
     ...['sin','cos','tan','cot','sec','csc','arcsin','arccos','arctan','sinh','cosh','tanh','ln','log','exp'].map(name=>s(name,`\\${name} #?`,name+'()',name)),s('logₐ','\\log_{#?} #?','logₐ()','Logarithm with base') ] },
@@ -16,6 +17,6 @@ export const symbolCategories = [
   { name:'Vectors & matrices', symbols:[
     s('v⃗','\\vec{#?}','v⃗','Vector'),s('‖v‖','\\lVert #? \\rVert','‖‖','Norm'),s('⟨u,v⟩','\\langle #?,#? \\rangle','⟨,⟩','Inner product'),s('2×2','\\begin{pmatrix}#?&#?\\\\#?&#?\\end{pmatrix}','[a,b;c,d]','Two by two matrix'),s('det','\\det\\left(#?\\right)','det()','Determinant'),s('Aᵀ','^{T}','ᵀ','Transpose'),s('⊥','\\perp','⊥','Perpendicular'),s('∥','\\parallel','∥','Parallel'),s('∠','\\angle','∠','Angle'),s('°','^{\\circ}','°','Degrees'),s('ℙ','\\mathbb{P}','ℙ','Probability'),s('𝔼','\\mathbb{E}','𝔼','Expected value'),s('Var','\\operatorname{Var}\\left(#?\\right)','Var()','Variance') ] }
 ];
-const commonLabels = ['x²','xⁿ','√','a/b','∅','∈','⊆','ℝ','≤','≥','≠','±','∑','∫','lim','∞','∀','⇒','α','π'];
+const commonLabels = ['x²','xⁿ','xₙ','√','a/b','∅','∈','⊆','ℝ','≤','≥','≠','±','∑','∫','lim','∞','∀','⇒','α','π'];
 const all = symbolCategories.flatMap(category=>category.symbols);
 export const commonSymbols = commonLabels.map(label=>all.find(symbol=>symbol.label===label)!);
