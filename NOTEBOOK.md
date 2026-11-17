@@ -1,3 +1,13 @@
+## Pastel folder colors and separated header
+
+- Integrated upstream library/search, reader appearance and guided geometry changes before applying this update.
+- Folders support six named pastel tokens: Sage, Sky, Lavender, Rose, Peach and Butter. Choose a color when creating a folder from the library or while saving an exercise, or expand Color on an existing folder card. My exercises can be recolored too.
+- Colors are saved in the account-scoped notebook record only after storage succeeds. Recoloring does not change exercise IDs, memberships, content or update times. Old folders without a color use Sage without a migration/write on open; unsupported tokens also display that safe default.
+- Folder cards and folder-selection dots use the selected color. Selected swatches have a check and accessible name/pressed state. Dark mode uses subdued matching card surfaces; colored text meets 4.5:1 contrast on all six light and dark surfaces (minimum measured 5.94:1).
+- The header has a lightly colored surface, bottom border and rounded lower corners to separate navigation from the content. It follows blue/rose paper preferences and has dedicated dark surfaces. Responsive padding keeps the header aligned with page content. Dialogs stay above the header.
+
+Validation covers color storage/immutability, legacy/invalid-token fallback, changing the history-folder color, folder creation/reload, failed-save retry without exercise changes, and color selection during exercise save. Physical Chrome visual acceptance still remains.
+
 ## History, shared folders and section-specific images
 
 - My exercises is now the complete history of saved exercises, regardless of custom folder selection. Each exercise has one ID and one saved record. Optional folderIds holds custom memberships; legacy folderId records are interpreted without rewriting existing notebooks on open. New saves can select zero, one or several custom folders; a newly created folder is added alongside the selected folders.

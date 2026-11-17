@@ -1,4 +1,5 @@
 import { get, set } from 'idb-keyval';
+import {defaultFolderColor,isFolderColor,type FolderColor} from './folder-colors';
 import type { GeometryDiagram } from './geometry-diagram';
 import type { ProofDiagram } from './geometry-proof';
 export interface Answer { text: string; source: string }
@@ -10,7 +11,7 @@ export interface Exercise {
   statement: string; statementFormat?: 'latex'; confirmed: boolean; knowledge?: Answer; hints: Answer[];
   notes: string; notesFormat?: 'latex'; messages: Message[]; attachments: Attachment[]; geometryDiagram?: GeometryDiagram; completed: boolean; updatedAt: string;
 }
-export interface Notebook { folders: { id: string; name: string }[]; exercises: Exercise[] }
+export interface Notebook { folders: { id: string; name: string; color?:FolderColor }[]; exercises: Exercise[] }
 export function sameAttachments(a:Attachment[],b:Attachment[]):boolean{return a.length===b.length&&a.every((image,index)=>{const other=b[index];return image.id===other.id&&image.name===other.name&&image.data===other.data&&image.kind===other.kind&&image.useForAI===other.useForAI;});}
 export function notebookKey(project: string, uid: string) {
   if (!project || !uid) throw new Error('Sign in to open your notebook.');
@@ -77,11 +78,17 @@ export async function readAttachment(file: File, kind: Attachment['kind']): Prom
   return { id: crypto.randomUUID(), name: file.name.slice(0,120), data, kind };
 }
 
-export function addFolder(book: Notebook, name: string): Notebook {
+export function addFolder(book: Notebook, name: string,color:FolderColor=defaultFolderColor): Notebook {
   const label = name.trim();
   if (!label || label.length > 80) throw new Error('Enter a folder name of 1–80 characters.');
   if (book.folders.some(folder => folder.name.toLocaleLowerCase() === label.toLocaleLowerCase())) throw new Error('A folder with this name already exists.');
-  return { ...book, folders: [...book.folders, { id: crypto.randomUUID(), name: label }] };
+  if(!isFolderColor(color))throw new Error('Choose a pastel folder color.');
+  return { ...book, folders: [...book.folders, { id: crypto.randomUUID(), name: label,color }] };
+}
+export function recolorFolder(book:Notebook,id:string,color:FolderColor):Notebook{
+  if(!isFolderColor(color))throw new Error('Choose a pastel folder color.');
+  if(!book.folders.some(folder=>folder.id===id))throw new Error('Folder not found.');
+  return {...book,folders:book.folders.map(folder=>folder.id===id?{...folder,color}:folder)};
 }
 /** Deleting a folder removes only its memberships; history and other folders keep pages. */
 export function removeFolder(book: Notebook, id: string): Notebook {
