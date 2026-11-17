@@ -94,7 +94,7 @@ describe('workspace menus and login backdrop',()=>{
   });
   it('shows decorative mathematics only on the signed-out page without changing login input',async()=>{
     mocks.signedIn=false;await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));
-    const backdrop=host.querySelector('.login-math-backdrop')!;expect(backdrop.getAttribute('aria-hidden')).toBe('true');expect(backdrop.querySelectorAll('span')).toHaveLength(16);expect(backdrop.querySelector('button,input,a')).toBeNull();
+    const backdrop=document.querySelector('.login-math-backdrop')!;expect(backdrop.parentElement).toBe(document.body);expect(backdrop.getAttribute('aria-hidden')).toBe('true');expect(backdrop.querySelectorAll('span')).toHaveLength(20);expect(backdrop.querySelector('button,input,a')).toBeNull();
     await type('input[type="email"]','learner@example.test');await type('input[type="password"]','sample-password');await act(async()=>host.querySelector<HTMLElement>('.appearance-disclosure summary')!.click());await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Theme"]')!.click());
     await act(async()=>[...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(option=>option.textContent?.startsWith('Dark'))!.click());
     expect(host.querySelector<HTMLInputElement>('input[type="email"]')!.value).toBe('learner@example.test');expect(host.querySelector<HTMLInputElement>('input[type="password"]')!.value).toBe('sample-password');expect(mocks.ai).not.toHaveBeenCalled();
@@ -816,17 +816,17 @@ describe('workspace comfort and English guide',()=>{
   });
   it('applies and persists reading appearance preferences',async()=>{
     await act(async()=>{host.querySelector<HTMLElement>('.appearance-disclosure summary')!.click();});
-    async function choose(label:string,option:string){await act(async()=>host.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click());await act(async()=>[...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(item=>item.textContent?.trim().startsWith(option))!.click());}
-    await choose('Theme','Dark');await choose('Reading font','Book serif');await choose('Text color','Blue');await choose('Text alignment','Justified');
+    async function choose(label:string,option:string){await act(async()=>host.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click());if(label==='Theme')expect([...document.querySelectorAll('[role="option"]')].map(item=>item.textContent?.replace('✓','').trim())).toEqual(['Light','Dark']);await act(async()=>[...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(item=>item.textContent?.trim().startsWith(option))!.click());}
+    await choose('Theme','Dark');await choose('Reading font','Book serif');await choose('Text color','Blue');expect(host.querySelector('[aria-label="Text alignment"]')).toBeNull();
     await type('.appearance-size input','19');
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(document.documentElement.dataset.readingFont).toBe('serif');
     expect(document.documentElement.dataset.ink).toBe('blue');
-    expect(document.documentElement.dataset.readingAlign).toBe('justify');
+    expect(document.documentElement.dataset.readingAlign).toBe('left');
     expect(document.documentElement.style.getPropertyValue('--reading-size')).toBe('19px');
     expect(host.querySelector<HTMLElement>('.appearance-preview p')!.style.fontSize).toBe('19px');
     expect(host.querySelector<HTMLElement>('.appearance-preview')!.classList.contains('preview-paper')).toBe(true);
-    expect(JSON.parse(localStorage.getItem('mathfolio-appearance-v1')!)).toMatchObject({theme:'dark',font:'serif',textColor:'blue',alignment:'justify',textSize:19});
+    expect(JSON.parse(localStorage.getItem('mathfolio-appearance-v1')!)).toMatchObject({theme:'dark',font:'serif',textColor:'blue',textSize:19});
   });
   it('accepts geometry directly in Problem without a sample gallery',async()=>{
     expect(host.textContent).not.toContain('Geometry studio');expect(host.textContent).not.toContain('Try this proof');

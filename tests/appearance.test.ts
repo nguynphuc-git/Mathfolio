@@ -5,6 +5,11 @@ import {
 } from '../src/appearance';
 
 describe('recoverable appearance preferences', () => {
+  it('resolves legacy System once into an explicit theme and drops obsolete alignment',()=>{
+    expect(parseAppearancePreferences({theme:'system',alignment:'justify'},true).theme).toBe('dark');
+    expect(parseAppearancePreferences({theme:'system'},false).theme).toBe('light');
+    expect(parseAppearancePreferences({theme:'dark',alignment:'justify'})).not.toHaveProperty('alignment');
+  });
   it('restores valid preferences without losing settings absent from an older record', () => {
     const preferences = loadAppearancePreferences({getItem: () => JSON.stringify({theme: 'dark', font: 'serif'})});
     expect(preferences).toEqual({...DEFAULT_APPEARANCE, theme: 'dark', font: 'serif'});
@@ -13,7 +18,7 @@ describe('recoverable appearance preferences', () => {
       getItem: (key: string) => stored.get(key) ?? null,
       setItem: (key: string, value: string) => { stored.set(key, value); },
     };
-    const customized = {...preferences, background: 'sage' as const, textSize: 19, textColor: 'plum' as const, alignment: 'justify' as const};
+    const customized = {...preferences, background: 'sage' as const, textSize: 19, textColor: 'plum' as const};
     expect(saveAppearancePreferences(customized, storage)).toBe(true);
     expect(loadAppearancePreferences(storage)).toEqual(customized);
     expect(stored.has(APPEARANCE_STORAGE_KEY)).toBe(true);

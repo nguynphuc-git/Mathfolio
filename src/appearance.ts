@@ -1,18 +1,17 @@
 import {useCallback, useEffect, useLayoutEffect, useState} from 'react';
 
 export interface AppearancePreferences {
-  theme: 'system' | 'light' | 'dark';
+  theme: 'light' | 'dark';
   background: 'paper' | 'sage' | 'blue' | 'rose';
   font: 'sans' | 'serif';
   textSize: number;
   textColor: 'default' | 'blue' | 'plum';
-  alignment: 'left' | 'justify';
 }
 
 export const APPEARANCE_STORAGE_KEY = 'mathfolio-appearance-v1';
 export const DEFAULT_APPEARANCE: Readonly<AppearancePreferences> = Object.freeze({
-  theme: 'system', background: 'paper', font: 'sans', textSize: 16,
-  textColor: 'default', alignment: 'left',
+  theme: 'light', background: 'paper', font: 'sans', textSize: 16,
+  textColor: 'default',
 });
 
 function choice<T extends string>(value: unknown, choices: readonly T[], fallback: T): T {
@@ -20,17 +19,16 @@ function choice<T extends string>(value: unknown, choices: readonly T[], fallbac
 }
 
 /** Only allow known preferences, including when recovering older or damaged records. */
-export function parseAppearancePreferences(value: unknown): AppearancePreferences {
+export function parseAppearancePreferences(value: unknown,systemDark=false): AppearancePreferences {
   const record = value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown> : {};
   return {
-    theme: choice(record.theme, ['system', 'light', 'dark'], DEFAULT_APPEARANCE.theme),
+    theme: record.theme==='system'?(systemDark?'dark':'light'):choice(record.theme, ['light', 'dark'], DEFAULT_APPEARANCE.theme),
     background: choice(record.background, ['paper', 'sage', 'blue', 'rose'], DEFAULT_APPEARANCE.background),
     font: choice(record.font, ['sans', 'serif'], DEFAULT_APPEARANCE.font),
     textSize: typeof record.textSize === 'number' && Number.isFinite(record.textSize)
       ? Math.max(14, Math.min(24, Math.round(record.textSize))) : DEFAULT_APPEARANCE.textSize,
     textColor: choice(record.textColor, ['default', 'blue', 'plum'], DEFAULT_APPEARANCE.textColor),
-    alignment: choice(record.alignment, ['left', 'justify'], DEFAULT_APPEARANCE.alignment),
   };
 }
 
@@ -44,7 +42,7 @@ export function loadAppearancePreferences(
 ): AppearancePreferences {
   try {
     const saved = storage?.getItem(APPEARANCE_STORAGE_KEY);
-    return parseAppearancePreferences(saved ? JSON.parse(saved) : undefined);
+    return parseAppearancePreferences(saved ? JSON.parse(saved) : undefined,typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(prefers-color-scheme: dark)').matches);
   } catch { return {...DEFAULT_APPEARANCE}; }
 }
 
@@ -69,22 +67,8 @@ export interface AppearanceController {
 
 export function useAppearance(): AppearanceController {
   const [preferences, setPreferences] = useState(loadAppearancePreferences);
-  const [systemDark, setSystemDark] = useState(() =>
-    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-      ? window.matchMedia('(prefers-color-scheme: dark)').matches : false);
   const [savedLocally, setSavedLocally] = useState(true);
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return;
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const update = () => setSystemDark(media.matches);
-    update();
-    media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
-  }, []);
-
-  const resolvedTheme = preferences.theme === 'system'
-    ? systemDark ? 'dark' : 'light' : preferences.theme;
+  const resolvedTheme = preferences.theme;
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -92,7 +76,7 @@ export function useAppearance(): AppearanceController {
     root.dataset.paper = preferences.background;
     root.dataset.readingFont = preferences.font;
     root.dataset.ink = preferences.textColor;
-    root.dataset.readingAlign = preferences.alignment;
+    root.dataset.readingAlign = 'left';
     root.style.setProperty('--reading-size', `${preferences.textSize}px`);
   }, [preferences, resolvedTheme]);
 

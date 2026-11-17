@@ -1,6 +1,7 @@
 import {useEffect,useId,useLayoutEffect,useRef,useState,type CSSProperties} from 'react';
 import {createPortal} from 'react-dom';
 import {useMenuDisclosure} from './MenuDisclosure';
+import {Chevron} from './Chevron';
 export interface SelectOption<T extends string>{value:T;label:string;description?:string}
 export function SelectMenu<T extends string>({id,label,value,options,onChange,disabled=false,describedBy}:{id?:string;label:string;value:T;options:readonly SelectOption<T>[];onChange:(value:T)=>void;disabled?:boolean;describedBy?:string}){
   const generated=useId(),listId=`${generated}-options`,owner=useMenuDisclosure();
@@ -18,11 +19,11 @@ export function SelectMenu<T extends string>({id,label,value,options,onChange,di
       if(event?.target instanceof Node&&list.current?.contains(event.target))return;
       const rect=trigger.current?.getBoundingClientRect();if(!rect)return;
       const viewport=window.visualViewport,originX=viewport?.offsetLeft??0,originY=viewport?.offsetTop??0;
-      const width=Math.max(0,Math.min(Math.max(rect.width,240),(viewport?.width??innerWidth)-24));
+      const width=Math.max(0,Math.min(Math.max(rect.width,180),(viewport?.width??innerWidth)-24));
       const bottom=originY+(viewport?.height??innerHeight),below=bottom-rect.bottom-20,above=rect.top-originY-20;
-      const upward=below<Math.min(180,options.length*56+16)&&above>below;
-      const height=Math.max(60,Math.min(280,upward?above:below));
-      const actual=Math.min(height,list.current?.scrollHeight||options.length*56+16);
+      const upward=below<Math.min(160,options.length*44+12)&&above>below;
+      const height=Math.max(60,Math.min(230,upward?above:below));
+      const actual=Math.min(height,list.current?.scrollHeight||options.length*44+12);
       setPosition({left:Math.max(originX+12,Math.min(rect.left,originX+(viewport?.width??innerWidth)-width-12)),top:upward?Math.max(originY+12,rect.top-actual-8):Math.max(originY+12,rect.bottom+8),width,maxHeight:height});
     };
     place();window.addEventListener('resize',place);document.addEventListener('scroll',place,true);window.visualViewport?.addEventListener('resize',place);window.visualViewport?.addEventListener('scroll',place);
@@ -50,7 +51,7 @@ export function SelectMenu<T extends string>({id,label,value,options,onChange,di
     }
   }
   return <div className="select-menu">
-    <button ref={trigger} id={id} type="button" role="combobox" aria-label={label} aria-describedby={describedBy} aria-haspopup="listbox" aria-expanded={open} aria-controls={open?listId:undefined} aria-activedescendant={open?`${listId}-${active}`:undefined} disabled={disabled} className="select-trigger" onKeyDown={keys} onClick={()=>open?close():show()}><span>{options[selected]?.label??'Choose an option'}</span><span className={`select-chevron${open?' expanded':''}`} aria-hidden="true">⌄</span></button>
+    <button ref={trigger} id={id} type="button" role="combobox" aria-label={label} aria-describedby={describedBy} aria-haspopup="listbox" aria-expanded={open} aria-controls={open?listId:undefined} aria-activedescendant={open?`${listId}-${active}`:undefined} disabled={disabled} className="select-trigger" onKeyDown={keys} onClick={()=>open?close():show()}><span>{options[selected]?.label??'Choose an option'}</span><Chevron className="select-chevron" expanded={open}/></button>
     {open&&createPortal(<div ref={list} id={listId} role="listbox" aria-label={`${label} options`} data-disclosure-owner={owner?.id} className="select-options" style={position} onKeyDown={keys}>{options.map((option,index)=><button type="button" role="option" id={`${listId}-${index}`} key={option.value} aria-selected={value===option.value} tabIndex={-1} data-index={index} className={active===index?'highlighted':''} onMouseDown={event=>event.preventDefault()} onPointerMove={()=>setActive(index)} onClick={()=>choose(index)}><span>{option.label}{option.description&&<small>{option.description}</small>}</span><span className="option-check" aria-hidden="true">{value===option.value?'✓':''}</span></button>)}</div>,document.body)}
   </div>;
 }

@@ -85,18 +85,22 @@ describe('math editor event integration',()=>{
 });
 async function editorKey(key:string, type='keydown', extra:KeyboardEventInit={}){
   const event=new KeyboardEvent(type,{key,bubbles:true,cancelable:true,...extra});
+  // happy-dom conflates Alt and AltGraph; model the browser's separate modifier state.
+  const modifier=event.getModifierState.bind(event);
+  Object.defineProperty(event,'getModifierState',{value:(name:string)=>name==='AltGraph'?!!extra.modifierAltGraph||!!extra.ctrlKey&&!!extra.altKey:modifier(name)});
   await act(async()=>field().dispatchEvent(event));return event;
 }
+async function altTap(code='AltLeft'){await editorKey('Alt','keydown',{altKey:true,code});await editorKey('Alt','keyup',{code});}
 async function ctrlTap(){await editorKey('Control','keydown',{ctrlKey:true});await editorKey('Control','keyup');}
 describe('manual Math/Text control',()=>{
-  it('locks Text for Vietnamese prose and switches back with two Control taps',async()=>{
+  it('locks Text for Vietnamese prose and switches back with one Alt tap',async()=>{
     const toggle=host.querySelector<HTMLButtonElement>('[aria-label="Input mode for Problem statement"]')!;
     await act(async()=>toggle.click());
     expect(field().mode).toBe('text');expect(field().smartMode).toBe(false);expect(change).not.toHaveBeenCalled();
     await paste('text/plain','hôm nay là ngày đầu tuần x^2');
     expect(field().insert.mock.calls.at(-1)?.[0]).toBe(String.raw`\text{hôm nay là ngày đầu tuần x\^2}`);
     expect((await editorKey('^')).defaultPrevented).toBe(false);
-    await ctrlTap();await ctrlTap();
+    await altTap();
     expect(field().mode).toBe('math');expect(toggle.textContent).toContain('Math');
   });
   it('never treats Ctrl+C/S or held/repeated Control as a mode switch',async()=>{
@@ -107,10 +111,23 @@ describe('manual Math/Text control',()=>{
     await editorKey('Control','keydown',{ctrlKey:true});await editorKey('Control','keydown',{ctrlKey:true,repeat:true});
     expect(field().mode).toBe('math');
   });
-  it('forgets a tap after focus leaves the editor or the double-tap timeout expires',async()=>{
-    let time=100;vi.spyOn(performance,'now').mockImplementation(()=>time);
-    await ctrlTap();await act(async()=>field().dispatchEvent(new Event('blur')));await ctrlTap();
-    expect(field().mode).toBe('math');time+=400;await ctrlTap();expect(field().mode).toBe('math');
+  it('does not switch for Option character chords, AltGraph, composition, or focus changes',async()=>{
+    await editorKey('Alt','keydown',{altKey:true,code:'AltRight'});await editorKey('Dead','keydown',{altKey:true});await editorKey('Alt','keyup');expect(field().mode).toBe('math');
+    await editorKey('Alt','keydown',{altKey:true,ctrlKey:true});await editorKey('Alt','keyup');expect(field().mode).toBe('math');
+    await editorKey('Alt','keydown',{altKey:true,modifierAltGraph:true});await editorKey('Alt','keyup');expect(field().mode).toBe('math');
+    await editorKey('Alt','keydown',{altKey:true,isComposing:true});await editorKey('Alt','keyup');expect(field().mode).toBe('math');
+    await editorKey('Alt','keydown',{altKey:true});await act(async()=>field().dispatchEvent(new Event('blur')));await editorKey('Alt','keyup');expect(field().mode).toBe('math');
+    await editorKey('Alt','keydown',{altKey:true});await act(async()=>field().dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,altKey:true})));await editorKey('Alt','keyup');expect(field().mode).toBe('math');
+    await altTap('AltRight');expect(field().mode).toBe('text');
+  });
+  it('toggles once per release, suppresses the bare Alt browser menu, and ignores old double Control',async()=>{
+    expect((await editorKey('Alt','keydown',{altKey:true})).defaultPrevented).toBe(true);
+    await editorKey('Alt','keydown',{altKey:true,repeat:true});expect(field().mode).toBe('math');await editorKey('Alt','keyup');expect(field().mode).toBe('text');
+    await ctrlTap();await ctrlTap();expect(field().mode).toBe('text');
+  });
+  it.each(['Notes','Chat'])('uses the same Alt/Option switch in %s without modifying content',async label=>{
+    await act(async()=>root.render(<MathInput value="" label={label} initialMode="text" onChange={change}/>));
+    await altTap('AltRight');expect(field().mode).toBe('math');await altTap('AltLeft');expect(field().mode).toBe('text');expect(change).not.toHaveBeenCalled();
   });
   it('accepts formatted note-sized content and preserves line breaks and explicit LaTeX',async()=>{
     await act(async()=>root.render(<MathInput ref={handle} value="" label="Notes" initialMode="text" maxLength={30000} preserveLines onChange={change}/>));
@@ -125,10 +142,10 @@ describe('manual Math/Text control',()=>{
     field().value='';await paste('text/plain','Long notes '.repeat(700));
     expect(change.mock.calls.at(-1)?.[0].length).toBeGreaterThan(6000);expect(host.querySelector('[role="alert"]')).toBeNull();
   });
-  it('keeps manual controls disabled for busy editors and ignores Control taps in read-only views',async()=>{
+  it('keeps manual controls disabled for busy editors and ignores Alt taps in read-only views',async()=>{
     await act(async()=>root.render(<MathInput value="x" disabled onChange={change}/>));
     expect(host.querySelector<HTMLButtonElement>('.editor-mode-toggle')!.disabled).toBe(true);
-    await ctrlTap();await ctrlTap();expect(field().mode).toBe('math');
+    await altTap();expect(field().mode).toBe('math');
     await act(async()=>root.render(<MathInput value="x" readOnly onChange={change}/>));
     expect(host.querySelector('.editor-mode-toggle')).toBeNull();
   });

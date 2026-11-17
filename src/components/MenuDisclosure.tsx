@@ -1,4 +1,5 @@
-import {createContext,useContext,useEffect,useId,useRef,type ReactNode,type RefObject} from 'react';
+import {Children,cloneElement,isValidElement,createContext,useContext,useEffect,useId,useRef,type ReactNode,type RefObject} from 'react';
+import {Chevron} from './Chevron';
 const Context=createContext<{id:string;root:RefObject<HTMLDetailsElement|null>}|null>(null);
 export const useMenuDisclosure=()=>useContext(Context);
 /** Temporary menus dismiss outside; the independent math palette stays persistent. */
@@ -11,5 +12,5 @@ export function MenuDisclosure({className,children}:{className:string;children:R
     document.addEventListener('pointerdown',dismiss,true);document.addEventListener('focusin',dismiss);document.addEventListener('keydown',escape);
     return()=>{document.removeEventListener('pointerdown',dismiss,true);document.removeEventListener('focusin',dismiss);document.removeEventListener('keydown',escape);};
   },[id]);
-  return <Context.Provider value={{id,root}}><details ref={root} className={className}>{children}</details></Context.Provider>;
+  return <Context.Provider value={{id,root}}><details ref={root} className={className}>{Children.map(children,child=>isValidElement<{children?:ReactNode}>(child)&&child.type==='summary'?cloneElement(child,{},<>{child.props.children}<Chevron/></>):child)}</details></Context.Provider>;
 }

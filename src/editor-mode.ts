@@ -1,22 +1,20 @@
-/** A modifier chord (Ctrl+C/S/...) must never count as a double Control tap. */
-export function doubleControl(toggle:()=>void, now=()=>performance.now()) {
-  let down=false, chord=false, previous:number|null=null;
+/** Toggle on a bare Alt/Option release, never a chord, AltGraph or composition. */
+export function altToggle(toggle:()=>void) {
+  let down=false,chord=false;
   return {
-    keydown(event:KeyboardEvent) {
-      if(event.isComposing){this.reset();return;}
-      if(event.key!=='Control'){if(down)chord=true;previous=null;return;}
+    keydown(event:KeyboardEvent){
+      if(event.isComposing||event.getModifierState('AltGraph')){this.reset();return;}
+      if(event.key!=='Alt'){if(down)chord=true;return;}
       if(event.repeat||down)return;
-      down=true;chord=event.altKey||event.metaKey||event.shiftKey;
-      if(chord)previous=null;
+      down=true;chord=event.ctrlKey||event.metaKey||event.shiftKey;
+      // A bare Alt must not hand focus to the browser menu on Windows.
+      if(!chord)event.preventDefault();
     },
-    keyup(event:KeyboardEvent) {
-      if(event.key!=='Control'||!down)return;
-      down=false;
-      if(chord||event.isComposing||event.altKey||event.metaKey||event.shiftKey){previous=null;return;}
-      const time=now();
-      if(previous!==null&&time-previous<=350){previous=null;event.preventDefault();toggle();}
-      else previous=time;
+    keyup(event:KeyboardEvent){
+      if(event.key!=='Alt'||!down)return;
+      const allowed=!chord&&!event.isComposing&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.getModifierState('AltGraph');
+      this.reset();if(allowed){event.preventDefault();toggle();}
     },
-    reset(){down=false;chord=false;previous=null;}
+    reset(){down=false;chord=false;}
   };
 }
