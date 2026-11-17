@@ -166,19 +166,18 @@ describe('proof diagram AI boundary',()=>{
   });
   it('rejects malformed or truncated scenes rather than saving them',async()=>{
     mock.generate.mockResolvedValueOnce({response:{text:()=>'{bad JSON',candidates:[]}});
-    await expect(generateProofDiagram(statement,'local',false,[],signal())).rejects.toThrow('did not return a diagram');
+    await expect(generateProofDiagram(statement,'local',false,[],signal())).rejects.toThrow('did not return a usable diagram after retry');
     mock.generate.mockResolvedValueOnce({response:{text:()=>JSON.stringify({}),candidates:[{finishReason:'MAX_TOKENS'}]}});
     await expect(generateProofDiagram(statement,'local',false,[],signal())).rejects.toThrow('incomplete');
   });
-  it('requests JSON from the model and retries a malformed response once on the same route',async()=>{
+  it('requests JSON from the model and accepts a scene wrapped in explanatory text',async()=>{
     mock.generate.mockResolvedValueOnce({response:{text:()=>`Here is the diagram:\n${JSON.stringify(exampleProofScene(geometryExamples[0].statement))}`,candidates:[]}});
     mock.generate.mockResolvedValueOnce(valid());
     const result=await generateProofDiagram(statement,'local',false,[],signal());
-    expect(result.scene.dimension).toBe('2D');expect(mock.generate).toHaveBeenCalledTimes(2);
+    expect(result.scene.dimension).toBe('2D');expect(mock.generate).toHaveBeenCalledOnce();
     expect(mock.model.mock.calls[0][1].onDeviceParams.promptOptions.responseConstraint).toMatchObject({
       type:'object',required:expect.arrayContaining(['dimension','points','relations','unresolved'])
     });
-    expect(mock.generate.mock.calls[1][0]).toContain('Your previous response was not valid JSON');
     expect(mock.model.mock.calls[0][1].mode).toBe(InferenceMode.ONLY_ON_DEVICE);
   });
   it('requests JSON MIME output for cloud-generated diagrams',async()=>{

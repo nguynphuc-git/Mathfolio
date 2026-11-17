@@ -22,7 +22,7 @@ export class ProofSceneGeometryError extends Error {
   constructor(readonly scene:ProofScene,message:string){super(message);this.name='ProofSceneGeometryError';}
 }
 export class ProofSceneFormatError extends Error {
-  constructor(){super('Diagram needs revision: the model did not return a diagram. Try again or clarify the givens.');this.name='ProofSceneFormatError';}
+  constructor(){super('The AI did not return a usable diagram after retry. Check the problem statement, then retry or switch the Cloud AI setting.');this.name='ProofSceneFormatError';}
 }
 const add=(a:Vec3,b:Vec3):Vec3=>a.map((x,i)=>x+b[i]) as Vec3;
 const sub=(a:Vec3,b:Vec3):Vec3=>a.map((x,i)=>x-b[i]) as Vec3;
@@ -31,6 +31,33 @@ const dot=(a:Vec3,b:Vec3)=>a.reduce((s,x,i)=>s+x*b[i],0);
 const cross=(a:Vec3,b:Vec3):Vec3=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 const norm=(a:Vec3)=>Math.hypot(...a);
 const fail=(message:string):never=>{throw new Error(`Diagram needs revision: ${message}`);};
+function parseProofJson(raw:string):unknown {
+  const text=raw.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/i,'').trim();
+  try{return JSON.parse(text);}
+  catch{
+    let start=-1,depth=0,inString=false,escaped=false;
+    for(let i=0;i<text.length;i++){
+      const char=text[i];
+      if(inString){
+        if(escaped)escaped=false;
+        else if(char==='\\')escaped=true;
+        else if(char==='"')inString=false;
+        continue;
+      }
+      if(char==='"'&&depth>0){inString=true;continue;}
+      if(char==='{'){
+        if(depth===0)start=i;
+        depth++;
+      }else if(char==='}'&&depth>0){
+        depth--;
+        if(depth===0&&start>=0){
+          try{return JSON.parse(text.slice(start,i+1));}catch{start=-1;}
+        }
+      }
+    }
+    throw new ProofSceneFormatError();
+  }
+}
 export function resolveProofScene(scene:ProofScene):Map<string,Vec3> {
   const points=new Map<string,Vec3>();
   const get=(id:string)=>points.get(id)??fail(`point ${id} must be defined before it is used.`);
@@ -136,7 +163,7 @@ export function resolveProofScene(scene:ProofScene):Map<string,Vec3> {
 
 export function parseProofScene(raw:string):ProofScene {
   if(raw.length>50000)fail('the response is too large.');
-  let s:any;try{s=JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,''));}catch{throw new ProofSceneFormatError();}
+  const s=parseProofJson(raw) as any;
   const list=(x:unknown,max:number)=>Array.isArray(x)&&x.length<=max;
   const label=(x:unknown)=>typeof x==='string'&&/^[A-Za-z][A-Za-z0-9_']{0,11}$/.test(x);
   const text=(x:unknown)=>typeof x==='string'&&x.length<=1200;

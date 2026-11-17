@@ -74,6 +74,12 @@ describe('proof constructions',()=>{
     expect(()=>parseProofScene(JSON.stringify(scene))).toThrow('point');
     expect(()=>parseProofScene(' '.repeat(50001))).toThrow('too large');
   });
+  it('extracts valid scene JSON when the model adds prose or markdown fences',()=>{
+    const raw=JSON.stringify(sample());
+    for(const wrapped of [`Here is the requested diagram:\n${raw}\nLet me know if you need anything else.`,`\`\`\`json\n${raw}\n\`\`\``]){
+      expect(parseProofScene(wrapped)).toEqual(sample());
+    }
+  });
   it('does not assume cyclicity when it is the target and instructs models to report gaps',()=>{
     const prompt=proofDiagramPrompt('Prove ABCD is cyclic.');
     expect(prompt).toContain('do not draw the target circle as a given');expect(prompt).toContain('unresolved');
