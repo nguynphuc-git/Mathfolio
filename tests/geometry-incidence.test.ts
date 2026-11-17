@@ -2,9 +2,9 @@ import {describe,it,expect} from 'vitest';
 import {imo2019Construction} from '../src/geometry-olympiad';
 import {exampleProofScene} from '../src/geometry-proof-examples';
 import {parseProofScene,resolveProofScene} from '../src/geometry-proof';
-import {repairProofIncidences} from '../src/geometry-incidence';
+import {repairProofIncidences,repairZeroLengthProofEdge} from '../src/geometry-incidence';
 import {mixedTextToLatex} from '../src/math-paste';
-import {imo2019PastedProblem} from './fixtures/geometry-contests';
+import {imo1970Scene,imo2019PastedProblem} from './fixtures/geometry-contests';
 
 const determinant=(matrix:number[][]):number=>matrix.length===1?matrix[0][0]:matrix[0].reduce((sum,x,i)=>sum+(-1)**i*x*determinant(matrix.slice(1).map(row=>row.filter((_,j)=>i!==j))),0);
 describe('dependent incidence constructions',()=>{
@@ -41,6 +41,19 @@ describe('dependent incidence constructions',()=>{
     const scene=imo2019Construction();scene.points[6]={id:'Q',kind:'free',xyz:[-1,.9,0]};
     scene.relations.push({kind:'perpendicular',refs:['P','Q','A','B'],source:'contradictory constraint'});
     expect(repairProofIncidences(scene)).toBeUndefined();
+  });
+  it('separates coincident free edge endpoints only when the full scene remains valid',()=>{
+    const scene=imo1970Scene();
+    scene.points.push({id:'R',kind:'free',xyz:[0,0,0]});
+    scene.edges.push({a:'D',b:'R'});
+    let error:unknown;
+    try{parseProofScene(JSON.stringify(scene));}catch(caught){error=caught;}
+    expect(error).toBeInstanceOf(Error);
+    const repaired=repairZeroLengthProofEdge(scene,error)!;
+    expect(repaired).toBeDefined();
+    expect(resolveProofScene(repaired).get('D')).not.toEqual(resolveProofScene(repaired).get('R'));
+    expect(repaired.relations).toEqual(scene.relations);
+    expect(scene.points.find(point=>point.id==='R')?.xyz).toEqual([0,0,0]);
   });
   it('enforces point order and angle conditions and rejects malformed line parameters',()=>{
     const outside=imo2019Construction();outside.points[3].t=1.2;

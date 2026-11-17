@@ -5,6 +5,7 @@ vi.mock('firebase/ai',async original=>({...await original<typeof import('firebas
 import {InferenceMode} from 'firebase/ai';
 import {notebookAI,notebookPrompt,generateProofDiagram,type NotebookRequest} from '../src/ai';
 import {exampleProofScene} from '../src/geometry-proof-examples';
+import {resolveProofScene} from '../src/geometry-proof';
 import {geometryExamples} from '../src/geometry';
 import {imo1970PastedProblem,imo1970Scene,imo2019PastedProblem} from './fixtures/geometry-contests';
 import {imo2019Construction} from '../src/geometry-olympiad';
@@ -122,6 +123,17 @@ describe('proof diagram AI boundary',()=>{
     expect(second[0].text).toContain('does not satisfy perpendicular');expect(second[0].text).toContain(first[0].text);
     expect(second[0].text).toContain('Do not remove a failing relation');expect(second[1]).toEqual(first[1]);
     expect(mock.model).toHaveBeenCalledOnce();expect(mock.model.mock.calls[0][1].mode).toBe(InferenceMode.ONLY_ON_DEVICE);
+  });
+  it('repairs coincident free endpoints locally without discarding the other geometry',async()=>{
+    const scene=imo1970Scene();
+    scene.points.push({id:'R',kind:'free',xyz:[0,0,0]});
+    scene.edges.push({a:'D',b:'R'});
+    mock.generate.mockResolvedValueOnce(geometryResponse(scene));
+    const result=await generateProofDiagram('A spatial proof with an extra point R.','local',false,[image],signal());
+    const points=resolveProofScene(result.scene);
+    expect(points.get('D')).not.toEqual(points.get('R'));
+    expect(result.scene.relations).toEqual(scene.relations);
+    expect(mock.generate).toHaveBeenCalledOnce();
   });
   it('refuses corrections that delete constraints instead of fixing the drawing',async()=>{
     const omitted=invalidSpatial();omitted.relations=[];

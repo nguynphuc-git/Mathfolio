@@ -36,3 +36,23 @@ export function repairProofIncidences(input:ProofScene):ProofScene|undefined {
   if(!changed)return;
   try{return parseProofScene(JSON.stringify(scene));}catch{return;}
 }
+
+/** Separate coincident free endpoints only when the complete scene still validates. */
+export function repairZeroLengthProofEdge(input:ProofScene,error:unknown):ProofScene|undefined {
+  if(!(error instanceof Error))return;
+  const edge=input.edges.find(candidate=>error.message.includes(`edge ${candidate.a}${candidate.b} has zero length`));
+  if(!edge)return;
+  const offsets=[.25,-.25,.5,-.5,1,-1,2,-2];
+  for(const id of [edge.a,edge.b]){
+    const point=input.points.find(candidate=>candidate.id===id);
+    if(point?.kind!=='free'||!point.xyz)continue;
+    for(let axis=0;axis<(input.dimension==='2D'?2:3);axis++){
+      for(const offset of offsets){
+        const scene=structuredClone(input);
+        const moved=scene.points.find(candidate=>candidate.id===id)!;
+        moved.xyz![axis]+=offset;
+        try{return parseProofScene(JSON.stringify(scene));}catch{}
+      }
+    }
+  }
+}
