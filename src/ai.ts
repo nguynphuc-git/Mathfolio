@@ -170,6 +170,8 @@ export async function study(
 }
 export function friendlyError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
+  if (/500[\s\S]{0,240}(?:high demand|overload)|(?:high demand|experiencing high demand)/i.test(message))
+    return 'Cloud AI is temporarily overloaded. Wait a moment and retry, or switch to local AI.';
   if (/on-device ai is unavailable in this browser/i.test(message))
     return 'On-device AI is unavailable in this browser. Turn on Cloud AI to use Firebase AI, or try a supported browser and device.';
   if (/429|quota|resource.exhausted/i.test(message)) return 'Rate limit reached. Wait before retrying, or use local AI.';
@@ -179,6 +181,22 @@ export function friendlyError(error: unknown): string {
   if (/auth\/email-already-in-use/i.test(message)) return 'This email already has an account. Please sign in.';
   if (/auth\/network-request-failed/i.test(message)) return 'Cannot reach Authentication. Check the network or start your emulator.';
   return message;
+}
+
+async function retryCloudOverload<T>(request:()=>Promise<T>,signal:AbortSignal):Promise<T> {
+  try{return await request();}
+  catch(error){
+    const message=error instanceof Error?error.message:String(error);
+    if(!/500[\s\S]{0,240}(?:high demand|overload)|(?:high demand|experiencing high demand)/i.test(message))throw error;
+    await abortable(new Promise<void>(resolve=>setTimeout(resolve,800)),signal);
+    try{return await request();}
+    catch(retryError){
+      const retryMessage=retryError instanceof Error?retryError.message:String(retryError);
+      if(/500[\s\S]{0,240}(?:high demand|overload)|(?:high demand|experiencing high demand)/i.test(retryMessage))
+        throw new Error('Cloud AI is temporarily overloaded. Wait a moment and retry, or switch to local AI.');
+      throw retryError;
+    }
+  }
 }
 
 // Notebook calls retain the existing Firebase cloud/emulator separation.
@@ -370,10 +388,11 @@ export async function generateProofDiagram(statement:string, route:'local'|'clou
       ?`${prompt}\nYour previous response was not valid JSON. Return only one complete JSON object matching the requested diagram schema. Do not include markdown fences, explanations, or text outside the JSON object.`
       :prompt;
     const content=prepared.length?[{type:'text' as const,text:requestPrompt},...prepared]:requestPrompt;
-    const {response}=await abortable(model.generateContent(content,{signal}),signal).catch((error:unknown)=>{
+    const request=()=>abortable(model.generateContent(content,{signal}),signal).catch((error:unknown)=>{
       if(error instanceof Error&&error.name==='QuotaExceededError')throw new Error('This problem exceeds the local model’s input capacity. Try a shorter statement or one cropped illustration. You can also explicitly enable Cloud AI and retry.');
       throw error;
     });
+    const {response}=route==='cloud'?await retryCloudOverload(request,signal):await request();
     signal.throwIfAborted();
     if(response.candidates?.some(c=>c.finishReason==='MAX_TOKENS'))throw new Error('The diagram response was incomplete. Try one exercise at a time.');
     const text=response.text().trim();

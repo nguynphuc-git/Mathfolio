@@ -3,7 +3,7 @@ const mock=vi.hoisted(()=>({model:vi.fn(),initialize:vi.fn(),stream:vi.fn(),gene
 vi.mock('../src/firebase',()=>({getCloudFirebaseApp:()=>({})}));
 vi.mock('firebase/ai',async original=>({...await original<typeof import('firebase/ai')>(),getAI:()=>({}),getGenerativeModel:mock.model}));
 import {InferenceMode} from 'firebase/ai';
-import {notebookAI,notebookPrompt,generateProofDiagram,type NotebookRequest} from '../src/ai';
+import {notebookAI,notebookPrompt,generateProofDiagram,friendlyError,type NotebookRequest} from '../src/ai';
 import {exampleProofScene} from '../src/geometry-proof-examples';
 import {resolveProofScene} from '../src/geometry-proof';
 import {geometryExamples} from '../src/geometry';
@@ -84,7 +84,7 @@ it('solves a supported simple local equation without initializing or calling the
 describe('proof diagram AI boundary',()=>{
   const statement='Given a circle with two tangents from P, prove the tangent segments are equal.';
   const signal=()=>new AbortController().signal;
-  const valid=()=>({response:{text:()=>JSON.stringify(exampleProofScene(geometryExamples[0].statement)),inferenceSource:'ON_DEVICE',candidates:[]}});
+  const valid=(source='ON_DEVICE')=>({response:{text:()=>JSON.stringify(exampleProofScene(geometryExamples[0].statement)),inferenceSource:source,candidates:[]}});
   it('constructs built-in examples immediately without invoking a model',async()=>{
     const result=await generateProofDiagram(geometryExamples[0].statement,'local',false,[],signal());
     expect(result.source).toBe('local_construction');expect(result.showAuxiliary).toBe(false);expect(mock.model).not.toHaveBeenCalled();
@@ -186,6 +186,22 @@ describe('proof diagram AI boundary',()=>{
     await generateProofDiagram(statement,'cloud',true,[],signal());
     expect(mock.model.mock.calls[0][1].inCloudParams.generationConfig.responseMimeType).toBe('application/json');
     expect(mock.model.mock.calls[0][1].mode).toBe(InferenceMode.ONLY_IN_CLOUD);
+  });
+  it('retries a transient cloud high-demand error once without changing routes',async()=>{
+    mock.generate.mockRejectedValueOnce(new Error('AI/fetch-error: [500] This model is currently experiencing high demand. Please try again later.'));
+    mock.generate.mockResolvedValueOnce(valid('IN_CLOUD'));
+    const result=await generateProofDiagram(statement,'cloud',true,[],signal());
+    expect(result.scene.dimension).toBe('2D');
+    expect(result.source).toBe('IN_CLOUD');
+    expect(mock.generate).toHaveBeenCalledTimes(2);
+  });
+  it('shows a useful overload message when the cloud remains unavailable',async()=>{
+    const overload=new Error('AI/fetch-error: [500] This model is currently experiencing high demand.');
+    mock.generate.mockRejectedValue(overload);
+    await expect(generateProofDiagram(statement,'cloud',true,[],signal()))
+      .rejects.toThrow('Cloud AI is temporarily overloaded');
+    expect(friendlyError(overload)).toBe('Cloud AI is temporarily overloaded. Wait a moment and retry, or switch to local AI.');
+    expect(mock.generate).toHaveBeenCalledTimes(2);
   });
   it('explains local capacity errors without sending the problem to cloud',async()=>{
     mock.generate.mockRejectedValueOnce(new DOMException('The input is too large.','QuotaExceededError'));
