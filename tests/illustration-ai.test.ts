@@ -6,7 +6,8 @@ import {InferenceMode} from 'firebase/ai';
 import {notebookAI,notebookPrompt,generateProofDiagram,type NotebookRequest} from '../src/ai';
 import {exampleProofScene} from '../src/geometry-proof-examples';
 import {geometryExamples} from '../src/geometry';
-import {imo1970PastedProblem,imo1970Scene} from './fixtures/geometry-contests';
+import {imo1970PastedProblem,imo1970Scene,imo2019PastedProblem} from './fixtures/geometry-contests';
+import {imo2019Construction} from '../src/geometry-olympiad';
 import {mixedTextToLatex} from '../src/math-paste';
 const image={name:'triangle.png',data:'data:image/png;base64,AA=='};
 const base:NotebookRequest={purpose:'knowledge',statement:'2x+3=7',knowledge:'',hints:[],messages:[],question:'',route:'local',cloudAllowed:false,images:[image]};
@@ -97,6 +98,21 @@ describe('proof diagram AI boundary',()=>{
   });
   const geometryResponse=(scene:ReturnType<typeof imo1970Scene>)=>({response:{text:()=>JSON.stringify(scene),inferenceSource:'ON_DEVICE',candidates:[]}});
   const invalidSpatial=()=>{const scene=imo1970Scene();scene.points.find(p=>p.id==='C')!.xyz=[0,1,4];return scene;};
+  it('constructs the reported IMO 2019 problem directly from pasted text and LaTeX',async()=>{
+    for(const text of [imo2019PastedProblem,mixedTextToLatex(imo2019PastedProblem,true)]){
+      const result=await generateProofDiagram(text,'local',false,[],signal());
+      expect(result.scene.points.find(p=>p.id==='Q')?.kind).toBe('parallelIntersection');
+      expect(result.scene.circles).toEqual([]);expect(result.source).toBe('local_construction');
+    }
+    expect(mock.generate).not.toHaveBeenCalled();
+  });
+  it('repairs AI collinearity locally using the declared parallel line without a second model call',async()=>{
+    const scene=imo2019Construction();scene.points[6]={id:'Q',kind:'free',xyz:[-1,.9,0]};
+    mock.generate.mockResolvedValueOnce(geometryResponse(scene));
+    const result=await generateProofDiagram('A related triangle problem with renamed givens.','local',false,[image],signal());
+    expect(result.scene.points[6].kind).toBe('parallelIntersection');expect(result.scene.relations).toEqual(scene.relations);
+    expect(mock.generate).toHaveBeenCalledOnce();
+  });
   it('repairs invalid perpendicular coordinates once, retaining the problem and images on the same local route',async()=>{
     mock.generate.mockResolvedValueOnce(geometryResponse(invalidSpatial())).mockResolvedValueOnce(geometryResponse(imo1970Scene()));
     const result=await generateProofDiagram(imo1970PastedProblem,'local',false,[image],signal());

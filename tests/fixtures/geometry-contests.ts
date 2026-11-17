@@ -1,4 +1,9 @@
 import type {ProofScene} from '../../src/geometry-proof';
+export const imo2019PastedProblem=`Problem 2. In triangle ABC, point A1 lies on side BC and point B1 lies on side AC. Let P and Q
+be points on segments AA1 and BB1, respectively, such that P Q is parallel to AB. Let P1 be a point
+on line P B1, such that B1 lies strictly between P and P1, and ∠P P1C= ∠BAC. Similarly, let Q1
+be a point on line QA1, such that A1 lies strictly between Q and Q1, and ∠CQ1Q= ∠CBA.
+Prove that points P , Q, P1, and Q1 are concyclic.`;
 // Exact PDF text reported by the user, including flattened superscripts.
 export const imo1970PastedProblem=`In the tetrahedron ABCD, angle BDC is a right angle. Suppose that the
 foot H of the perpendicular from D to the plane ABC is the intersection of

@@ -1,0 +1,38 @@
+import {parseProofScene,resolveProofScene,type ProofScene,type ProofPoint} from './geometry-proof';
+
+/** Replace guessed line-bound points with dependent constructions. No givens or
+ * relations are removed; accept only if the entire scene validates afterwards. */
+export function repairProofIncidences(input:ProofScene):ProofScene|undefined {
+  const scene=structuredClone(input);
+  let changed=false;
+  for(let index=0;index<scene.points.length;index++){
+    const point=scene.points[index];if(point.kind!=='free')continue;
+    const earlier=new Set(scene.points.slice(0,index).map(p=>p.id));
+    const candidates=scene.relations.filter(r=>(r.kind==='collinear'||r.kind==='between')&&r.refs.includes(point.id))
+      .map(r=>r.refs.filter(id=>id!==point.id)).filter(refs=>refs.length===2&&refs.every(id=>earlier.has(id)));
+    const lines=[...new Map(candidates.map(refs=>[[...refs].sort().join(','),refs])).values()];
+    if(!lines.length)continue;
+    let construction:ProofPoint|undefined;
+    for(const r of scene.relations){
+      if(r.kind!=='parallel'||r.refs.filter(id=>id===point.id).length!==1)continue;
+      const [a,b,c,d]=r.refs;
+      const refs=(a===point.id||b===point.id)?[a===point.id?b:a,c,d,...lines[0]]:[c===point.id?d:c,a,b,...lines[0]];
+      if(refs.every(id=>earlier.has(id))){construction={id:point.id,kind:'parallelIntersection',refs};break;}
+    }
+    if(!construction&&lines.length>1)construction={id:point.id,kind:'intersection',refs:[...lines[0],...lines[1]]};
+    if(!construction){
+      // A projection determines the free parameter; dependencies are resolved
+      // before fitting, so earlier repairs propagate to this point too.
+      try{
+        const resolved=resolveProofScene({...scene,points:scene.points.slice(0,index),circles:scene.circles.filter(c=>earlier.has(c.center)&&earlier.has(c.through)),edges:[],relations:[],faces:[]});
+        const [a,b]=lines[0].map(id=>resolved.get(id)!);if(!a||!b)continue;
+        const direction=b.map((x,i)=>x-a[i]),den=direction.reduce((s,x)=>s+x*x,0);if(den<1e-10)continue;
+        const t=direction.reduce((s,x,i)=>s+x*(point.xyz![i]-a[i]),0)/den;
+        construction={id:point.id,kind:'onLine',refs:lines[0],t};
+      }catch{continue;}
+    }
+    scene.points[index]={...construction,...(point.auxiliary!==undefined?{auxiliary:point.auxiliary}:{})};changed=true;
+  }
+  if(!changed)return;
+  try{return parseProofScene(JSON.stringify(scene));}catch{return;}
+}
