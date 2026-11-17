@@ -171,11 +171,12 @@ export default function App() {
   async function createGeometryDiagram() {
     if(blocked||activeAI.current||!ready)return;
     const version=epoch.current,id=draft.id;
-    if((draft.knowledge||draft.hints.length||draft.messages.length)&&!await confirmChange({title:'Build a new proof diagram?',description:'The new construction plan will replace the diagram and clear earlier AI guidance so new hints use the same plan. Your problem, notes and images stay.',action:'Build diagram'}))return;
-    if(version!==epoch.current||activeAI.current)return;
+    const hasGuidance=!!(draft.knowledge||draft.hints.length||draft.messages.length);
     const operation={controller:new AbortController(),status,error};activeAI.current=operation;
     const current=()=>activeAI.current===operation&&epoch.current===version&&!operation.controller.signal.aborted;
-    setDiagramBusy(true);setError('');setStatus('Reading hypotheses and constructing the diagram…');
+    setDiagramBusy(true);setError('');setStatus(hasGuidance
+      ?'Rebuilding diagram… Existing guidance will be replaced only if the new diagram succeeds.'
+      :'Reading hypotheses and constructing the diagram…');
     try{
       const diagram=await generateProofDiagram(draft.statement,cloudAllowed&&online?'cloud':'local',cloudAllowed&&online,illustrations,operation.controller.signal);
       if(!current())return;

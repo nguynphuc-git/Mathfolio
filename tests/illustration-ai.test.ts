@@ -135,6 +135,24 @@ describe('proof diagram AI boundary',()=>{
     expect(result.scene.relations).toEqual(scene.relations);
     expect(mock.generate).toHaveBeenCalledOnce();
   });
+  it('repairs a parallel guessed intersection from model coordinates without dropping other constraints',async()=>{
+    const scene={
+      dimension:'2D' as const,givens:['Lines AB and CD meet at X.'],goal:'Locate X.',
+      points:[
+        {id:'A',kind:'free' as const,xyz:[0,0,0] as [number,number,number]},
+        {id:'B',kind:'free' as const,xyz:[1,0,0] as [number,number,number]},
+        {id:'C',kind:'free' as const,xyz:[0,1,0] as [number,number,number]},
+        {id:'D',kind:'free' as const,xyz:[1,1,0] as [number,number,number]},
+        {id:'X',kind:'intersection' as const,refs:['A','B','C','D']}
+      ],
+      circles:[],edges:[],relations:[],constructions:[],unresolved:[]
+    };
+    mock.generate.mockResolvedValueOnce({response:{text:()=>JSON.stringify(scene),inferenceSource:'ON_DEVICE',candidates:[]}});
+    const result=await generateProofDiagram('A geometry problem with lines and an intersection.','local',false,[image],signal());
+    expect(resolveProofScene(result.scene).has('X')).toBe(true);
+    expect(result.scene.givens).toEqual(scene.givens);
+    expect(mock.generate).toHaveBeenCalledOnce();
+  });
   it('refuses corrections that delete constraints instead of fixing the drawing',async()=>{
     const omitted=invalidSpatial();omitted.relations=[];
     mock.generate.mockResolvedValueOnce(geometryResponse(invalidSpatial())).mockResolvedValueOnce(geometryResponse(omitted));

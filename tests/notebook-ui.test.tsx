@@ -834,6 +834,26 @@ describe('workspace comfort and English guide',()=>{
     await type('[aria-label="Problem statement"]','Prove that ABCD is cyclic.');
     expect(button('Create diagram').disabled).toBe(false);
   });
+  it('rebuilds a diagram without an extra confirmation and clears old guidance only on success',async()=>{
+    await openWorkspace();
+    expect(host.textContent).toContain('Original essentials');
+    expect(host.textContent).toContain('Original hint');
+    await click('Create diagram');
+    expect(host.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(mocks.diagram).toHaveBeenCalledOnce();
+    expect(host.textContent).not.toContain('Original essentials');
+    expect(host.textContent).not.toContain('Original hint');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe(String.raw`\text{Original notes}`);
+    expect(host.querySelector('.proof-board')).not.toBeNull();
+  });
+  it('keeps existing guidance when diagram regeneration fails',async()=>{
+    await openWorkspace();mocks.diagram.mockRejectedValueOnce(new Error('Could not construct a valid diagram.'));
+    await click('Create diagram');
+    expect(host.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(host.textContent).toContain('Original essentials');
+    expect(host.textContent).toContain('Original hint');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not construct a valid diagram.');
+  });
   it('shares a construction plan with hints and reveals auxiliary lines at level two',async()=>{
     await type('[aria-label="Problem statement"]',geometryExamples[0].statement);await click('Create diagram');
     const board=host.querySelector<HTMLElement>('.proof-board')!;

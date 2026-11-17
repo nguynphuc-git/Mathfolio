@@ -56,3 +56,28 @@ export function repairZeroLengthProofEdge(input:ProofScene,error:unknown):ProofS
     }
   }
 }
+
+/** Nudge only free sketch coordinates used by a failed intersection; keep a
+ * candidate only when the complete scene, including every relation, validates. */
+export function repairDegenerateProofIntersection(input:ProofScene,error:unknown):ProofScene|undefined {
+  if(!(error instanceof Error))return;
+  const match=/intersection for point ([A-Za-z][A-Za-z0-9_']{0,11}) has (?:parallel or degenerate|skew) lines/.exec(error.message);
+  if(!match)return;
+  const intersection=input.points.find(point=>point.id===match[1]);
+  if(!intersection||!['intersection','parallelIntersection'].includes(intersection.kind))return;
+  const candidates=(intersection.refs??[])
+    .map(id=>input.points.find(point=>point.id===id))
+    .filter((point):point is ProofPoint=>point?.kind==='free'&&!!point.xyz)
+    .sort((a,b)=>Number(!!b.auxiliary)-Number(!!a.auxiliary));
+  const offsets=[.1,-.1,.25,-.25,.5,-.5,1,-1,2,-2];
+  for(const point of candidates){
+    for(let axis=0;axis<(input.dimension==='2D'?2:3);axis++){
+      for(const offset of offsets){
+        const scene=structuredClone(input);
+        const moved=scene.points.find(candidate=>candidate.id===point.id)!;
+        moved.xyz![axis]+=offset;
+        try{return parseProofScene(JSON.stringify(scene));}catch{}
+      }
+    }
+  }
+}

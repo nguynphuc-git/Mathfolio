@@ -6,7 +6,7 @@ import { linearHelp, localAnswerGuidance, type ResponseStyle } from './local-tut
 import { geometryHelp, geometryPromptContext } from './geometry';
 import { parseProofScene, proofDiagramPrompt, ProofSceneFormatError, ProofSceneGeometryError, proofRepairPrompt, assertProofRepairPreservesGivens } from './geometry-proof';
 import {exampleProofScene} from './geometry-proof-examples';
-import {repairProofIncidences,repairZeroLengthProofEdge} from './geometry-incidence';
+import {repairDegenerateProofIntersection,repairProofIncidences,repairZeroLengthProofEdge} from './geometry-incidence';
 import {hasEditorContent} from './math-input';
 import {hintProblems,scopedHint} from './hint-problems';
 import { stripProblemLayout } from './problem-text';
@@ -403,7 +403,9 @@ export async function generateProofDiagram(statement:string, route:'local'|'clou
       return {scene,statement,source:response.inferenceSource??(route==='cloud'?'in_cloud':'on_device'),showAuxiliary:false};
     }catch(error){
       if(error instanceof ProofSceneGeometryError){
-        const repaired=repairProofIncidences(error.scene)??repairZeroLengthProofEdge(error.scene,error);
+        const repaired=repairProofIncidences(error.scene)
+          ??repairZeroLengthProofEdge(error.scene,error)
+          ??repairDegenerateProofIntersection(error.scene,error);
         if(repaired){
           if(correction)assertProofRepairPreservesGivens(correction.scene,repaired);
           return {scene:repaired,statement,source:response.inferenceSource??(route==='cloud'?'in_cloud':'on_device'),showAuxiliary:false};

@@ -1,8 +1,8 @@
 import {describe,it,expect} from 'vitest';
 import {imo2019Construction} from '../src/geometry-olympiad';
 import {exampleProofScene} from '../src/geometry-proof-examples';
-import {parseProofScene,resolveProofScene} from '../src/geometry-proof';
-import {repairProofIncidences,repairZeroLengthProofEdge} from '../src/geometry-incidence';
+import {parseProofScene,resolveProofScene,type ProofScene} from '../src/geometry-proof';
+import {repairDegenerateProofIntersection,repairProofIncidences,repairZeroLengthProofEdge} from '../src/geometry-incidence';
 import {mixedTextToLatex} from '../src/math-paste';
 import {imo1970Scene,imo2019PastedProblem} from './fixtures/geometry-contests';
 
@@ -54,6 +54,40 @@ describe('dependent incidence constructions',()=>{
     expect(resolveProofScene(repaired).get('D')).not.toEqual(resolveProofScene(repaired).get('R'));
     expect(repaired.relations).toEqual(scene.relations);
     expect(scene.points.find(point=>point.id==='R')?.xyz).toEqual([0,0,0]);
+  });
+  it('repairs parallel guessed intersection lines while preserving every declared relation',()=>{
+    const scene:ProofScene={
+      dimension:'2D',givens:['Lines AB and CD meet at X.'],goal:'Locate X.',
+      points:[
+        {id:'A',kind:'free',xyz:[0,0,0]},{id:'B',kind:'free',xyz:[1,0,0]},
+        {id:'C',kind:'free',xyz:[0,1,0]},{id:'D',kind:'free',xyz:[1,1,0]},
+        {id:'X',kind:'intersection',refs:['A','B','C','D']}
+      ],
+      circles:[],edges:[],relations:[],constructions:[],unresolved:[]
+    };
+    let error:unknown;
+    try{parseProofScene(JSON.stringify(scene));}catch(caught){error=caught;}
+    expect(error).toBeInstanceOf(Error);
+    const repaired=repairDegenerateProofIntersection(scene,error)!;
+    expect(repaired).toBeDefined();
+    expect(resolveProofScene(repaired).has('X')).toBe(true);
+    expect(repaired.relations).toEqual(scene.relations);
+    expect(scene.points[2].xyz).toEqual([0,1,0]);
+  });
+  it('does not alter coordinates to bypass an explicitly given parallel relation',()=>{
+    const scene:ProofScene={
+      dimension:'2D',givens:['AB is parallel to CD.'],goal:'Find their intersection.',
+      points:[
+        {id:'A',kind:'free',xyz:[0,0,0]},{id:'B',kind:'free',xyz:[1,0,0]},
+        {id:'C',kind:'free',xyz:[0,1,0]},{id:'D',kind:'free',xyz:[1,1,0]},
+        {id:'X',kind:'intersection',refs:['A','B','C','D']}
+      ],
+      circles:[],edges:[],relations:[{kind:'parallel',refs:['A','B','C','D'],source:'AB is parallel to CD'}],
+      constructions:[],unresolved:[]
+    };
+    let error:unknown;
+    try{parseProofScene(JSON.stringify(scene));}catch(caught){error=caught;}
+    expect(repairDegenerateProofIntersection(scene,error)).toBeUndefined();
   });
   it('enforces point order and angle conditions and rejects malformed line parameters',()=>{
     const outside=imo2019Construction();outside.points[3].t=1.2;
