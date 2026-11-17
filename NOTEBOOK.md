@@ -1,3 +1,13 @@
+## Dark editors, temporary menus and the sign-in background
+
+- The workspace toolbar separates content tools on the left from a right-aligned Exercise actions group: New exercise, Focus mode, Save exercise and the Cloud AI switch. Narrow layouts wrap while retaining right alignment of the action group.
+- Dark mode now covers the shared MathLive surface/host used by Problem, Notes and Chat, including caret, selection, placeholders and composition. The editor surface is a lighter muted dark shade. More symbols, the notes keyboard toggle, the floating symbol drawer and its sticky header/categories also follow dark colors. Compact saved math keeps a transparent surface.
+- Appearance, Study options and Add content are temporary disclosures: outside pointer/focus dismisses them, and Escape closes them with focus returned to their summary. The independent draggable math palette retains its explicit-close behavior.
+- Appearance choices and Local answer style use a shared custom selection menu: rounded surface, selected pill/check, hover state, keyboard arrows/Home/End/typeahead, Enter selection, Escape cancellation and Tab dismissal. Fixed-position portalled options fit above or below their trigger and track viewport/scroll changes; selecting inside them does not dismiss the parent disclosure. Existing appearance preference keys and answer-style routing are preserved.
+- The signed-out page has slow drifting mathematical symbols and soft background halos, with a translucent login card. The decoration is aria-hidden, ignores pointers, does not modify form data, and stops animating under prefers-reduced-motion. It is absent from the signed-in workspace and the usage guide.
+
+Validation includes temporary-disclosure/portal boundaries, keyboard selection/cancellation, disabled and unmounted cleanup, appearance persistence, right-group structure, draft preservation, and unchanged login values during theme changes. Existing editor/keyboard and application regressions remain covered. Physical Chrome geometry, colors and animation feel remain visual acceptance items; a browser binary is not available in this workspace.
+
 ## Pastel folder colors and separated header
 
 - Integrated upstream library/search, reader appearance and guided geometry changes before applying this update.

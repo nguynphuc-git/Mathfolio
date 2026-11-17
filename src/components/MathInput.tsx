@@ -35,7 +35,7 @@ export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({v
       .ML__content > .ML__latex > .ML__base { display:block!important; width:auto!important; white-space:normal!important; overflow-wrap:anywhere; line-height:1.45; }
       .ML__content > .ML__latex > .ML__base .ML__text { white-space:pre-wrap!important; overflow-wrap:break-word; }
       .ML__content > .ML__latex > .ML__base .mathfolio-line { display:block!important; width:auto!important; white-space:normal!important; min-height:1.45em; margin:0 0 .2em; }
-      .ML__content-placeholder { position:absolute; top:0; left:0; }
+      .ML__content-placeholder { position:absolute; top:0; left:0; color:var(--editor-placeholder,#788c7d); }
     `;
     const installStyle=()=>{if(!flowStyle.isConnected)field.shadowRoot?.appendChild(flowStyle);};
     field.addEventListener('mount',installStyle);

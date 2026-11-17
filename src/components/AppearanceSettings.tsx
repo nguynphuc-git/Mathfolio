@@ -1,4 +1,5 @@
 import {useId} from 'react';
+import {SelectMenu} from './SelectMenu';
 import type {AppearanceController, AppearancePreferences} from '../appearance';
 
 export function AppearanceSettings({appearance}: {appearance: AppearanceController}) {
@@ -7,31 +8,11 @@ export function AppearanceSettings({appearance}: {appearance: AppearanceControll
   return <section className="appearance-settings" aria-label="Appearance settings">
     <p className="subtle" id={`${id}-help`}>Make your reading space comfortable. Math keeps its standard notation.</p>
     <div className="appearance-options">
-      <label htmlFor={`${id}-theme`}>Theme
-        <select id={`${id}-theme`} value={preferences.theme} onChange={event => updateAppearance({theme: event.target.value as AppearancePreferences['theme']})}>
-          <option value="system">System setting</option><option value="light">Light</option><option value="dark">Dark</option>
-        </select>
-      </label>
-      <label htmlFor={`${id}-background`}>Page color
-        <select id={`${id}-background`} value={preferences.background} onChange={event => updateAppearance({background: event.target.value as AppearancePreferences['background']})}>
-          <option value="paper">Paper</option><option value="sage">Sage</option><option value="blue">Sky</option><option value="rose">Rose</option>
-        </select>
-      </label>
-      <label htmlFor={`${id}-font`}>Reading font
-        <select id={`${id}-font`} aria-describedby={`${id}-help`} value={preferences.font} onChange={event => updateAppearance({font: event.target.value as AppearancePreferences['font']})}>
-          <option value="sans">Sans serif</option><option value="serif">Book serif</option>
-        </select>
-      </label>
-      <label htmlFor={`${id}-ink`}>Text color
-        <select id={`${id}-ink`} value={preferences.textColor} onChange={event => updateAppearance({textColor: event.target.value as AppearancePreferences['textColor']})}>
-          <option value="default">Default</option><option value="blue">Blue</option><option value="plum">Plum</option>
-        </select>
-      </label>
-      <label htmlFor={`${id}-alignment`}>Text alignment
-        <select id={`${id}-alignment`} value={preferences.alignment} onChange={event => updateAppearance({alignment: event.target.value as AppearancePreferences['alignment']})}>
-          <option value="left">Left</option><option value="justify">Justified</option>
-        </select>
-      </label>
+      <div className="appearance-field"><span>Theme</span><SelectMenu<AppearancePreferences['theme']> id={`${id}-theme`} label="Theme" value={preferences.theme} options={[{value:'system',label:'System setting'},{value:'light',label:'Light'},{value:'dark',label:'Dark'}]} onChange={theme=>updateAppearance({theme})}/></div>
+      <div className="appearance-field"><span>Page color</span><SelectMenu<AppearancePreferences['background']> id={`${id}-background`} label="Page color" value={preferences.background} options={[{value:'paper',label:'Paper'},{value:'sage',label:'Sage'},{value:'blue',label:'Sky'},{value:'rose',label:'Rose'}]} onChange={background=>updateAppearance({background})}/></div>
+      <div className="appearance-field"><span>Reading font</span><SelectMenu<AppearancePreferences['font']> id={`${id}-font`} label="Reading font" describedBy={`${id}-help`} value={preferences.font} options={[{value:'sans',label:'Sans serif'},{value:'serif',label:'Book serif'}]} onChange={font=>updateAppearance({font})}/></div>
+      <div className="appearance-field"><span>Text color</span><SelectMenu<AppearancePreferences['textColor']> id={`${id}-ink`} label="Text color" value={preferences.textColor} options={[{value:'default',label:'Default'},{value:'blue',label:'Blue'},{value:'plum',label:'Plum'}]} onChange={textColor=>updateAppearance({textColor})}/></div>
+      <div className="appearance-field"><span>Text alignment</span><SelectMenu<AppearancePreferences['alignment']> id={`${id}-alignment`} label="Text alignment" value={preferences.alignment} options={[{value:'left',label:'Left'},{value:'justify',label:'Justified'}]} onChange={alignment=>updateAppearance({alignment})}/></div>
       <div className="appearance-size">
         <label htmlFor={`${id}-size`}>Reading size <output htmlFor={`${id}-size`}>{preferences.textSize}px</output></label>
         <input id={`${id}-size`} type="range" min="14" max="24" step="1" value={preferences.textSize} aria-valuetext={`${preferences.textSize} pixels`} onChange={event => updateAppearance({textSize: Number(event.target.value)})}/>

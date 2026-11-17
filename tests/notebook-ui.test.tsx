@@ -5,13 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NotebookRequest } from '../src/ai';
 import type { Answer, Notebook } from '../src/notebook';
 
-const mocks = vi.hoisted(() => ({ values: new Map<string, unknown>(), ai: vi.fn(), diagram:vi.fn(), imageCloud: vi.fn(), imageLocal: vi.fn(), readAttachment: vi.fn(), write: vi.fn(), pdf: vi.fn(), pdfPreview: vi.fn(), prepareImage: vi.fn(), readImage: vi.fn(), insert: vi.fn() }));
+const mocks = vi.hoisted(() => ({ values: new Map<string, unknown>(),signedIn:true, ai: vi.fn(), diagram:vi.fn(), imageCloud: vi.fn(), imageLocal: vi.fn(), readAttachment: vi.fn(), write: vi.fn(), pdf: vi.fn(), pdfPreview: vi.fn(), prepareImage: vi.fn(), readImage: vi.fn(), insert: vi.fn() }));
 vi.mock('idb-keyval', () => ({ get: vi.fn(async (key: string) => structuredClone(mocks.values.get(key))), del: async (key: string) => { mocks.values.delete(key); }, set: async (key: string, value: unknown) => { mocks.write(key, value); mocks.values.set(key, structuredClone(value)); } }));
 vi.mock('../src/notebook', async () => ({ ...(await vi.importActual<typeof import('../src/notebook')>('../src/notebook')), readAttachment: mocks.readAttachment }));
 vi.mock('../src/firebase', () => ({ getFirebaseApp: () => ({}) }));
 vi.mock('firebase/auth', () => ({
   getAuth: () => ({ app: { options: { projectId: 'test' } } }),
-  onAuthStateChanged: (_: unknown, callback: (value: unknown) => void) => { callback({ uid: 'alice', email: 'alice@example.test' }); return () => {}; },
+  onAuthStateChanged: (_: unknown, callback: (value: unknown) => void) => { callback(mocks.signedIn?{ uid: 'alice', email: 'alice@example.test' }:null); return () => {}; },
   createUserWithEmailAndPassword: vi.fn(), signInWithEmailAndPassword: vi.fn(), signOut: vi.fn()
 }));
 vi.mock('../src/ai', () => ({
@@ -62,6 +62,7 @@ beforeEach(async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   localStorage.removeItem('mathfolio-appearance-v1');
+  mocks.signedIn=true;
   mocks.diagram.mockReset().mockImplementation(async(statement:string)=>({statement,scene:exampleProofScene(geometryExamples[0].statement)!,source:'local_construction',showAuxiliary:false}));
   mocks.ai.mockReset(); mocks.imageCloud.mockReset(); mocks.imageLocal.mockReset(); mocks.readAttachment.mockReset(); mocks.insert.mockReset(); mocks.write.mockReset(); mocks.pdf.mockReset(); mocks.pdfPreview.mockReset(); mocks.values.clear();
   mocks.prepareImage.mockReset().mockResolvedValue({ data: 'data:image/jpeg;base64,AA==', name: 'problem.jpg' });
@@ -76,6 +77,29 @@ beforeEach(async () => {
   await act(async () => { root.render(<App/>); });
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+describe('workspace menus and login backdrop',()=>{
+  it('dismisses temporary tools outside while preserving typed notes and the chosen appearance',async()=>{
+    await type('[aria-label="Notes"]','Keep my draft');const study=host.querySelector<HTMLDetailsElement>('.study-options')!,appearance=host.querySelector<HTMLDetailsElement>('.appearance-disclosure')!;
+    await act(async()=>study.querySelector<HTMLElement>('summary')!.click());expect(study.open).toBe(true);
+    const summary=appearance.querySelector<HTMLElement>('summary')!;await act(async()=>{summary.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));summary.click();});expect(study.open).toBe(false);expect(appearance.open).toBe(true);
+    await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Theme"]')!.click());await act(async()=>[...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(option=>option.textContent?.startsWith('Dark'))!.click());
+    expect(appearance.open).toBe(true);expect(document.documentElement.dataset.theme).toBe('dark');
+    await act(async()=>host.querySelector<HTMLElement>('.notes')!.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true})));expect(appearance.open).toBe(false);expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe('Keep my draft');
+  });
+  it('keeps the four main actions in their own group with content tools separate',()=>{
+    const actions=host.querySelector('[aria-label="Exercise actions"]')!;
+    expect(actions.contains(button('＋ New exercise'))).toBe(true);expect(actions.contains(button('Focus mode'))).toBe(true);expect(actions.contains(button('Save exercise'))).toBe(true);expect(actions.querySelector('[role="switch"]')).not.toBeNull();
+    expect(actions.querySelector('.study-options')).toBeNull();expect(host.querySelector('.workspace-tools .study-options')).not.toBeNull();
+  });
+  it('shows decorative mathematics only on the signed-out page without changing login input',async()=>{
+    mocks.signedIn=false;await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));
+    const backdrop=host.querySelector('.login-math-backdrop')!;expect(backdrop.getAttribute('aria-hidden')).toBe('true');expect(backdrop.querySelectorAll('span')).toHaveLength(16);expect(backdrop.querySelector('button,input,a')).toBeNull();
+    await type('input[type="email"]','learner@example.test');await type('input[type="password"]','sample-password');await act(async()=>host.querySelector<HTMLElement>('.appearance-disclosure summary')!.click());await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Theme"]')!.click());
+    await act(async()=>[...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(option=>option.textContent?.startsWith('Dark'))!.click());
+    expect(host.querySelector<HTMLInputElement>('input[type="email"]')!.value).toBe('learner@example.test');expect(host.querySelector<HTMLInputElement>('input[type="password"]')!.value).toBe('sample-password');expect(mocks.ai).not.toHaveBeenCalled();
+  });
+});
 
 describe('pastel folder colors',()=>{
   async function reload(){await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));}
@@ -784,18 +808,16 @@ describe('workspace comfort and English guide',()=>{
     expect(mocks.ai).not.toHaveBeenCalled();
   });
   it('passes answer style to new local requests',async()=>{
-    const select=host.querySelector<HTMLSelectElement>('[aria-label="Local answer style"]')!;
-    await act(async()=>{select.value='brief';select.dispatchEvent(new Event('change',{bubbles:true}));});
+    await act(async()=>host.querySelector<HTMLElement>('.study-options summary')!.click());
+    await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Local answer style"]')!.click());
+    await act(async()=>[...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(item=>item.textContent?.includes('Brief'))!.click());
     await type('[aria-label="Problem statement"]','2x+3=7');mocks.ai.mockResolvedValue({text:'Formula',source:'on_device'});
     await click('Confirm & analyze');expect(mocks.ai.mock.calls[0][0]).toMatchObject({responseStyle:'brief',route:'local'});
   });
   it('applies and persists reading appearance preferences',async()=>{
     await act(async()=>{host.querySelector<HTMLElement>('.appearance-disclosure summary')!.click();});
-    const selects=host.querySelectorAll<HTMLSelectElement>('.appearance-settings select');
-    await act(async()=>{selects[0].value='dark';selects[0].dispatchEvent(new Event('change',{bubbles:true}));});
-    await act(async()=>{selects[2].value='serif';selects[2].dispatchEvent(new Event('change',{bubbles:true}));});
-    await act(async()=>{selects[3].value='blue';selects[3].dispatchEvent(new Event('change',{bubbles:true}));});
-    await act(async()=>{selects[4].value='justify';selects[4].dispatchEvent(new Event('change',{bubbles:true}));});
+    async function choose(label:string,option:string){await act(async()=>host.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click());await act(async()=>[...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(item=>item.textContent?.trim().startsWith(option))!.click());}
+    await choose('Theme','Dark');await choose('Reading font','Book serif');await choose('Text color','Blue');await choose('Text alignment','Justified');
     await type('.appearance-size input','19');
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(document.documentElement.dataset.readingFont).toBe('serif');

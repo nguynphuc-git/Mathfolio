@@ -31,6 +31,10 @@ import './appearance.css';
 import './folder-colors.css';
 import {useAppearance} from './appearance';
 import {AppearanceSettings} from './components/AppearanceSettings';
+import {MenuDisclosure} from './components/MenuDisclosure';
+import {SelectMenu} from './components/SelectMenu';
+import {LoginBackdrop} from './components/LoginBackdrop';
+import './workspace-ui.css';
 import {GeometryDiagramEditor} from './components/GeometryDiagramEditor';
 import {LatexMessage} from './components/LatexMessage';
 import { UsageGuide } from './components/UsageGuide';
@@ -584,10 +588,11 @@ export default function App() {
     };
     window.addEventListener('keydown',keydown);return()=>window.removeEventListener('keydown',keydown);
   });
-  return <MathKeyboardProvider><main className="notebook-app" style={{'--problem-font-size':`${mathSize}px`} as React.CSSProperties} inert={!!confirmation || !!preview || pdfQuestions !== null || !!imageProblem || !!viewingImage}>
+  return <MathKeyboardProvider><main className={`notebook-app${!user&&tab!=='guide'?' login-page':''}`} style={{'--problem-font-size':`${mathSize}px`} as React.CSSProperties} inert={!!confirmation || !!preview || pdfQuestions !== null || !!imageProblem || !!viewingImage}>
+    {!user&&tab!=='guide'&&<LoginBackdrop/>}
     <header className="notebook-header"><a className="brand" href="#" onClick={e => { e.preventDefault(); setTab('solve'); }}><span className="brand-mark" aria-hidden="true">Σ</span><span>Mathfolio<small>YOUR DIGITAL EXERCISE BOOK</small></span></a>
       <nav aria-label="Navigation"><button aria-current={tab === 'solve' ? 'page' : undefined} className={tab === 'solve' ? 'active' : ''} onClick={() => setTab('solve')}>Workspace</button><button aria-current={tab === 'library' ? 'page' : undefined} className={tab === 'library' ? 'active' : ''} onClick={() => setTab('library')}>Exercise library <span>{book.exercises.length}</span></button><button aria-current={tab === 'guide' ? 'page' : undefined} className={tab === 'guide' ? 'active' : ''} onClick={() => setTab('guide')}>How to use</button><button aria-current={tab === 'account' ? 'page' : undefined} className={tab === 'account' ? 'active' : ''} onClick={() => setTab('account')}>{user ? 'Account' : 'Sign in'}</button></nav>
-      <details className="appearance-disclosure"><summary>◐ <span>Appearance</span></summary><AppearanceSettings appearance={appearance}/></details>
+      <MenuDisclosure className="appearance-disclosure"><summary>◐ <span>Appearance</span></summary><AppearanceSettings appearance={appearance}/></MenuDisclosure>
     </header>
     <div className="connection"><span className={online ? 'dot online' : 'dot'} />{online ? 'Online' : 'Offline'}<span>·</span><span>Notebook storage: this device · Cloud sync unavailable</span></div>
     {error && <p role="alert" className="notice error">{error}</p>}
@@ -606,17 +611,19 @@ export default function App() {
     {user && ready && tab === 'solve' && <>
       <div className="page-heading workspace-heading"><div><p className="eyebrow">WORKSPACE / {draft.title || 'NEW EXERCISE'}</p><h1>{draft.title || 'One problem. One discovery.'}</h1><p>Read it. Try it. Open a hint when you need one.</p></div></div>
       <div className="workspace-toolbar">
-        <div className="workspace-actions">
-          <div className="row"><span className={`save-state ${dirty?'draft':'saved'}`} role="status">{dirty ? draftSave==='saved'?`Draft saved · ${new Date(draftSavedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`:draftSave==='saving'?'Saving draft…':'Unsaved changes' : savedDraft?'Saved on this device':'New exercise'}</span>
+        <div className="workspace-tools">
+            <MenuDisclosure className="tool-disclosure"><summary>Add content</summary><div className="tool-content import-actions"><label className="attachment-button pdf-upload-button">＋ Choose PDF<input aria-label="Choose a PDF" type="file" accept="application/pdf,.pdf" disabled={blocked} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void loadPdf(file);}}/></label><label className="attachment-button">＋ Read image<input aria-label="Read a problem image" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void loadImage(file);}}/></label>
+</div></MenuDisclosure>
+            <MenuDisclosure className="tool-disclosure study-options"><summary>Study options</summary><div className="tool-content"><div className="study-style-field"><span>Local answer style</span><SelectMenu<ResponseStyle> label="Local answer style" disabled={blocked} value={responseStyle} options={[{value:'auto',label:'Auto',description:'Match the problem'},{value:'brief',label:'Brief',description:'Essential steps'},{value:'explained',label:'Explained',description:'Why each step works'}]} onChange={setResponseStyle}/><small>Applies to new local solutions and chat. Hints stay gradual.</small></div><div className="problem-size-control"><span>Problem text size</span><div className="math-zoom" role="group" aria-label="Math size"><button type="button" aria-label="Decrease math size" disabled={mathSize<=14} onClick={()=>setMathSize(size=>Math.max(14,size-1))}>A−</button><span>{mathSize}</span><button type="button" aria-label="Increase math size" disabled={mathSize>=23} onClick={()=>setMathSize(size=>Math.min(23,size+1))}>A+</button></div></div>{savedDraft&&<button disabled={blocked} onClick={()=>beginSave(true)}>Name / folders</button>}<p className="subtle">Focus mode keeps only your problem and working notes. Keyboard shortcuts are in How to use.</p></div></MenuDisclosure>
+        </div>
+        <div className="workspace-actions" role="group" aria-label="Exercise actions">
+          <span className={`save-state ${dirty?'draft':'saved'}`} role="status">{dirty ? draftSave==='saved'?`Draft saved · ${new Date(draftSavedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`:draftSave==='saving'?'Saving draft…':'Unsaved changes' : savedDraft?'Saved on this device':'New exercise'}</span>
+          <div className="row">
           <button disabled={blocked} onClick={()=>changeExercise(newExercise())}>＋ New exercise</button>
           <button type="button" className="focus-button" aria-pressed={focusMode} onClick={()=>setFocusMode(value=>!value)}>{focusMode?'Exit focus mode':'Focus mode'}</button>
-          <button title="Save exercise (Ctrl+S)" className="primary" disabled={blocked||!hasEditorContent(draft.statement)} onClick={()=>beginSave()}>Save exercise {dirty?'•':''}</button></div>
-          <div className="workspace-secondary">
-            <details className="tool-disclosure"><summary>Add content</summary><div className="tool-content import-actions"><label className="attachment-button pdf-upload-button">＋ Choose PDF<input aria-label="Choose a PDF" type="file" accept="application/pdf,.pdf" disabled={blocked} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void loadPdf(file);}}/></label><label className="attachment-button">＋ Read image<input aria-label="Read a problem image" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void loadImage(file);}}/></label>
-</div></details>
-            <details className="tool-disclosure study-options"><summary>Study options</summary><div className="tool-content"><label>Local answer style<select aria-label="Local answer style" disabled={blocked} value={responseStyle} onChange={e=>setResponseStyle(e.target.value as ResponseStyle)}><option value="auto">Auto · match the problem</option><option value="brief">Brief · essential steps</option><option value="explained">Explained · why each step works</option></select><small>Applies to new local solutions and chat. Hints stay gradual.</small></label><div className="problem-size-control"><span>Problem text size</span><div className="math-zoom" role="group" aria-label="Math size"><button type="button" aria-label="Decrease math size" disabled={mathSize<=14} onClick={()=>setMathSize(size=>Math.max(14,size-1))}>A−</button><span>{mathSize}</span><button type="button" aria-label="Increase math size" disabled={mathSize>=23} onClick={()=>setMathSize(size=>Math.min(23,size+1))}>A+</button></div></div>{savedDraft&&<button disabled={blocked} onClick={()=>beginSave(true)}>Name / folders</button>}<p className="subtle">Focus mode keeps only your problem and working notes. Keyboard shortcuts are in How to use.</p></div></details>
-            <button className="cloud-switch" role="switch" aria-checked={cloudAllowed} aria-label="Cloud AI" disabled={blocked} onClick={()=>void toggleCloud()}><span className="switch-track" aria-hidden="true"><span/></span>Cloud AI <strong>{cloudAllowed?'On':'Off'}</strong></button>
+          <button title="Save exercise (Ctrl+S)" className="primary" disabled={blocked||!hasEditorContent(draft.statement)} onClick={()=>beginSave()}>Save exercise {dirty?'•':''}</button>
           </div>
+            <button className="cloud-switch" role="switch" aria-checked={cloudAllowed} aria-label="Cloud AI" disabled={blocked} onClick={()=>void toggleCloud()}><span className="switch-track" aria-hidden="true"><span/></span>Cloud AI <strong>{cloudAllowed?'On':'Off'}</strong></button>
         </div>
       </div>
       {focusMode&&<p className="focus-notice" role="status">Focus mode · Your hints, illustrations and discussion are kept. Exit focus mode to see them.</p>}

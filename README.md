@@ -23,6 +23,7 @@ Trình khởi động cài dependency từ lockfile, khởi động Auth Emulato
 - Hint 2/3 gợi ý **Use Cloud AI** khi có mạng và hỏi đồng ý trước khi chạy.
 - Hint bao quát từng bài/ý; chọn **Reset hints** để tạo lại các tầng cũ. Bàn phím thông dụng có **xₙ**, Calculus & series có **⋃ / ⋂**.
 - Chọn màu pastel khi tạo thư mục, hoặc mở **Color** trên ô thư mục để đổi màu. Header có nền riêng và tương thích với Appearance sáng/tối.
+- Appearance và Study options tự đóng khi bấm ra ngoài; các lựa chọn có menu riêng với dấu tick. Dark mode áp dụng cho cả đề, ghi chú, chat và bàn phím toán. Trang đăng nhập có ký hiệu toán chuyển động nhẹ, tôn trọng cài đặt giảm chuyển động.
 - Nhấn ảnh đề/bài làm trong Workspace hoặc thư viện để xem lớn, zoom và kéo ảnh; nhấn Escape để quay lại.
 - Xem [các tính năng Mathfolio](NOTEBOOK.md) và [checklist sprint chung](https://github.com/nguynphuc-git/StudyLens/issues/2).
 
