@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createUserWithEmailAndPassword, getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth';
 import { getFirebaseApp } from './firebase';
-import { friendlyError, notebookAI, recognizeImageWithCloud, recommendsCloudForProblem, type NotebookRequest } from './ai';
+import { friendlyError, generateProofDiagram, notebookAI, recognizeImageWithCloud, recommendsCloudForProblem, type NotebookRequest } from './ai';
 import { MarkdownView } from './components/MarkdownView';
 import { PdfFormulaCropper } from './components/PdfFormulaCropper';
 import { addFolder, removeFolder, emptyNotebook, loadNotebook, newExercise, notebookKey, putExercise, putExercisePreview, exerciseFolderIds, inExerciseFolder, withExerciseFolders, sameAttachments, readAttachment, saveNotebook, type Exercise, type Notebook, type Attachment } from './notebook';
@@ -33,11 +33,14 @@ import {GeometryDiagramEditor} from './components/GeometryDiagramEditor';
 import {LatexMessage} from './components/LatexMessage';
 import { UsageGuide } from './components/UsageGuide';
 import type { ResponseStyle } from './local-tutor';
-import {geometryDiagramFromStatement} from './geometry-diagram';
+import {proofTutorContext} from './geometry-proof';
+import {ProofDiagramView} from './components/ProofDiagramView';
+import {ProblemSourceInput} from './components/ProblemSourceInput';
 
 const labels = ['A starting point', 'The method', 'Full solution'];
 export default function App() {
   const appearance=useAppearance();
+  const [diagramBusy,setDiagramBusy]=useState(false);
   const [geometryOpen,setGeometryOpen]=useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
@@ -84,7 +87,7 @@ export default function App() {
   const illustrations=selectedIllustrations(draft.attachments);
   const filteredPdfQuestions=pdfQuestions?.map((question,index)=>({question,index})).filter(({question})=>`${question.text} page ${question.page}`.toLocaleLowerCase().includes(pdfQuestionFilter.trim().toLocaleLowerCase())) ?? [];
   const activeAI = useRef<{ controller: AbortController; status: string; error: string } | null>(null);
-  const blocked = !!busy || saving || pdfBusy || imagePreparing || imageBusy || !!recovery;
+  const blocked = diagramBusy || !!busy || saving || pdfBusy || imagePreparing || imageBusy || !!recovery;
   useEffect(()=>{if(!busy)return;const tick=()=>setElapsed(Math.floor((performance.now()-runStarted.current)/1000));tick();const timer=setInterval(tick,1000);return()=>clearInterval(timer);},[busy]);
   const problemPanel = useRef<HTMLElement>(null);
   const [problemHeight, setProblemHeight] = useState(520);
@@ -128,7 +131,7 @@ export default function App() {
         const version = ++epoch.current;
         confirmationResult.current?.(false); confirmationResult.current = null; setConfirmation(null);
         key.current = ''; setUser(next); setReady(false); setBook(emptyNotebook()); setDraft(newExercise()); setDirty(false);setRecovery(null);setDraftSave('idle');setDraftSavedAt('');setImageProblem(null);setImagePreparing(false);setPdfBusy(false);closePdfPicker();setImportError('');setLibraryQuery('');
-        setPartial(''); setBusy(null); setSaving(false); setSaveOpen(false); setFolderDialog(false); setPreview(null);setViewingImage(null); setPreviewError(''); setCollapsedHints([]); setError(''); setStatus(''); setQuestion(''); setFolder(null); setCloudAllowed(false); setChatRoute('local');
+        setPartial(''); setBusy(null);setDiagramBusy(false); setSaving(false); setSaveOpen(false); setFolderDialog(false); setPreview(null);setViewingImage(null); setPreviewError(''); setCollapsedHints([]); setError(''); setStatus(''); setQuestion(''); setFolder(null); setCloudAllowed(false); setChatRoute('local');
         if (!next) return;
         const nextKey = notebookKey(auth.app.options.projectId!, next.uid); key.current = nextKey;
         void Promise.all([loadNotebook(nextKey),loadWorkspaceDraft(nextKey).catch(()=>null)]).then(([value,unfinished]) => {
@@ -157,17 +160,23 @@ export default function App() {
   }, [saveOpen, folderDialog, pdfQuestions, saving]);
   function documentActiveElement() { return window.document.activeElement instanceof HTMLElement ? window.document.activeElement : undefined; }
 
-  function edit(update: Partial<Exercise>) { setDraft(value => ({ ...value, ...update })); setDirty(true);setDraftSave('idle'); }
-  function createGeometryDiagram(analyze = false) {
-    const diagram = geometryDiagramFromStatement(draft.statement);
-    if (!diagram) {
-      setError('Could not identify a supported geometry figure. Check that the problem names a triangle, quadrilateral, circle, or 3D solid.');
-      return;
-    }
-    edit({ geometryDiagram: diagram });
-    setError('');
-    setStatus('Schematic created from the problem text. Check the extracted givens against the source; the sketch is not to scale.');
-    if (analyze) void ask('knowledge');
+  function edit(update: Partial<Exercise>) { setDraft(value => ({ ...value, ...(update.statement!==undefined&&update.statement!==value.statement?{proofDiagram:undefined,geometryDiagram:undefined}:{}), ...update })); setDirty(true);setDraftSave('idle'); }
+  async function createGeometryDiagram() {
+    if(blocked||activeAI.current||!ready)return;
+    const version=epoch.current,id=draft.id;
+    if((draft.knowledge||draft.hints.length||draft.messages.length)&&!await confirmChange({title:'Build a new proof diagram?',description:'The new construction plan will replace the diagram and clear earlier AI guidance so new hints use the same plan. Your problem, notes and images stay.',action:'Build diagram'}))return;
+    if(version!==epoch.current||activeAI.current)return;
+    const operation={controller:new AbortController(),status,error};activeAI.current=operation;
+    const current=()=>activeAI.current===operation&&epoch.current===version&&!operation.controller.signal.aborted;
+    setDiagramBusy(true);setError('');setStatus('Reading hypotheses and constructing the diagram…');
+    try{
+      const diagram=await generateProofDiagram(draft.statement,cloudAllowed&&online?'cloud':'local',cloudAllowed&&online,illustrations,operation.controller.signal);
+      if(!current())return;
+      setDraft(value=>value.id===id?{...value,proofDiagram:diagram,geometryDiagram:undefined,confirmed:false,knowledge:undefined,hints:[],messages:[]}:value);
+      setCollapsedHints([]);setDirty(true);setDraftSave('idle');
+      setStatus('Diagram ready. Review Given and To prove, then analyze for hints. Auxiliary constructions are hidden until you request them.');
+    }catch(e){if(current()){setError(friendlyError(e));setStatus('Diagram not changed. Clarify the problem or try again.');}}
+    finally{if(current()){activeAI.current=null;setDiagramBusy(false);}}
   }
   function resumeDraft(){if(!recovery)return;setDraft(structuredClone(recovery.exercise));setDirty(true);setDraftSave('saved');setDraftSavedAt(recovery.savedAt);setRecovery(null);setTab('solve');setStatus('Draft restored. Save exercise when you want to update your library.');}
   async function discardRecovery(){const version=epoch.current;setSaving(true);try{await clearWorkspaceDraft(key.current);if(version===epoch.current){setRecovery(null);setDraftSave('idle');}}catch{setError('Could not remove the draft. Try again.');}finally{if(version===epoch.current)setSaving(false);}}
@@ -184,7 +193,7 @@ export default function App() {
     if(draft.confirmed&&!await confirmChange({title:'Use this image problem?',description:'This replaces the problem and clears its essentials, hints and chat. Your notes and saved images stay.',action:'Use this problem'}))return;
     if(version!==epoch.current)return;
     const attachment:Attachment={id:crypto.randomUUID(),name:imageProblem.name,data:imageProblem.data,kind:'problem'};
-    edit({statement,statementFormat:'latex',confirmed:false,knowledge:undefined,hints:[],messages:[],geometryDiagram:geometryDiagramFromStatement(statement),attachments:keep&&draft.attachments.length<4?[...draft.attachments,attachment]:draft.attachments});
+    edit({statement,statementFormat:'latex',confirmed:false,knowledge:undefined,hints:[],messages:[],geometryDiagram:undefined,proofDiagram:undefined,attachments:keep&&draft.attachments.length<4?[...draft.attachments,attachment]:draft.attachments});
     setCollapsedHints([]);setImageProblem(null);setImportError('');setStatus('Image problem added. Check its formulas before analyzing.');
   }
   async function loadPdf(file?: File) {
@@ -250,7 +259,7 @@ export default function App() {
     edit({
       statement,
       statementFormat: 'latex',
-      geometryDiagram: geometryDiagramFromStatement(statement),
+      geometryDiagram: undefined,proofDiagram:undefined,
       ...(draft.confirmed ? { confirmed: false, knowledge: undefined, hints: [], messages: [] } : {})
     });
     closePdfPicker();
@@ -271,7 +280,7 @@ export default function App() {
     if(version!==epoch.current)return false;
     cancelImport();
     activeAI.current?.controller.abort(); activeAI.current = null;
-    epoch.current++; setCollapsedHints([]); setDraft(structuredClone(value)); setDirty(false);setDraftSave('idle'); setPartial(''); setBusy(null); setError(''); setStatus(''); setQuestion(''); setTab('solve');
+    epoch.current++; setCollapsedHints([]); setDraft(structuredClone(value)); setDirty(false);setDraftSave('idle'); setPartial(''); setBusy(null);setDiagramBusy(false); setError(''); setStatus(''); setQuestion(''); setTab('solve');
     return true;
   }
   async function authenticate(register: boolean) {
@@ -340,7 +349,7 @@ export default function App() {
     try {
       const route = purpose === 'chat' ? chatRoute
         : purpose !== 'hint1' && permitted ? 'cloud' : 'local';
-      const answer = await notebookAI({ purpose, statement: draft.statement, knowledge: draft.knowledge?.text ?? '', hints: draft.hints.map(h => h.text), messages: draft.messages, question: askedQuestion, cloudAllowed: permitted, route,responseStyle,images:illustrations }, text => {
+      const answer = await notebookAI({ purpose, statement: draft.statement, knowledge: draft.knowledge?.text ?? '', hints: draft.hints.map(h => h.text), messages: draft.messages, question: askedQuestion, cloudAllowed: permitted, route,responseStyle,geometryContext:draft.proofDiagram?.statement===draft.statement?proofTutorContext(draft.proofDiagram):undefined,images:illustrations }, text => {
         if (currentOperation()) { setPartial(text); setStatus('AI is answering…'); }
       }, operation.controller.signal);
       if (!currentOperation()) return;
@@ -348,18 +357,18 @@ export default function App() {
         if (current.id !== id) return current;
         if (purpose === 'knowledge') return { ...current, confirmed: true, knowledge: answer };
         if (purpose === 'chat') return { ...current, messages: [...current.messages, { role: 'user', text: askedQuestion,format:'latex' }, { role: 'assistant', text: answer.text, source: answer.source }] };
-        return { ...current, hints: [...current.hints, answer] };
+        return { ...current, hints: [...current.hints, answer],proofDiagram:current.proofDiagram&&purpose!=='hint1'?{...current.proofDiagram,showAuxiliary:true}:current.proofDiagram };
       });
       if (purpose.startsWith('hint')) setCollapsedHints(current => current.filter(level => level !== Number(purpose.slice(-1)) - 1));
       setDirty(true);setDraftSave('idle'); if (purpose === 'chat') setQuestion(''); setStatus('Response ready. You can save this page.');
     } catch (e) { if (currentOperation()) { setError(friendlyError(e)); setStatus(operation.status); } }
-    finally { if (currentOperation()) { activeAI.current = null; setPartial(''); setBusy(null); } }
+    finally { if (currentOperation()) { activeAI.current = null; setPartial(''); setBusy(null);setDiagramBusy(false); } }
   }
   function stopAI() {
     const operation = activeAI.current; if (!operation) return;
     activeAI.current = null;
     operation.controller.abort();
-    setPartial(''); setBusy(null); setStatus(operation.status); setError(operation.error);
+    setPartial(''); setBusy(null);setDiagramBusy(false); setStatus(operation.status); setError(operation.error);
   }
   async function resetHints(){
     if(blocked||activeAI.current)return;
@@ -373,7 +382,7 @@ export default function App() {
     const version=epoch.current,changed=!sameIllustrations(draft.attachments,next);
     if(changed&&draft.confirmed&&!await confirmChange({title:'Update problem illustrations?',description:'The problem context changes. Its essentials, hints and conversation will be cleared for a fresh analysis. Notes and saved library pages stay.',action:'Update illustrations'}))return;
     if(version!==epoch.current||activeAI.current)return;
-    edit({attachments:next,...(changed?{confirmed:false,knowledge:undefined,hints:[],messages:[]}: {})});
+    edit({attachments:next,...(changed?{confirmed:false,knowledge:undefined,hints:[],messages:[],proofDiagram:undefined}: {})});
     if(changed)setCollapsedHints([]);
   }
   async function attach(file: File | undefined, kind: Attachment['kind']) {
@@ -408,7 +417,7 @@ export default function App() {
       if (version !== epoch.current) return;
       const statement = [draft.statement.trim(), mixedTextToLatex(text)].filter(Boolean).join('\n\n');
       if (statement.length > 6000) throw new Error('The transcription would exceed the 6,000-character problem limit. Shorten the current problem or read a smaller crop.');
-      setDraft(current => current.id === id ? { ...current, statement, statementFormat: 'latex', geometryDiagram:geometryDiagramFromStatement(statement) } : current);
+      setDraft(current => current.id === id ? { ...current, statement, statementFormat: 'latex', geometryDiagram:undefined,proofDiagram:undefined } : current);
       setDirty(true);
       setStatus(`Image read ${route === 'local' ? 'locally' : 'with Cloud AI'}. Review the transcription before analyzing.`);
     } catch (reason) {
@@ -573,6 +582,7 @@ export default function App() {
     {status && <p role="status" className="notice success">{status}</p>}
     {recovery&&<section className="draft-recovery paper" aria-label="Recover workspace draft"><div><strong>Continue where you left off?</strong><p>A draft of {recovery.exercise.title || 'Untitled exercise'} was saved {new Date(recovery.savedAt).toLocaleString('en-GB')}. Your library copy has not been changed.</p></div><div className="row"><button className="primary" disabled={saving} onClick={resumeDraft}>Resume draft</button><button disabled={saving} onClick={()=>void discardRecovery()}>Start fresh</button></div></section>}
     {draftSave==='error'&&<p className="notice error" role="alert">Could not autosave this draft. Keep this page open and try Save exercise.</p>}
+    {diagramBusy&&<div className="ai-toolbar" role="status"><span>Building geometry from the hypotheses…</span><button onClick={stopAI}>Stop diagram</button></div>}
     {(pdfBusy||imagePreparing)&&<div className="ai-toolbar" role="status"><span>{imagePreparing?'Preparing image…':pdfProgress?.stage==='ocr'?`Reading PDF locally · ${pdfProgress.page}/${pdfProgress.total}`:'Opening PDF…'}</span><button className="stop-ai" onClick={cancelImport}>Stop import</button></div>}
     {busy && <div className="ai-toolbar" role="status"><span>AI is working on {busy === 'knowledge' ? 'your essentials' : busy === 'chat' ? 'your conversation' : `hint ${busy.slice(-1)}`} · {elapsed}s</span><button className="stop-ai" onClick={stopAI}>■ Stop AI</button></div>}
     {((!user && tab !== 'guide') || tab === 'account') && <section className="account-panel paper">
@@ -603,11 +613,12 @@ export default function App() {
       <div className={focusMode?'workspace-content focus-mode':'workspace-content'}>
       <div className="problem-row">
         <section className="paper problem"><div className="panel-heading"><span className="step">01</span><h2>Problem</h2><span className="tag">YOUR PROBLEM</span></div>
+          {!draft.confirmed&&<ProblemSourceInput disabled={blocked} onApply={statement=>edit({statement,statementFormat:'latex'})}/>}
           <MathInput ref={input} value={statementLatex(draft.statement, draft.statementFormat)} readOnly={draft.confirmed} disabled={blocked} onChange={value => edit({ statement: value, statementFormat: 'latex' })}/>
           {!draft.confirmed && <><p className="subtle">Type your problem or paste LaTeX. Insert symbols directly below.</p><MathKeyboard disabled={blocked} onActivate={()=>input.current?.focus()} onInsert={symbol => insertMath(symbol.latex)}/></>}
           {!cloudAllowed && online && draft.statement.trim() && recommendsCloudForProblem(draft.statement) && <aside className="cloud-recommendation" aria-label="Cloud AI recommendation"><p>This may need several reasoning steps. Cloud AI can provide deeper analysis; your problem is sent only after you enable it and run analysis.</p><button type="button" disabled={blocked} onClick={() => void allowCloud('Cloud AI may provide deeper reasoning for this problem. Your problem and related tutoring context are sent only when you choose to run an AI action with Cloud AI enabled. Allow Cloud AI for this session?')}>Consider Cloud AI</button></aside>}
 
-          <div className="row">{draft.confirmed && <button disabled={blocked} onClick={editStatement}>Edit problem</button>}<button type="button" disabled={blocked||!hasEditorContent(draft.statement)} onClick={()=>createGeometryDiagram()}>{draft.geometryDiagram?'Update diagram':'Create diagram'}</button><button className="primary" title="Analyze problem (Ctrl+Enter)" disabled={blocked || !hasEditorContent(draft.statement)} onClick={() => void ask('knowledge')}>{draft.confirmed ? 'Refresh knowledge' : 'Confirm & analyze'}</button></div>
+          <div className="row">{draft.confirmed && <button disabled={blocked} onClick={editStatement}>Edit problem</button>}<button type="button" disabled={blocked||!hasEditorContent(draft.statement)} onClick={()=>void createGeometryDiagram()}>{draft.proofDiagram?'Update diagram':'Create diagram'}</button><button className="primary" title="Analyze problem (Ctrl+Enter)" disabled={blocked || !hasEditorContent(draft.statement)} onClick={() => void ask('knowledge')}>{draft.confirmed ? 'Refresh knowledge' : 'Confirm & analyze'}</button></div>
         </section>
         <aside className="paper problem-images" aria-label="Problem illustrations"><div className="panel-heading"><h2>Illustrations</h2><span className="tag">{illustrations.length} FOR AI</span></div>
           <label className="attachment-button">＋ Add illustration<input aria-label="Attach a problem illustration" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked||draft.attachments.length>=4} onChange={event=>{const file=event.target.files?.[0];event.target.value='';void attach(file,'problem');}}/></label>
@@ -619,7 +630,8 @@ export default function App() {
           <p className="subtle">{cloudAllowed&&online?'Cloud actions send selected illustrations. Local chat stays on your device.':'Local AI needs a compatible device to understand illustrations. Images are not sent to cloud while Cloud AI is off.'}</p>
         </aside>
       </div>
-      {draft.geometryDiagram&&<GeometryDiagramEditor diagram={draft.geometryDiagram} onChange={geometryDiagram=>edit({geometryDiagram})} onCreate={()=>createGeometryDiagram()} onAnalyze={()=>void ask('knowledge')} disabled={blocked}/>}
+      {draft.proofDiagram&&<ProofDiagramView diagram={draft.proofDiagram} disabled={blocked} onToggle={showAuxiliary=>edit({proofDiagram:{...draft.proofDiagram!,showAuxiliary}})}/>}
+      {!draft.proofDiagram&&draft.geometryDiagram&&<GeometryDiagramEditor diagram={draft.geometryDiagram} onChange={geometryDiagram=>edit({geometryDiagram})} onCreate={()=>createGeometryDiagram()} onAnalyze={()=>void ask('knowledge')} disabled={blocked}/>}
       <div className="guidance-row">
         <section className="paper knowledge"><div className="panel-heading"><span className="step">02</span><h2>What you need</h2></div><p className="subtle">Only the concepts needed for this exact problem.</p><div className="knowledge-scroll" role="region" aria-label="Knowledge for this problem" tabIndex={0}><span className="source-label">{draft.knowledge ? sourceLabel(draft.knowledge.source) : cloudAllowed&&online?'Cloud AI':'Local AI'}</span>{streaming('knowledge')}{draft.knowledge && busy !== 'knowledge' ? <><MarkdownView value={draft.knowledge.text}/><small className="subtle">Processed by: {sourceLabel(draft.knowledge.source)}</small></> : busy !== 'knowledge' && <div className="empty-panel"><span>∑</span><p>Confirm your problem to see<br/>the essentials here.</p></div>}</div></section>
         <section className="paper hints">

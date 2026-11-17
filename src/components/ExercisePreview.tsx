@@ -8,6 +8,7 @@ import { MathInput } from './MathInput';
 import { MarkdownView } from './MarkdownView';
 import { NotesEditor } from './NotesEditor';
 import { sourceLabel } from '../ui-labels';
+import {ProofDiagramView} from './ProofDiagramView';
 
 interface Props {
   exercise: Exercise; folderName: string; attachments:Attachment[]; folders:Notebook['folders']; folderIds:string[]; onAttachments:(images:Attachment[])=>void; onAttach:(file:File)=>void; onFolders:(ids:string[])=>void; notes: string; notesFormat?:'latex'; saving: boolean; suspended: boolean; error: string;
@@ -38,6 +39,7 @@ export function ExercisePreview({ exercise, folderName, attachments,folders,fold
     <section ref={dialog} className="paper exercise-preview" role="dialog" aria-modal="true" aria-labelledby="exercise-preview-title">
       <header className="exercise-preview-header"><div><p className="eyebrow">YOUR SAVED PAGE · {folderName}</p><h2 id="exercise-preview-title">{exercise.title}</h2><p className="subtle">{exercise.completed ? 'Completed' : 'In progress'} · {new Date(exercise.updatedAt).toLocaleString('en-GB')}</p></div><button ref={closeButton} disabled={saving} onClick={onClose} aria-label="Close exercise preview">✕</button></header>
       <div className="exercise-preview-body" tabIndex={0} aria-label="Saved exercise contents">
+        {exercise.proofDiagram&&<ProofDiagramView diagram={exercise.proofDiagram}/>}
         <div className="preview-columns">
           <section className="preview-section"><h3>Problem</h3><MathInput value={statementLatex(exercise.statement, exercise.statementFormat)} readOnly label="Saved problem"/><AttachmentGallery images={attachments.filter(image=>image.kind==='problem')} onOpen={onImage} onRename={rename} disabled={saving}/></section>
           <section className="preview-section"><h3>What you need</h3>{exercise.knowledge ? <><MarkdownView value={exercise.knowledge.text}/><small className="subtle">{sourceLabel(exercise.knowledge.source)}</small></> : <p className="subtle">No knowledge saved yet.</p>}</section>

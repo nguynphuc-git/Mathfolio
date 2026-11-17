@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NotebookRequest } from '../src/ai';
 import type { Answer, Notebook } from '../src/notebook';
 
-const mocks = vi.hoisted(() => ({ values: new Map<string, unknown>(), ai: vi.fn(), imageCloud: vi.fn(), imageLocal: vi.fn(), readAttachment: vi.fn(), write: vi.fn(), pdf: vi.fn(), pdfPreview: vi.fn(), prepareImage: vi.fn(), readImage: vi.fn(), insert: vi.fn() }));
+const mocks = vi.hoisted(() => ({ values: new Map<string, unknown>(), ai: vi.fn(), diagram:vi.fn(), imageCloud: vi.fn(), imageLocal: vi.fn(), readAttachment: vi.fn(), write: vi.fn(), pdf: vi.fn(), pdfPreview: vi.fn(), prepareImage: vi.fn(), readImage: vi.fn(), insert: vi.fn() }));
 vi.mock('idb-keyval', () => ({ get: vi.fn(async (key: string) => structuredClone(mocks.values.get(key))), del: async (key: string) => { mocks.values.delete(key); }, set: async (key: string, value: unknown) => { mocks.write(key, value); mocks.values.set(key, structuredClone(value)); } }));
 vi.mock('../src/notebook', async () => ({ ...(await vi.importActual<typeof import('../src/notebook')>('../src/notebook')), readAttachment: mocks.readAttachment }));
 vi.mock('../src/firebase', () => ({ getFirebaseApp: () => ({}) }));
@@ -16,6 +16,7 @@ vi.mock('firebase/auth', () => ({
 }));
 vi.mock('../src/ai', () => ({
   notebookAI: mocks.ai,
+  generateProofDiagram:mocks.diagram,
   recognizeImageWithCloud: mocks.imageCloud,
   friendlyError: (error: Error) => error.message,
   recommendsCloudForProblem: (statement: string) => /\bprove\b/i.test(statement)
@@ -33,6 +34,8 @@ vi.mock('../src/components/MathInput', () => ({ MathInput: forwardRef(function F
   return <textarea aria-label={props.label ?? 'Problem statement'} readOnly={props.readOnly} disabled={props.disabled} value={props.value} onChange={event => props.onChange?.(event.target.value)}/>;
 }) }));
 import App from '../src/App';
+import {geometryExamples} from '../src/geometry';
+import {exampleProofScene} from '../src/geometry-proof-examples';
 import {workspaceDraftKey} from '../src/workspace-draft';
 import { emptyNotebook, newExercise, notebookKey } from '../src/notebook';
 
@@ -59,6 +62,7 @@ beforeEach(async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   localStorage.removeItem('mathfolio-appearance-v1');
+  mocks.diagram.mockReset().mockImplementation(async(statement:string)=>({statement,scene:exampleProofScene(geometryExamples[0].statement)!,source:'local_construction',showAuxiliary:false}));
   mocks.ai.mockReset(); mocks.imageCloud.mockReset(); mocks.imageLocal.mockReset(); mocks.readAttachment.mockReset(); mocks.insert.mockReset(); mocks.write.mockReset(); mocks.pdf.mockReset(); mocks.pdfPreview.mockReset(); mocks.values.clear();
   mocks.prepareImage.mockReset().mockResolvedValue({ data: 'data:image/jpeg;base64,AA==', name: 'problem.jpg' });
   mocks.readImage.mockReset();
@@ -207,17 +211,16 @@ describe('saved page previews and workspace copies', () => {
     expect(mocks.pdfPreview).toHaveBeenCalledWith(file, 1);
     expect(mocks.pdfPreview).toHaveBeenCalledWith(file, 2);
   });
-  it('creates a geometry sketch after importing a diagram problem from PDF',async()=>{
-    mocks.pdf.mockResolvedValue([{page:1,text:'Triangle ABC has AB = 5 cm and angle ACB = 90 degrees. Find BC.'}]);
+  it('requires transcription review before building a proof diagram from PDF',async()=>{
+    mocks.pdf.mockResolvedValue([{page:1,text:geometryExamples[0].statement}]);
     const upload=host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
-    Object.defineProperty(upload,'files',{configurable:true,value:[new File(['pdf'],'triangle.pdf',{type:'application/pdf'})]});
+    Object.defineProperty(upload,'files',{configurable:true,value:[new File(['pdf'],'proof.pdf',{type:'application/pdf'})]});
     await act(async()=>upload.dispatchEvent(new Event('change',{bubbles:true})));
-    await click('Use this question');
-    const board=host.querySelector<HTMLElement>('.geometry-board')!;
-    expect(board.querySelector('.geometry-canvas')?.getAttribute('aria-label')).toContain('triangle schematic');
-    expect(board.textContent).toContain('AB = 5 cm');
-    expect(host.querySelector('[aria-label="Problem statement"]')).not.toBeNull();
-    expect(mocks.ai).not.toHaveBeenCalled();
+    expect(mocks.diagram).not.toHaveBeenCalled();
+    await click('Use this question');expect(host.querySelector('.proof-board')).toBeNull();
+    await click('Create diagram');
+    expect(host.querySelector('.proof-board')?.textContent).toContain('To prove');
+    expect(mocks.diagram.mock.calls[0][1]).toBe('local');expect(mocks.ai).not.toHaveBeenCalled();
   });
 
   it('filters extracted PDF questions without losing the selected item', async () => {
@@ -779,28 +782,34 @@ describe('workspace comfort and English guide',()=>{
     expect(host.querySelector<HTMLElement>('.appearance-preview')!.classList.contains('preview-paper')).toBe(true);
     expect(JSON.parse(localStorage.getItem('mathfolio-appearance-v1')!)).toMatchObject({theme:'dark',font:'serif',textColor:'blue',alignment:'justify',textSize:19});
   });
-  it('opens Geometry Studio and switches between 2D and 3D calculations',async()=>{
-    await click('◇ Geometry studio');
-    const studio=host.querySelector<HTMLElement>('.geometry-studio')!;
-    expect(studio.textContent).toContain('Area');
-    const shape=studio.querySelector<HTMLSelectElement>('select')!;
-    await act(async()=>{shape.value='cone';shape.dispatchEvent(new Event('change',{bubbles:true}));});
-    expect(studio.textContent).toContain('Slant height');
-    expect(studio.textContent).toContain('Total surface area');
-    expect(studio.textContent).toContain('Try a geometry proof or reasoning problem');
-    expect(mocks.ai).not.toHaveBeenCalled();
+  it('opens proof examples instead of a dimension calculator',async()=>{
+    await click('◇ Geometry studio');const studio=host.querySelector<HTMLElement>('.geometry-studio')!;
+    expect(studio.textContent).toContain('Geometry proofs');expect(studio.querySelector('input[type="number"]')).toBeNull();
+    expect(studio.querySelectorAll('.geometry-example-grid article')).toHaveLength(4);
   });
-  it('builds a diagram from a problem, exposes colored drawing tools, then starts the guided analysis',async()=>{
-    await type('[aria-label="Problem statement"]','Triangle ABC has AB = 5 cm and angle ACB = 90 degrees. Find BC.');
-    await click('Create diagram');
-    const board=host.querySelector<HTMLElement>('.geometry-board')!;
-    expect(board.querySelector('.geometry-canvas')?.getAttribute('aria-label')).toContain('triangle schematic');
-    expect(board.textContent).toContain('AB = 5 cm');
-    expect(board.textContent).toContain('∠ACB = 90°');
-    expect(board.textContent).toContain('starting hint, method, and full worked solution');
-    expect(board.querySelector('[aria-label="Blue mark"]')).not.toBeNull();
-    mocks.ai.mockResolvedValue({text:'Use Pythagoras in the right triangle.',source:'on_device'});
-    await click('Analyze problem',board);
-    expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'knowledge',statement:'Triangle ABC has AB = 5 cm and angle ACB = 90 degrees. Find BC.'});
+  it('shares a construction plan with hints and reveals auxiliary lines at level two',async()=>{
+    await type('[aria-label="Problem statement"]',geometryExamples[0].statement);await click('Create diagram');
+    const board=host.querySelector<HTMLElement>('.proof-board')!;
+    expect(board.querySelectorAll('line[stroke="#8050b5"]')).toHaveLength(0);
+    mocks.ai.mockResolvedValue({text:'Use tangent-radius perpendicularity.',source:'on_device'});
+    await click('Confirm & analyze');expect(mocks.ai.mock.calls[0][0].geometryContext).toContain('Join OA');
+    await click('Open level 1');expect(board.querySelectorAll('line[stroke="#8050b5"]')).toHaveLength(0);
+    await click('Open level 2');expect(board.querySelectorAll('line[stroke="#8050b5"]').length).toBeGreaterThan(0);
+    await click('Hide auxiliary constructions');expect(board.querySelectorAll('line[stroke="#8050b5"]')).toHaveLength(0);
+  });
+  it('cancels diagram requests and ignores late results',async()=>{
+    let finish!:(value:unknown)=>void;let signal!:AbortSignal;
+    mocks.diagram.mockImplementation((statement,route,allowed,images,stop)=>{signal=stop;return new Promise(resolve=>{finish=resolve;});});
+    await type('[aria-label="Problem statement"]',geometryExamples[0].statement);await click('Create diagram');await click('Stop diagram');
+    expect(signal.aborted).toBe(true);
+    await act(async()=>finish({statement:geometryExamples[0].statement,scene:exampleProofScene(geometryExamples[0].statement),showAuxiliary:false,source:'on_device'}));
+    expect(host.querySelector('.proof-board')).toBeNull();expect(button('Create diagram').disabled).toBe(false);
+  });
+  it('accepts pasted LaTeX and clears a stale diagram on problem edits',async()=>{
+    await type('[aria-label="Problem source"]',String.raw`Let $ABCD$ be cyclic. Prove $\\angle A + \\angle C = 180^\\circ$.`);
+    await click('Use pasted problem');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain(String.raw`\\angle`);
+    await click('Create diagram');expect(host.querySelector('.proof-board')).not.toBeNull();
+    await type('[aria-label="Problem statement"]','Prove a different theorem.');expect(host.querySelector('.proof-board')).toBeNull();
   });
 });

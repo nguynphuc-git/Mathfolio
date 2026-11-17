@@ -1,4 +1,5 @@
 export function sourceLabel(source?:string):string {
+  if(source==='local_construction')return 'Local construction';
   const key=source?.toLowerCase()??'';
   if(key==='local_reference')return 'Verified formula';
   if(key==='local_calculation')return 'Local calculation';
