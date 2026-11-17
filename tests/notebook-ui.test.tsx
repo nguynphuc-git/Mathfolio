@@ -73,6 +73,30 @@ beforeEach(async () => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+describe('pastel folder colors',()=>{
+  async function reload(){await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));}
+  async function choose(name:string,scope:ParentNode){await act(async()=>scope.querySelector<HTMLButtonElement>(`[aria-label="${name} pastel"]`)!.click());}
+  it('creates a colored folder and restores its color on reload',async()=>{
+    await click('Exercise library');await click('＋ New folder');
+    await type('[aria-labelledby="folder-title"] input','Geometry');const dialog=host.querySelector('[aria-labelledby="folder-title"]')!;
+    await choose('Lavender',dialog);await click('Create folder');
+    expect(stored().folders.find(folder=>folder.name==='Geometry')!.color).toBe('lavender');
+    await reload();await click('Exercise library');const card=[...host.querySelectorAll('.folder-card')].find(card=>card.textContent?.includes('Geometry'))!;
+    expect(card.getAttribute('data-folder-color')).toBe('lavender');expect(card.querySelector('[aria-label="Lavender pastel"]')!.getAttribute('aria-pressed')).toBe('true');
+  });
+  it('does not apply a failed color save, allows retry, and leaves exercises untouched',async()=>{
+    const before=structuredClone(stored().exercises);await click('Exercise library');const card=host.querySelector('.folder-card')!;
+    await act(async()=>card.querySelector<HTMLElement>('summary')!.click());mocks.write.mockImplementationOnce(()=>{throw new Error('Storage is full');});await choose('Rose',card);
+    expect(stored().folders[0].color).toBeUndefined();expect(card.getAttribute('data-folder-color')).toBe('sage');expect(host.textContent).toContain('Storage is full');
+    await choose('Sky',card);expect(card.getAttribute('data-folder-color')).toBe('sky');expect(stored().folders[0].color).toBe('sky');expect(stored().exercises).toEqual(before);expect(mocks.ai).not.toHaveBeenCalled();
+  });
+  it('can choose the new folder color while saving an exercise',async()=>{
+    await type('[aria-label="Problem statement"]','x=7');await click('Save exercise');await type('[aria-labelledby="save-title"] label input','Colored page');
+    await type('[aria-label="New folder name"]','Revision');await choose('Butter',host.querySelector('[aria-labelledby="save-title"]')!);await click('Save on this device');
+    const folder=stored().folders.find(folder=>folder.name==='Revision')!;expect(folder.color).toBe('butter');expect(stored().exercises[0].folderIds).toContain(folder.id);
+  });
+});
+
 describe('library image edits and shared folders',()=>{
   async function reload(){await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));}
   function folders(){stored().folders.push({id:'a',name:'Algebra'},{id:'b',name:'Revision'});}

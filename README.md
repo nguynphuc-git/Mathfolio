@@ -22,6 +22,7 @@ Trình khởi động cài dependency từ lockfile, khởi động Auth Emulato
 - Hàng đầu gồm đề (2/3) và **Illustrations** (1/3); hàng tiếp là kiến thức/hint; hàng cuối là chat/notes. Chọn **Use this illustration for AI** ở những ảnh cần cho bài toán.
 - Hint 2/3 gợi ý **Use Cloud AI** khi có mạng và hỏi đồng ý trước khi chạy.
 - Hint bao quát từng bài/ý; chọn **Reset hints** để tạo lại các tầng cũ. Bàn phím thông dụng có **xₙ**, Calculus & series có **⋃ / ⋂**.
+- Chọn màu pastel khi tạo thư mục, hoặc mở **Color** trên ô thư mục để đổi màu. Header có nền riêng và tương thích với Appearance sáng/tối.
 - Nhấn ảnh đề/bài làm trong Workspace hoặc thư viện để xem lớn, zoom và kéo ảnh; nhấn Escape để quay lại.
 - Xem [các tính năng Mathfolio](NOTEBOOK.md) và [checklist sprint chung](https://github.com/nguynphuc-git/StudyLens/issues/2).
 

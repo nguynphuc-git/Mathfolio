@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { addFolder, emptyNotebook, newExercise, putExercise, removeFolder } from '../src/notebook';
+import { addFolder, recolorFolder,emptyNotebook, newExercise, putExercise, removeFolder } from '../src/notebook';
+import {folderColor,type FolderColor} from '../src/folder-colors';
 describe('notebook folder management', () => {
+  it('stores pastel colors without changing exercise records or folder memberships',()=>{
+    let book=addFolder(emptyNotebook(),'Geometry','lavender');const id=book.folders[1].id;
+    book=putExercise(book,{...newExercise(),title:'Triangle',statement:'a+b=c',folderIds:[id]});
+    const next=recolorFolder(book,id,'peach');expect(next.folders[1].color).toBe('peach');expect(book.folders[1].color).toBe('lavender');expect(next.exercises).toBe(book.exercises);
+    expect(recolorFolder(next,'general','sky').folders[0].color).toBe('sky');
+  });
+  it('provides a safe default for old colors and rejects invalid colors or missing folders',()=>{
+    expect(folderColor(undefined).id).toBe('sage');expect(folderColor('url(evil)').id).toBe('sage');
+    expect(()=>addFolder(emptyNotebook(),'Bad','red' as FolderColor)).toThrow('pastel');
+    expect(()=>recolorFolder(emptyNotebook(),'missing','rose')).toThrow('not found');
+    expect(()=>recolorFolder(emptyNotebook(),'general','red' as FolderColor)).toThrow('pastel');
+    expect(emptyNotebook().folders[0].color).toBeUndefined();
+  });
   it('creates a named empty folder without changing existing content', () => {
     const initial=emptyNotebook(); const next=addFolder(initial,'  Algebra week 1  ');
     expect(next.folders).toHaveLength(2); expect(next.folders[1].name).toBe('Algebra week 1');
