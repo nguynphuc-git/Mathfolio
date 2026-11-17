@@ -806,10 +806,11 @@ describe('workspace comfort and English guide',()=>{
     expect(host.querySelector<HTMLElement>('.appearance-preview')!.classList.contains('preview-paper')).toBe(true);
     expect(JSON.parse(localStorage.getItem('mathfolio-appearance-v1')!)).toMatchObject({theme:'dark',font:'serif',textColor:'blue',alignment:'justify',textSize:19});
   });
-  it('opens proof examples instead of a dimension calculator',async()=>{
-    await click('◇ Geometry studio');const studio=host.querySelector<HTMLElement>('.geometry-studio')!;
-    expect(studio.textContent).toContain('Geometry proofs');expect(studio.querySelector('input[type="number"]')).toBeNull();
-    expect(studio.querySelectorAll('.geometry-example-grid article')).toHaveLength(4);
+  it('accepts geometry directly in Problem without a sample gallery',async()=>{
+    expect(host.textContent).not.toContain('Geometry studio');expect(host.textContent).not.toContain('Try this proof');
+    expect(host.querySelector('[aria-label="Problem source"]')).not.toBeNull();
+    await type('[aria-label="Problem statement"]','Prove that ABCD is cyclic.');
+    expect(button('Create diagram').disabled).toBe(false);
   });
   it('shares a construction plan with hints and reveals auxiliary lines at level two',async()=>{
     await type('[aria-label="Problem statement"]',geometryExamples[0].statement);await click('Create diagram');

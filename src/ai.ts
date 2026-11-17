@@ -4,7 +4,7 @@ import type { Part } from 'firebase/ai';
 import { formulaReference, referenceContext } from './math-knowledge';
 import { linearHelp, localAnswerGuidance, type ResponseStyle } from './local-tutor';
 import { geometryHelp, geometryPromptContext } from './geometry';
-import { parseProofScene, proofDiagramPrompt } from './geometry-proof';
+import { parseProofScene, proofDiagramPrompt, ProofSceneGeometryError, proofRepairPrompt, assertProofRepairPreservesGivens } from './geometry-proof';
 import {exampleProofScene} from './geometry-proof-examples';
 import {hasEditorContent} from './math-input';
 import {hintProblems,scopedHint} from './hint-problems';
@@ -343,15 +343,27 @@ export async function generateProofDiagram(statement:string, route:'local'|'clou
   if(route==='local')await abortable(model.initializeDeviceModel(),signal);
   const prepared=route==='local'?await localVisionParts(parts,signal):parts;
   const prompt=proofDiagramPrompt(stripProblemLayout(statement));
-  const content=prepared.length?[{type:'text' as const,text:prompt},...prepared]:prompt;
-  const {response}=await abortable(model.generateContent(content,{signal}),signal).catch((error:unknown)=>{
-    if(error instanceof Error&&error.name==='QuotaExceededError')throw new Error('This problem exceeds the local model’s input capacity. Try a shorter statement or one cropped illustration. You can also explicitly enable Cloud AI and retry.');
-    throw error;
-  });
-  signal.throwIfAborted();
-  if(response.candidates?.some(c=>c.finishReason==='MAX_TOKENS'))throw new Error('The diagram response was incomplete. Try one exercise at a time.');
-  const text=response.text().trim();
-  if(text.startsWith(localModelUnavailablePrefix))throw new Error('On-device AI is unavailable in this browser. Use a supported Chrome device, or explicitly enable Cloud AI and retry.');
-  const scene=parseProofScene(text);
-  return {scene,statement,source:response.inferenceSource??(route==='cloud'?'in_cloud':'on_device'),showAuxiliary:false};
+  let correction:ProofSceneGeometryError|undefined;
+  for(let attempt=0;attempt<2;attempt++){
+    signal.throwIfAborted();
+    const requestPrompt=correction?proofRepairPrompt(prompt,correction):prompt;
+    const content=prepared.length?[{type:'text' as const,text:requestPrompt},...prepared]:requestPrompt;
+    const {response}=await abortable(model.generateContent(content,{signal}),signal).catch((error:unknown)=>{
+      if(error instanceof Error&&error.name==='QuotaExceededError')throw new Error('This problem exceeds the local model’s input capacity. Try a shorter statement or one cropped illustration. You can also explicitly enable Cloud AI and retry.');
+      throw error;
+    });
+    signal.throwIfAborted();
+    if(response.candidates?.some(c=>c.finishReason==='MAX_TOKENS'))throw new Error('The diagram response was incomplete. Try one exercise at a time.');
+    const text=response.text().trim();
+    if(text.startsWith(localModelUnavailablePrefix))throw new Error('On-device AI is unavailable in this browser. Use a supported Chrome device, or explicitly enable Cloud AI and retry.');
+    try{
+      const scene=parseProofScene(text);
+      if(correction)assertProofRepairPreservesGivens(correction.scene,scene);
+      return {scene,statement,source:response.inferenceSource??(route==='cloud'?'in_cloud':'on_device'),showAuxiliary:false};
+    }catch(error){
+      if(attempt===0&&error instanceof ProofSceneGeometryError){correction=error;continue;}
+      throw error;
+    }
+  }
+  throw new Error('The diagram could not be corrected. Check the hypotheses and try again.');
 }

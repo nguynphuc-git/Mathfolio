@@ -2,7 +2,7 @@
 
 The geometry workspace accepts a reviewed PDF/image problem or pasted text/LaTeX, then builds a declarative diagram from the hypotheses. Green solid lines represent given objects. Violet dashed lines represent optional auxiliary constructions, initially hidden and revealed with hint level 2 or the explicit toggle. Spatial scenes use 3D coordinates and adjustable viewing angles.
 
-Four built-in examples use exact local constructions without model initialization. Other problems use the selected AI route. Cloud requests require explicit Cloud AI consent. Malformed scenes, impossible intersections, violated declared relations and truncated responses are rejected. Editing the problem or changing its illustrations invalidates the existing diagram.
+Users enter or upload problems directly in Problem; there is no sample gallery. Recognized problems can use exact local constructions without model initialization, including IMO 1970 P5. Its full published wording (including flattened PDF superscripts) and the supplied English/LaTeX paraphrases are recognized conservatively; changed hypotheses and additional conditions still go to AI. Other problems use the selected AI route. Cloud requests require explicit Cloud AI consent. Invalid geometry in a schema-valid response gets at most one correction attempt on the same route, with the original problem and selected illustrations. Corrections must preserve the givens, goal, given objects and every declared relation; otherwise they are rejected. Malformed scenes and truncated responses are rejected directly. Editing the problem or changing its illustrations invalidates the existing diagram.
 
 ## Sourced contest cases
 
@@ -14,7 +14,7 @@ Inputs are paraphrased in `tests/fixtures/geometry-contests.ts` with source link
 | IMO 1970, problem 5 | [Official problem paper](https://www.imo-official.org/assets/documents/problems/1970/1970_eng.pdf) | Plane projection, orthocenter and perpendicularity constraints; unequal-axis and equality configurations; invalid configurations rejected. |
 | ASMO 2022 International Round, Secondary, problem 25 | [Organizer's sample paper](https://drive.google.com/file/d/1K4iV1-ueLUCpTjMdWUqAZ-0hqmuRudaP/view), linked from the [organizer's ASMO page](https://globalolympiadsacademy.com/asmo/) | Right trapezoid, midpoint, line intersection and published ratio 10. This is a **plane geometry** comparison case, not a spatial proof problem. |
 
-The regression scenes are human-authored fixtures. Passing these tests validates the construction engine and input pipeline; it does not show that a model independently solved those contest problems. Numerical checks of a few configurations are not proofs.
+The regression scenes are human-authored fixtures. IMO 1970 P5 additionally exercises the production generation API using the exact text reported by the user and its editor conversion, independently checking the right angle, plane projection and all three altitudes. Passing these tests validates the construction engine and input pipeline; it does not show that a model independently solved those contest problems. Numerical checks of a few configurations are not proofs.
 
 ## Proof review criteria
 
@@ -31,4 +31,4 @@ The regression scenes are human-authored fixtures. Passing these tests validates
 - The scene validator checks relations declared in the scene. It cannot prove that AI extracted every hypothesis correctly; the interface asks the learner to review the extracted givens and explicitly displays unresolved assumptions.
 - Circles currently lie in planes parallel to the xy plane. Arbitrarily oriented spatial circles and unsupported loci must be reported as unresolved. A diagram is illustrative, not a symbolic proof certificate.
 
-Run `npm test` and `npm run build`. For manual Chrome testing, open the local development URL, choose a geometry example or paste one problem, click **Create diagram**, review **Given** and **To prove**, then request hint levels 1 and 2. For a spatial problem, rotate and tilt the view. Modify the statement and confirm that the old diagram is removed before generating a replacement.
+Run `npm test` and `npm run build`. For manual Chrome testing, open the local development URL, paste one problem into Problem, click **Create diagram**, review **Given** and **To prove**, then request hint levels 1 and 2. For a spatial problem, rotate and tilt the view. Modify the statement and confirm that the old diagram is removed before generating a replacement.

@@ -63,9 +63,7 @@ html[data-theme=dark] .focus-notice,html[data-theme=dark] .geometry-validation{c
 html[data-theme=dark] .appearance-options select,html[data-theme=dark] .geometry-workbench input{color-scheme:dark}
 html[data-theme=dark] .appearance-disclosure>summary,html[data-theme=dark] .tool-disclosure>summary{background:#202923;border-color:#435248;color:#d4e0d4}
 html[data-theme=dark] .tool-disclosure[open]>summary{background:#304237}
-html[data-theme=dark] .tool-content,html[data-theme=dark] .geometry-result,html[data-theme=dark] .geometry-inputs figure,html[data-theme=dark] .geometry-example-grid article{background:#202923;border-color:#3a483e}
-html[data-theme=dark] .geometry-examples{border-color:#3a483e}
-html[data-theme=dark] .geometry-examples>summary,html[data-theme=dark] .geometry-launch{color:#c4d6be}
+html[data-theme=dark] .tool-content,html[data-theme=dark] .geometry-result,html[data-theme=dark] .geometry-inputs figure{background:#202923;border-color:#3a483e}
 html[data-theme=dark] .appearance-preview{background:#29352d;border-color:#435248;--preview-blue:#a9cdf5;--preview-plum:#e4b7d1}
 html[data-theme=dark] .appearance-preview>strong,html[data-theme=dark] .appearance-preview span{color:#c3d6c1}
 html[data-theme=dark][data-ink=blue]{--reading-ink:#a9cdf5}

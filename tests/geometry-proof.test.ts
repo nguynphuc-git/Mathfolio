@@ -4,6 +4,7 @@ import {exampleProofScene} from '../src/geometry-proof-examples';
 import {geometryExamples} from '../src/geometry';
 import {mixedTextToLatex} from '../src/math-paste';
 import {emptyNotebook,newExercise,putExercise} from '../src/notebook';
+import {imo1970PastedProblem} from './fixtures/geometry-contests';
 const sample=()=>exampleProofScene(geometryExamples[0].statement)!;
 describe('proof constructions',()=>{
   it('constructs all built-in proofs from both prose and pasted LaTeX',()=>{
@@ -18,6 +19,27 @@ describe('proof constructions',()=>{
     const p=resolveProofScene(sample()),b=p.get('B')!;
     expect(b[0]).toBeCloseTo(.8);expect(b[1]).toBeCloseTo(-.6);
     expect(b[0]*(2-b[0])+b[1]*(1-b[1])).toBeCloseTo(0);
+  });
+  it('constructs the reported IMO problem with its right angle, projection and all three altitudes',()=>{
+    for(const text of [imo1970PastedProblem,mixedTextToLatex(imo1970PastedProblem,true),imo1970PastedProblem.replace(/2/g,'²')]){
+      const scene=exampleProofScene(text)!;expect(scene,text).toBeDefined();
+      const p=resolveProofScene(scene),sub=(a:string,b:string)=>p.get(a)!.map((x,i)=>x-p.get(b)![i]);
+      const dot=(a:number[],b:number[])=>a.reduce((sum,x,i)=>sum+x*b[i],0);
+      expect(dot(sub('B','D'),sub('C','D'))).toBeCloseTo(0);
+      expect(dot(sub('D','H'),sub('A','B'))).toBeCloseTo(0);
+      expect(dot(sub('D','H'),sub('A','C'))).toBeCloseTo(0);
+      expect(dot(sub('A','H'),sub('B','C'))).toBeCloseTo(0);
+      expect(dot(sub('B','H'),sub('A','C'))).toBeCloseTo(0);
+      expect(dot(sub('C','H'),sub('A','B'))).toBeCloseTo(0);
+      expect(Math.hypot(...sub('A','D'))).not.toBe(Math.hypot(...sub('B','D')));
+      expect(scene.goal).toContain('equality');expect(scene.unresolved).toEqual([]);
+      expect(scene.points.find(p=>p.id==='H')?.kind).toBe('planeFoot');
+    }
+  });
+  it('does not apply the IMO construction to changed or additional hypotheses',()=>{
+    for(const changed of [imo1970PastedProblem.replace('right angle','60 degree angle'),imo1970PastedProblem+' Assume AD = BD.',imo1970PastedProblem.replace('6(AD2','4(AD2'),imo1970PastedProblem.replace('intersection of\nthe altitudes','circumcenter')]){
+      expect(exampleProofScene(changed)).toBeUndefined();
+    }
   });
   it('rejects a diagram that contradicts its extracted perpendicular hypothesis',()=>{
     const scene=sample();scene.points[2].xyz=[2,2,0];

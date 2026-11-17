@@ -31,7 +31,6 @@ import './appearance.css';
 import './folder-colors.css';
 import {useAppearance} from './appearance';
 import {AppearanceSettings} from './components/AppearanceSettings';
-import {GeometryStudio} from './components/GeometryStudio';
 import {GeometryDiagramEditor} from './components/GeometryDiagramEditor';
 import {LatexMessage} from './components/LatexMessage';
 import { UsageGuide } from './components/UsageGuide';
@@ -44,7 +43,6 @@ const labels = ['A starting point', 'The method', 'Full solution'];
 export default function App() {
   const appearance=useAppearance();
   const [diagramBusy,setDiagramBusy]=useState(false);
-  const [geometryOpen,setGeometryOpen]=useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
   const [authBusy, setAuthBusy] = useState(false); const [tab, setTab] = useState<'solve' | 'library' | 'guide' | 'account'>('solve');
@@ -616,13 +614,11 @@ export default function App() {
           <div className="workspace-secondary">
             <details className="tool-disclosure"><summary>Add content</summary><div className="tool-content import-actions"><label className="attachment-button pdf-upload-button">＋ Choose PDF<input aria-label="Choose a PDF" type="file" accept="application/pdf,.pdf" disabled={blocked} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void loadPdf(file);}}/></label><label className="attachment-button">＋ Read image<input aria-label="Read a problem image" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void loadImage(file);}}/></label>
 </div></details>
-            <button className="geometry-launch" aria-expanded={geometryOpen} aria-controls="geometry-area" onClick={()=>setGeometryOpen(value=>!value)}>◇ Geometry studio</button>
             <details className="tool-disclosure study-options"><summary>Study options</summary><div className="tool-content"><label>Local answer style<select aria-label="Local answer style" disabled={blocked} value={responseStyle} onChange={e=>setResponseStyle(e.target.value as ResponseStyle)}><option value="auto">Auto · match the problem</option><option value="brief">Brief · essential steps</option><option value="explained">Explained · why each step works</option></select><small>Applies to new local solutions and chat. Hints stay gradual.</small></label><div className="problem-size-control"><span>Problem text size</span><div className="math-zoom" role="group" aria-label="Math size"><button type="button" aria-label="Decrease math size" disabled={mathSize<=14} onClick={()=>setMathSize(size=>Math.max(14,size-1))}>A−</button><span>{mathSize}</span><button type="button" aria-label="Increase math size" disabled={mathSize>=23} onClick={()=>setMathSize(size=>Math.min(23,size+1))}>A+</button></div></div>{savedDraft&&<button disabled={blocked} onClick={()=>beginSave(true)}>Name / folders</button>}<p className="subtle">Focus mode keeps only your problem and working notes. Keyboard shortcuts are in How to use.</p></div></details>
             <button className="cloud-switch" role="switch" aria-checked={cloudAllowed} aria-label="Cloud AI" disabled={blocked} onClick={()=>void toggleCloud()}><span className="switch-track" aria-hidden="true"><span/></span>Cloud AI <strong>{cloudAllowed?'On':'Off'}</strong></button>
           </div>
         </div>
       </div>
-      {geometryOpen&&<div id="geometry-area"><GeometryStudio disabled={blocked} onClose={()=>setGeometryOpen(false)} onUse={(title,statement)=>void (async()=>{if(await changeExercise({...newExercise(),title,statement:mixedTextToLatex(statement)})){setGeometryOpen(false);setDirty(true);setDraftSave('idle');setStatus('Geometry problem ready. Review the givens, then analyze or start your own solution.');}})()}/></div>}
       {focusMode&&<p className="focus-notice" role="status">Focus mode · Your hints, illustrations and discussion are kept. Exit focus mode to see them.</p>}
       <div className={focusMode?'workspace-content focus-mode':'workspace-content'}>
       <div className="problem-row">

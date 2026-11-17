@@ -1,4 +1,10 @@
 import type {ProofScene} from '../../src/geometry-proof';
+// Exact PDF text reported by the user, including flattened superscripts.
+export const imo1970PastedProblem=`In the tetrahedron ABCD, angle BDC is a right angle. Suppose that the
+foot H of the perpendicular from D to the plane ABC is the intersection of
+the altitudes of ∆ABC. Prove that
+(AB + BC + CA)2 ≤ 6(AD2 + BD2 + CD2).
+For what tetrahedra does equality hold?`;
 // Paraphrased inputs. Sources and evaluation boundaries: docs/geometry-proof-validation.md.
 export const contestProofs=[
   {id:'IMO-1968-P4',dimension:'3D',source:'https://www.imo-official.org/assets/documents/problems/1968/1968_eng.pdf',statement:'For an arbitrary tetrahedron ABCD, prove the existence of a vertex whose three incident edge lengths satisfy all strict triangle inequalities.',checks:['arbitrary tetrahedron','existence of a vertex','strict inequalities','no regularity assumption']},

@@ -6,6 +6,8 @@ import {InferenceMode} from 'firebase/ai';
 import {notebookAI,notebookPrompt,generateProofDiagram,type NotebookRequest} from '../src/ai';
 import {exampleProofScene} from '../src/geometry-proof-examples';
 import {geometryExamples} from '../src/geometry';
+import {imo1970PastedProblem,imo1970Scene} from './fixtures/geometry-contests';
+import {mixedTextToLatex} from '../src/math-paste';
 const image={name:'triangle.png',data:'data:image/png;base64,AA=='};
 const base:NotebookRequest={purpose:'knowledge',statement:'2x+3=7',knowledge:'',hints:[],messages:[],question:'',route:'local',cloudAllowed:false,images:[image]};
 function response(source='ON_DEVICE',text='Use the marked lengths in the attached diagram.'){
@@ -84,6 +86,44 @@ describe('proof diagram AI boundary',()=>{
   it('constructs built-in examples immediately without invoking a model',async()=>{
     const result=await generateProofDiagram(geometryExamples[0].statement,'local',false,[],signal());
     expect(result.source).toBe('local_construction');expect(result.showAuxiliary).toBe(false);expect(mock.model).not.toHaveBeenCalled();
+  });
+  it('handles the exact reported IMO input through the real generation API without AI coordinates',async()=>{
+    for(const statement of [imo1970PastedProblem,mixedTextToLatex(imo1970PastedProblem,true)]){
+      const result=await generateProofDiagram(statement,'local',false,[],signal());
+      expect(result.source).toBe('local_construction');expect(result.scene.dimension).toBe('3D');
+      expect(result.statement).toBe(statement);expect(result.scene.goal).toContain('equality');
+    }
+    expect(mock.model).not.toHaveBeenCalled();expect(mock.generate).not.toHaveBeenCalled();
+  });
+  const geometryResponse=(scene:ReturnType<typeof imo1970Scene>)=>({response:{text:()=>JSON.stringify(scene),inferenceSource:'ON_DEVICE',candidates:[]}});
+  const invalidSpatial=()=>{const scene=imo1970Scene();scene.points.find(p=>p.id==='C')!.xyz=[0,1,4];return scene;};
+  it('repairs invalid perpendicular coordinates once, retaining the problem and images on the same local route',async()=>{
+    mock.generate.mockResolvedValueOnce(geometryResponse(invalidSpatial())).mockResolvedValueOnce(geometryResponse(imo1970Scene()));
+    const result=await generateProofDiagram(imo1970PastedProblem,'local',false,[image],signal());
+    expect(result.scene.points.find(p=>p.id==='C')?.xyz).toEqual([0,0,4]);
+    expect(mock.generate).toHaveBeenCalledTimes(2);
+    const first=mock.generate.mock.calls[0][0],second=mock.generate.mock.calls[1][0];
+    expect(second[0].text).toContain('does not satisfy perpendicular');expect(second[0].text).toContain(first[0].text);
+    expect(second[0].text).toContain('Do not remove a failing relation');expect(second[1]).toEqual(first[1]);
+    expect(mock.model).toHaveBeenCalledOnce();expect(mock.model.mock.calls[0][1].mode).toBe(InferenceMode.ONLY_ON_DEVICE);
+  });
+  it('refuses corrections that delete constraints instead of fixing the drawing',async()=>{
+    const omitted=invalidSpatial();omitted.relations=[];
+    mock.generate.mockResolvedValueOnce(geometryResponse(invalidSpatial())).mockResolvedValueOnce(geometryResponse(omitted));
+    await expect(generateProofDiagram('A spatial proof with constraints.','local',false,[],signal())).rejects.toThrow('changed or removed a given constraint');
+    expect(mock.generate).toHaveBeenCalledTimes(2);
+  });
+  it('stops after one invalid correction and never falls back to cloud',async()=>{
+    mock.generate.mockResolvedValue(geometryResponse(invalidSpatial()));
+    await expect(generateProofDiagram('A spatial proof with constraints.','local',false,[],signal())).rejects.toThrow('perpendicular');
+    expect(mock.generate).toHaveBeenCalledTimes(2);expect(mock.model).toHaveBeenCalledOnce();
+  });
+  it('can cancel while a correction is pending',async()=>{
+    let finish!:(value:ReturnType<typeof geometryResponse>)=>void;
+    mock.generate.mockResolvedValueOnce(geometryResponse(invalidSpatial())).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+    const controller=new AbortController(),pending=generateProofDiagram('A spatial proof with constraints.','local',false,[],controller.signal);
+    await vi.waitFor(()=>expect(mock.generate).toHaveBeenCalledTimes(2));controller.abort();
+    await expect(pending).rejects.toMatchObject({name:'AbortError'});finish(geometryResponse(imo1970Scene()));
   });
   it('sends uploaded illustrations locally and validates the returned scene',async()=>{
     mock.generate.mockResolvedValueOnce(valid());

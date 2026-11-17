@@ -1,9 +1,11 @@
 import {geometryExamples} from './geometry';
 import {stripProblemLayout} from './problem-text';
 import {parseProofScene,type ProofScene} from './geometry-proof';
+import {olympiadProofScene} from './geometry-olympiad';
 // Exact built-in examples only. Arbitrary exercises always go through the interpreter.
 const normalized=(value:string)=>stripProblemLayout(value).replace(/\\(?:text|mathrm)\{([^{}]*)\}/g,'$1').replace(/\\(?:cdot|times)\s*/g,'*').replace(/[\s${}]/g,'');
 export function exampleProofScene(statement:string):ProofScene|undefined {
+  const olympiad=olympiadProofScene(statement);if(olympiad)return olympiad;
   const example=geometryExamples.find(e=>normalized(e.statement)===normalized(statement));
   if(!example)return;
   const common={goal:example.statement.slice(example.statement.indexOf('Prove')),unresolved:[]};
