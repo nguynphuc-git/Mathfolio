@@ -21,6 +21,9 @@ export interface ProofDiagram { scene: ProofScene; statement: string; source: st
 export class ProofSceneGeometryError extends Error {
   constructor(readonly scene:ProofScene,message:string){super(message);this.name='ProofSceneGeometryError';}
 }
+export class ProofSceneFormatError extends Error {
+  constructor(){super('Diagram needs revision: the model did not return a diagram. Try again or clarify the givens.');this.name='ProofSceneFormatError';}
+}
 const add=(a:Vec3,b:Vec3):Vec3=>a.map((x,i)=>x+b[i]) as Vec3;
 const sub=(a:Vec3,b:Vec3):Vec3=>a.map((x,i)=>x-b[i]) as Vec3;
 const mul=(a:Vec3,k:number):Vec3=>a.map(x=>x*k) as Vec3;
@@ -133,7 +136,7 @@ export function resolveProofScene(scene:ProofScene):Map<string,Vec3> {
 
 export function parseProofScene(raw:string):ProofScene {
   if(raw.length>50000)fail('the response is too large.');
-  let s:any;try{s=JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,''));}catch{fail('the model did not return a diagram. Try again or clarify the givens.');}
+  let s:any;try{s=JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,''));}catch{throw new ProofSceneFormatError();}
   const list=(x:unknown,max:number)=>Array.isArray(x)&&x.length<=max;
   const label=(x:unknown)=>typeof x==='string'&&/^[A-Za-z][A-Za-z0-9_']{0,11}$/.test(x);
   const text=(x:unknown)=>typeof x==='string'&&x.length<=1200;

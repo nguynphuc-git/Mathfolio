@@ -158,6 +158,23 @@ describe('proof diagram AI boundary',()=>{
     mock.generate.mockResolvedValueOnce({response:{text:()=>JSON.stringify({}),candidates:[{finishReason:'MAX_TOKENS'}]}});
     await expect(generateProofDiagram(statement,'local',false,[],signal())).rejects.toThrow('incomplete');
   });
+  it('requests JSON from the model and retries a malformed response once on the same route',async()=>{
+    mock.generate.mockResolvedValueOnce({response:{text:()=>`Here is the diagram:\n${JSON.stringify(exampleProofScene(geometryExamples[0].statement))}`,candidates:[]}});
+    mock.generate.mockResolvedValueOnce(valid());
+    const result=await generateProofDiagram(statement,'local',false,[],signal());
+    expect(result.scene.dimension).toBe('2D');expect(mock.generate).toHaveBeenCalledTimes(2);
+    expect(mock.model.mock.calls[0][1].onDeviceParams.promptOptions.responseConstraint).toMatchObject({
+      type:'object',required:expect.arrayContaining(['dimension','points','relations','unresolved'])
+    });
+    expect(mock.generate.mock.calls[1][0]).toContain('Your previous response was not valid JSON');
+    expect(mock.model.mock.calls[0][1].mode).toBe(InferenceMode.ONLY_ON_DEVICE);
+  });
+  it('requests JSON MIME output for cloud-generated diagrams',async()=>{
+    mock.generate.mockResolvedValueOnce(valid());
+    await generateProofDiagram(statement,'cloud',true,[],signal());
+    expect(mock.model.mock.calls[0][1].inCloudParams.generationConfig.responseMimeType).toBe('application/json');
+    expect(mock.model.mock.calls[0][1].mode).toBe(InferenceMode.ONLY_IN_CLOUD);
+  });
   it('explains local capacity errors without sending the problem to cloud',async()=>{
     mock.generate.mockRejectedValueOnce(new DOMException('The input is too large.','QuotaExceededError'));
     await expect(generateProofDiagram(statement,'local',false,[],signal())).rejects.toThrow('local model’s input capacity');

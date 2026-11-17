@@ -4,7 +4,7 @@ import type { Part } from 'firebase/ai';
 import { formulaReference, referenceContext } from './math-knowledge';
 import { linearHelp, localAnswerGuidance, type ResponseStyle } from './local-tutor';
 import { geometryHelp, geometryPromptContext } from './geometry';
-import { parseProofScene, proofDiagramPrompt, ProofSceneGeometryError, proofRepairPrompt, assertProofRepairPreservesGivens } from './geometry-proof';
+import { parseProofScene, proofDiagramPrompt, ProofSceneFormatError, ProofSceneGeometryError, proofRepairPrompt, assertProofRepairPreservesGivens } from './geometry-proof';
 import {exampleProofScene} from './geometry-proof-examples';
 import {repairProofIncidences} from './geometry-incidence';
 import {hasEditorContent} from './math-input';
@@ -20,13 +20,28 @@ questionMarkdown: Schema.string(), options: Schema.array({ items: Schema.string(
 correctIndex: Schema.integer(), explanationMarkdown: Schema.string()
 } }) })
 } });
+const proofDiagramConstraint = {
+type: 'object',
+properties: {
+dimension: { type: 'string', enum: ['2D', '3D'] },
+givens: { type: 'array', items: { type: 'string' } },
+goal: { type: 'string' },
+points: { type: 'array', items: { type: 'object' } },
+circles: { type: 'array', items: { type: 'object' } },
+edges: { type: 'array', items: { type: 'object' } },
+relations: { type: 'array', items: { type: 'object' } },
+constructions: { type: 'array', items: { type: 'string' } },
+unresolved: { type: 'array', items: { type: 'string' } }
+},
+required: ['dimension', 'givens', 'goal', 'points', 'circles', 'edges', 'relations', 'constructions', 'unresolved']
+};
 const models = new Map<string, ReturnType<typeof getGenerativeModel>>();
 const localModelUnavailablePrefix = 'On-device model is not available in Chromium, this API is just echoing back the input:';
-function modelFor(r: Pick<StudyRequest, 'action' | 'policy' | 'language'>, signal?: AbortSignal) {
+function modelFor(r: Pick<StudyRequest, 'action' | 'policy' | 'language'>, signal?: AbortSignal, jsonOutput=false) {
 const mode = r.action === 'deep' || r.action === 'quiz'
 ? InferenceMode.ONLY_IN_CLOUD
 : InferenceMode.ONLY_ON_DEVICE;
-const key = `${mode}:${r.action === 'quiz' ? 'quiz' : 'text'}:${r.language}`;
+const key = `${mode}:${r.action === 'quiz' ? 'quiz' : 'text'}:${r.language}:${jsonOutput?'json':'default'}`;
 let model = signal ? undefined : models.get(key);
 if (!model) {
 const ai = getAI(getCloudFirebaseApp(), { backend: new GoogleAIBackend() });
@@ -34,12 +49,15 @@ model = getGenerativeModel(ai, {
 mode,
 // Firebase forwards promptOptions to Chrome's native promptStreaming(). The native
 // API supports signal, although Firebase's current prompt-options type omits it.
-...(signal ? { onDeviceParams: { createOptions: { signal }, promptOptions: { signal } as { signal: AbortSignal; responseConstraint?: object } } } : {}),
+...(signal || (jsonOutput && mode===InferenceMode.ONLY_ON_DEVICE) ? { onDeviceParams: {
+...(signal ? { createOptions: { signal } } : {}),
+promptOptions: { ...(signal ? { signal } : {}), ...(jsonOutput ? { responseConstraint: proofDiagramConstraint } : {}) } as { signal?: AbortSignal; responseConstraint?: object }
+} } : {}),
 inCloudParams: {
 model: import.meta.env.VITE_CLOUD_MODEL || 'gemini-3.5-flash-lite',
 generationConfig: {
 maxOutputTokens: r.action === 'quiz' ? 4096 : 3072,
-...(r.action === 'quiz' ? { responseMimeType: 'application/json', responseSchema: quizSchema } : {})
+...(r.action === 'quiz' ? { responseMimeType: 'application/json', responseSchema: quizSchema } : jsonOutput ? { responseMimeType: 'application/json' } : {})
 }
 }
 });
@@ -340,14 +358,17 @@ export async function generateProofDiagram(statement:string, route:'local'|'clou
   const parts=validateIllustrations(images);
   const example=!parts.length?exampleProofScene(statement):undefined;
   if(example)return {scene:example,statement,source:'local_construction',showAuxiliary:false};
-  const model=modelFor({action:route==='cloud'?'deep':'quick',policy:route==='cloud'?'hybrid':'local',language:'en'},route==='local'?signal:undefined);
+  const model=modelFor({action:route==='cloud'?'deep':'quick',policy:route==='cloud'?'hybrid':'local',language:'en'},route==='local'?signal:undefined,true);
   if(route==='local')await abortable(model.initializeDeviceModel(),signal);
   const prepared=route==='local'?await localVisionParts(parts,signal):parts;
   const prompt=proofDiagramPrompt(stripProblemLayout(statement));
   let correction:ProofSceneGeometryError|undefined;
+  let retryMalformedOutput=false;
   for(let attempt=0;attempt<2;attempt++){
     signal.throwIfAborted();
-    const requestPrompt=correction?proofRepairPrompt(prompt,correction):prompt;
+    const requestPrompt=correction?proofRepairPrompt(prompt,correction):retryMalformedOutput
+      ?`${prompt}\nYour previous response was not valid JSON. Return only one complete JSON object matching the requested diagram schema. Do not include markdown fences, explanations, or text outside the JSON object.`
+      :prompt;
     const content=prepared.length?[{type:'text' as const,text:requestPrompt},...prepared]:requestPrompt;
     const {response}=await abortable(model.generateContent(content,{signal}),signal).catch((error:unknown)=>{
       if(error instanceof Error&&error.name==='QuotaExceededError')throw new Error('This problem exceeds the local model’s input capacity. Try a shorter statement or one cropped illustration. You can also explicitly enable Cloud AI and retry.');
@@ -370,6 +391,7 @@ export async function generateProofDiagram(statement:string, route:'local'|'clou
         }
       }
       if(attempt===0&&error instanceof ProofSceneGeometryError){correction=error;continue;}
+      if(attempt===0&&error instanceof ProofSceneFormatError){retryMalformedOutput=true;continue;}
       throw error;
     }
   }
