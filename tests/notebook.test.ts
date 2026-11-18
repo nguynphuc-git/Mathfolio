@@ -6,7 +6,7 @@ vi.mock('firebase/ai', async original => ({...await original<typeof import('fire
 vi.mock('../src/firebase',()=>({getCloudFirebaseApp:vi.fn(()=>({}))}));
 import { InferenceMode } from 'firebase/ai';
 vi.mock('idb-keyval', () => ({get: vi.fn(async (key: string) => values.get(key)), del:vi.fn(async(key:string)=>{values.delete(key);}), set: vi.fn(async (key: string, value: unknown) => { values.set(key, structuredClone(value)); })}));
-import { emptyNotebook, newExercise, notebookKey, putExercise, putExerciseNotes, loadNotebook, saveNotebook } from '../src/notebook';
+import { emptyNotebook, newExercise, notebookKey, putExercise, putExerciseNotes, putExerciseCompletion, loadNotebook, saveNotebook } from '../src/notebook';
 import { notebookAI, notebookPrompt, recommendsCloudForProblem, type NotebookRequest } from '../src/ai';
 afterEach(() => vi.unstubAllGlobals());
 const request: NotebookRequest = {purpose:'knowledge',statement:'Find the derivative of x squared.',subject:'calculus',knowledge:'',hints:[],messages:[],question:'',cloudAllowed:false,route:'local'};
@@ -51,6 +51,16 @@ describe('private exercise notebook', () => {
     expect(next.exercises[0].hints).toEqual(before.exercises[0].hints);
     expect(()=>putExerciseNotes(book,'missing','After')).toThrow('not found');
     expect(()=>putExerciseNotes(book,id,'a'.repeat(30001))).toThrow('30,000');
+  });
+  it('patches completion without duplicating a shared exercise or altering other saved content',()=>{
+    const book={...emptyNotebook(),folders:[...emptyNotebook().folders,{id:'revision',name:'Revision'}],exercises:[{...newExercise(),id:'page',title:'Shared',statement:'x=1',folderIds:['revision'],notes:'Saved notes',updatedAt:'2000-01-01T00:00:00Z'},{...newExercise(),id:'other'}]};
+    const before=structuredClone(book);const next=putExerciseCompletion(book,'page',true);
+    const {completed,updatedAt,...rest}=next.exercises[0];
+    expect(completed).toBe(true);expect(updatedAt).not.toBe(before.exercises[0].updatedAt);
+    expect(rest).toEqual((({completed,updatedAt,...rest})=>rest)(before.exercises[0]));
+    expect(next.exercises[1]).toBe(book.exercises[1]);expect(book).toEqual(before);
+    expect(putExerciseCompletion(next,'page',false).exercises[0].completed).toBe(false);
+    expect(()=>putExerciseCompletion(book,'missing',true)).toThrow('not found');
   });
   it('keeps hints and analysis on-device unless Cloud AI is explicitly enabled', async () => {
     vi.stubGlobal('navigator', {onLine:true});
@@ -170,5 +180,16 @@ describe('provider cancellation', () => {
     expect(model.generateContent.mock.calls.at(-1)?.[1]).toEqual({signal:controller.signal});
     release({response}); await Promise.resolve(); await Promise.resolve();
     expect(onText).not.toHaveBeenCalled();
+  });
+});
+
+describe('conversation without analysis',()=>{
+  it('supports a question-only conversation while keeping non-chat requests dependent on a problem',async()=>{
+    getModel.mockReturnValue(model);
+    const response={text:()=> 'A sequence is Cauchy when its late terms get arbitrarily close.',inferenceSource:'on_device',candidates:[]};
+    model.generateContentStream.mockResolvedValue({stream:(async function*(){yield response;})(),response:Promise.resolve(response)});
+    await expect(notebookAI({...request,purpose:'chat',statement:'',question:'What does Cauchy mean?'},vi.fn())).resolves.toMatchObject({text:response.text(),source:'on_device'});
+    for(const purpose of ['knowledge','hint1','hint2','hint3'] as const)await expect(notebookAI({...request,purpose,statement:'',question:'What does Cauchy mean?'},vi.fn())).rejects.toThrow('6,000');
+    await expect(notebookAI({...request,purpose:'chat',statement:'',question:String.raw`\text{   }`},vi.fn())).rejects.toThrow('6,000');
   });
 });

@@ -64,3 +64,16 @@ html .appearance-settings .appearance-size input[type=range]{appearance:none;dis
 html[data-theme="dark"] .hint-cloud-suggestion,html[data-theme="dark"] .cloud-recommendation{background:#2b4032;border-color:#48624e;color:#d9e9dc}
 html[data-theme="dark"] .hint-cloud-suggestion p,html[data-theme="dark"] .cloud-recommendation p{color:#d9e9dc}
 html[data-theme="dark"] .hint-cloud-suggestion button{background:#35553e;border-color:#66866f;color:#effbf1}
+
+/* Busy states and import choices remain legible with the app's Dark theme. */
+html[data-theme="dark"] .ai-toolbar{background:#2b3c32;border-color:#4a6251;color:#e2eee5;box-shadow:0 4px 18px #0003}
+html[data-theme="dark"] button.stop-ai{background:#45332b;border-color:#8c6b55;color:#f7dfcf}
+html[data-theme="dark"] button.stop-ai:hover:not(:disabled){background:#574035}
+html[data-theme="dark"] .live-answer{color:#d0e3d3;border-color:#72947b}
+html[data-theme="dark"] .pdf-dialog-actions,html[data-theme="dark"] .pdf-replace-confirm{background:#26362c;border-color:#4a6251;color:#e2eee5}
+html[data-theme="dark"] .pdf-dialog-header,html[data-theme="dark"] .pdf-typeset-details,html[data-theme="dark"] .pdf-dialog .import-source{border-color:#43564a}
+html[data-theme="dark"] .pdf-dialog-header h2,html[data-theme="dark"] .pdf-question-browser-heading h3,html[data-theme="dark"] .pdf-dialog .import-review-columns h3{color:#e2eee5}
+html[data-theme="dark"] .pdf-question-list button{background:#202c25;border-color:#4a6251;color:#e2eee5}
+html[data-theme="dark"] .pdf-question-list button[aria-pressed="true"]{background:#36533f;border-color:#7eaa88;box-shadow:inset 3px 0 #a0c8a6}
+html[data-theme="dark"] .pdf-question-list button:hover:not(:disabled){background:#304b39;border-color:#7eaa88}
+html[data-theme="dark"] .pdf-question-list button span,html[data-theme="dark"] .pdf-question-list button strong small,html[data-theme="dark"] .pdf-question-browser-heading>div span,html[data-theme="dark"] .pdf-format-actions>span,html[data-theme="dark"] .pdf-typeset-details>summary,html[data-theme="dark"] .pdf-replace-confirm p{color:#c1d4c5}

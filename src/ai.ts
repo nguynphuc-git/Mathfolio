@@ -261,7 +261,7 @@ function hintQuality(scope?:string):string {
 
 export async function notebookAI(r:NotebookRequest,onText:(text:string)=>void,signal?:AbortSignal):Promise<{text:string;source:string}> {
   signal?.throwIfAborted();
-  if(!hasEditorContent(r.statement)||r.statement.length>6000||r.question.length>1000)throw new Error('The problem must be at most 6,000 characters and the question at most 1,000.');
+  if((!hasEditorContent(r.statement)&&!(r.purpose==='chat'&&hasEditorContent(r.question)))||r.statement.length>6000||r.question.length>1000)throw new Error('The problem must be at most 6,000 characters and the question at most 1,000.');
   // A first hint is always on-device, even for images or a stale caller's cloud route.
   if(r.purpose==='hint1')r={...r,route:'local'};
   const problems=r.purpose.startsWith('hint')?hintProblems(r.statement):[];
@@ -280,7 +280,7 @@ export async function notebookAI(r:NotebookRequest,onText:(text:string)=>void,si
 async function runNotebookAI(r: NotebookRequest, onText: (text: string) => void, signal?: AbortSignal,scope?:string) {
   r = { ...r, statement:stripProblemLayout(r.statement) };
   signal?.throwIfAborted();
-  if (!hasEditorContent(r.statement) || r.statement.length > 6000 || r.question.length > 1000) throw new Error('The problem must be at most 6,000 characters and the question at most 1,000.');
+  if ((!hasEditorContent(r.statement)&&!(r.purpose==='chat'&&hasEditorContent(r.question))) || r.statement.length > 6000 || r.question.length > 1000) throw new Error('The problem must be at most 6,000 characters and the question at most 1,000.');
   const imageParts=validateIllustrations(r.images??[]);
   const quickAnswer = r.route === 'local' && !imageParts.length ? (linearHelp(r.statement, r.purpose, r.question, r.responseStyle) ?? geometryHelp(r.statement, r.purpose, r.question)) : undefined;
   if (quickAnswer) { onText(quickAnswer); return { text: quickAnswer, source: 'local_calculation' }; }

@@ -18,6 +18,8 @@ Trình khởi động cài dependency từ lockfile, khởi động Auth Emulato
 - Thử `2x+3=7` và chọn **Confirm & analyze** để xem thẻ công thức cục bộ. Các bài ngoài phạm vi công thức, hint và chat dùng Firebase AI Logic. Gemini cần project thật, App Check và thiết bị tương thích cho chế độ on-device.
 - Chọn **Read image** để đọc đề trên thiết bị rồi kiểm tra với ảnh nguồn. Nếu local AI không hỗ trợ ảnh, dùng OCR chữ in cục bộ; công thức cần được soát lại. Bước đọc ảnh này chạy cục bộ. Ảnh minh họa được chọn có thể gửi khi bạn bật Cloud AI và chạy phân tích, hint 2/3 hoặc chat. Hint 1 luôn chạy local.
 - Bản đang làm được tự lưu riêng; tải lại trang rồi chọn **Resume draft** để tiếp tục. **Save exercise** mới cập nhật bài gốc trong thư viện.
+- **Chat** và **Your working notes** dùng ngay từ đầu, không cần chạy kiến thức hoặc hint. Có thể hỏi trong chat khi chưa nhập đề; Cloud AI vẫn cần sự đồng ý của bạn.
+- Trong thư viện, chọn **Mark completed / Mark in progress** ngay trên thẻ bài. Trạng thái được lưu cho cùng bài ở mọi thư mục và đồng bộ với ô đánh dấu trong Workspace; ghi chú đang viết dở được giữ nguyên.
 - Đề, ghi chú và chat có nút **Math / Text**; nhấn **Alt một lần** (**Option / ⌥** trên Mac) trong ô đang viết để chuyển nhanh. Nhận diện tự động khi gõ đã tắt. Một bàn phím nổi dùng chung sẽ nhập vào ô bạn đang chọn, có thể kéo thả và giữ mở khi bấm ra ngoài.
 - Có thể dán đoạn chữ kèm công thức trực tiếp trong **Math**, giữ xuống dòng và công thức từ nguồn có chú thích LaTeX (ví dụ KaTeX). **Text** giữ nguyên chữ, chỉ định dạng toán khi có dấu phân cách LaTeX hoặc nguồn có công thức cấu trúc. Sau khi dán, chế độ gõ vẫn theo lựa chọn của bạn; kiểm tra lại công thức nếu nguồn sao chép chỉ có văn bản phẳng.
 - Hàng đầu gồm đề (2/3) và **Illustrations** (1/3); hàng tiếp là kiến thức/hint; hàng cuối là chat/notes. Chọn **Use this illustration for AI** ở những ảnh cần cho bài toán.
@@ -26,6 +28,7 @@ Trình khởi động cài dependency từ lockfile, khởi động Auth Emulato
 - Chọn màu pastel khi tạo thư mục, hoặc mở **Color** trên ô thư mục để đổi màu. Header có nền riêng và tương thích với Appearance sáng/tối.
 - Appearance và Study options tự đóng khi bấm ra ngoài; các lựa chọn có menu riêng với dấu tick. Dark mode áp dụng cho cả đề, ghi chú, chat và bàn phím toán. Trang đăng nhập có ký hiệu toán chuyển động nhẹ, tôn trọng cài đặt giảm chuyển động.
 - Nhấn ảnh đề/bài làm trong Workspace hoặc thư viện để xem lớn, zoom và kéo ảnh; nhấn Escape để quay lại.
+- **Illustrations** chỉ giữ ảnh minh họa để xem và đưa vào ngữ cảnh AI; không còn nút đọc chữ dưới mỗi ảnh. Để đọc đề từ ảnh, dùng **Add content → Read image**. Danh sách **Questions found** trong PDF có thêm chiều cao để xem nhiều câu hơn.
 - Xem [các tính năng Mathfolio](NOTEBOOK.md) và [checklist sprint chung](https://github.com/nguynphuc-git/StudyLens/issues/2).
 
 ## Môi trường Firebase khi được cấp quota

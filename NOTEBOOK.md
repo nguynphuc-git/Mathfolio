@@ -1,3 +1,12 @@
+## Independent chat, library completion and dark import/progress states
+
+- Chat and notes are available without running knowledge or hints. A question-only chat is accepted without a problem statement; analysis and hints still require a problem, and hints retain their ordered prerequisites. Chat uses any existing problem/context without confirming the problem or opening hint levels. Cloud consent, selected illustrations and cancellation guards remain active.
+- Library cards offer Mark completed / Mark in progress. Only completion and the update timestamp are patched on the single shared saved record. Filters update immediately after successful storage. Matching workspace completion follows the explicit library action without overwriting unsaved notes or other work; a failed save leaves the displayed and stored status intact.
+- Illustration thumbnails retain zoom, rename, remove and AI-context selection. Per-illustration Read locally / Read with Cloud AI actions were removed; Add content → Read image and separately consented PDF reading remain available.
+- AI/diagram/import progress banners, streaming text, PDF action footers, replacement prompts, selected questions and PDF headings have explicit dark colors. Source image pixels are preserved. The PDF question list grows from a 25dvh/250px maximum to 38dvh/420px on desktop, with a 38dvh limit on smaller screens; the rest of the dialog remains scrollable.
+
+Validation covers question-only and unanalyzed chat, notes preservation, consent/Stop boundaries, completion toggling/reload/filtering, failed-save retry, shared-record isolation and unsaved workspace preservation. Browser checks use controlled auth/AI/PDF fixtures; they validate real page controls and styling without live authentication or inference.
+
 ## Mixed Math paste, fraction focus and edge-to-edge sign-in decoration
 
 - Math mode accepts pasted prose alongside formulas, retaining paragraph breaks and recovering exact TeX from annotated KaTeX/MathML clipboard HTML. Complete authored TeX environments retain their layout. Text mode keeps ordinary clipboard text literal; explicit LaTeX still takes precedence. Both modes remain selected after paste; live automatic mode detection stays disabled.

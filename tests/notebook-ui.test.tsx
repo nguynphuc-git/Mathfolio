@@ -286,41 +286,19 @@ describe('saved page previews and workspace copies', () => {
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Selected PDF question"]')!.value).toContain('Solve x^2=4');
   });
 
-  it('reads an attached image locally without sending it to Cloud AI', async () => {
-    const upload = host.querySelector<HTMLInputElement>('[aria-label="Attach a problem illustration"]')!;
-    const file = new File(['image'], 'problem.png', { type: 'image/png' });
-    Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
-    await act(async () => {
-      upload.dispatchEvent(new Event('change', { bubbles: true }));
-      await new Promise(resolve => setTimeout(resolve, 0));
-    });
-
-    await click('Read locally');
-    expect(mocks.imageLocal).toHaveBeenCalledOnce();
-    expect(mocks.imageCloud).not.toHaveBeenCalled();
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain('Local transcription');
-    expect(host.textContent).toContain('Review the transcription before analyzing');
-  });
-
-  it('asks separate consent before sending a selected image to Cloud AI', async () => {
-    const upload = host.querySelector<HTMLInputElement>('[aria-label="Attach a problem illustration"]')!;
-    const file = new File(['image'], 'problem.png', { type: 'image/png' });
-    Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
-    await act(async () => {
-      upload.dispatchEvent(new Event('change', { bubbles: true }));
-      await new Promise(resolve => setTimeout(resolve, 0));
-    });
-
-    await click('Read with Cloud AI');
-    expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain('The selected problem image will be sent');
-    expect(mocks.imageCloud).not.toHaveBeenCalled();
-    await click('Not now');
-    expect(mocks.imageCloud).not.toHaveBeenCalled();
-
-    await click('Read with Cloud AI');
-    await click('Send image to Cloud AI');
-    expect(mocks.imageCloud).toHaveBeenCalledWith(expect.stringMatching(/^data:image\/png;base64,/));
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain('Cloud transcription');
+  it('keeps illustrations for viewing and AI context without per-image reading actions',async()=>{
+    await type('[aria-label="Problem statement"]','Keep this problem');
+    const upload=host.querySelector<HTMLInputElement>('[aria-label="Attach a problem illustration"]')!;
+    Object.defineProperty(upload,'files',{configurable:true,value:[new File(['image'],'diagram.png',{type:'image/png'})]});
+    await act(async()=>upload.dispatchEvent(new Event('change',{bubbles:true})));
+    const panel=host.querySelector('[aria-label="Problem illustrations"]')!;
+    expect(panel.textContent).toContain('diagram.png');expect(panel.querySelector('img')).not.toBeNull();
+    expect([...panel.querySelectorAll('button')].some(button=>/Read locally|Read with Cloud AI/.test(button.textContent??''))).toBe(false);
+    expect(panel.querySelector<HTMLInputElement>('.image-ai-choice input')!.checked).toBe(true);
+    await click('Cloud AI',host.querySelector('.workspace-actions')!);await click('Allow Cloud AI');
+    expect(panel.textContent).not.toMatch(/Read locally|Read with Cloud AI/);
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe('Keep this problem');
+    expect(mocks.ai).not.toHaveBeenCalled();expect(mocks.imageCloud).not.toHaveBeenCalled();expect(mocks.imageLocal).not.toHaveBeenCalled();
   });
 
   it('requires image consent before Cloud AI reads a full PDF page', async () => {
@@ -510,6 +488,72 @@ describe('Stop AI restores the pre-request page', () => {
     expect(host.querySelector('.hints')!.textContent).not.toContain('Original hint');expect(button('Open level 1').disabled).toBe(false);
     expect(host.querySelector('.knowledge')!.textContent).toContain('Original essentials');expect(stored().exercises[0].hints[0].text).toBe('Original hint');expect(mocks.ai).not.toHaveBeenCalled();
     mocks.ai.mockResolvedValue({text:'Fresh complete hints',source:'ON_DEVICE'});await click('Open level 1');expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'hint1',route:'local'});
+  });
+});
+
+describe('independent conversation and notes',()=>{
+  it.each(['','An unconfirmed problem'])('allows chat with problem %j before knowledge or hints',async statement=>{
+    if(statement)await type('[aria-label="Problem statement"]',statement);
+    const notes=host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!;
+    const chat=host.querySelector<HTMLTextAreaElement>('[aria-label="Discussion question"]')!;
+    expect(notes.disabled).toBe(false);expect(chat.disabled).toBe(false);
+    await type('[aria-label="Notes"]','My own approach');
+    await type('[aria-label="Discussion question"]','What does a Cauchy sequence mean?');
+    mocks.ai.mockResolvedValue({text:'Compare every pair of sufficiently late terms.',source:'on_device'});
+    await click('Send');
+    expect(mocks.ai).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({purpose:'chat',statement,knowledge:'',hints:[],route:'local',cloudAllowed:false}),expect.any(Function),expect.any(AbortSignal));
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe('My own approach');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Discussion question"]')!.value).toBe('');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.readOnly).toBe(false);
+    expect(button('Open level 1').disabled).toBe(true);expect(host.querySelector('.messages')!.textContent).toContain('Compare every pair');
+    expect(mocks.write).not.toHaveBeenCalled();
+  });
+  it('keeps cloud consent and Stop behavior for an unanalyzed conversation',async()=>{
+    await type('[aria-label="Discussion question"]','Explain limits');
+    await click('Cloud AI',host.querySelector('.chat-routes')!);await click('Not now');
+    expect(mocks.ai).not.toHaveBeenCalled();
+    await click('Cloud AI',host.querySelector('.chat-routes')!);await click('Allow Cloud AI');
+    let finish!:(answer:Answer)=>void;
+    mocks.ai.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+    await click('Send');expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'chat',statement:'',route:'cloud',cloudAllowed:true});
+    await click('■ Stop AI');await act(async()=>finish({text:'Late output',source:'in_cloud'}));
+    expect(host.querySelector('.messages')!.textContent).not.toContain('Late output');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Discussion question"]')!.value).toBe('Explain limits');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.disabled).toBe(false);
+  });
+});
+
+describe('completion directly in the library',()=>{
+  it('toggles the shared saved record both ways and updates completion filters after reload',async()=>{
+    await library();await click('Mark completed');
+    expect(stored().exercises.find(exercise=>exercise.id==='first')!.completed).toBe(true);
+    await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));
+    await library();
+    const filter=host.querySelector<HTMLSelectElement>('[aria-label="Exercise status"]')!;
+    await act(async()=>{filter.value='completed';filter.dispatchEvent(new Event('change',{bubbles:true}));});
+    expect(host.querySelectorAll('.exercise-card')).toHaveLength(1);expect(host.querySelector('.exercise-card')!.textContent).toContain('Quadratic page');
+    await click('Mark in progress');
+    expect(host.querySelectorAll('.exercise-card')).toHaveLength(0);
+    expect(stored().exercises.find(exercise=>exercise.id==='first')!.completed).toBe(false);expect(stored().exercises).toHaveLength(2);
+    expect(mocks.ai).not.toHaveBeenCalled();
+  });
+  it('leaves saved data and the displayed status intact on failure, then allows retry',async()=>{
+    await library();const before=structuredClone(stored());
+    mocks.write.mockImplementationOnce(()=>{throw new Error('Storage is full');});
+    await click('Mark completed');
+    expect(stored()).toEqual(before);expect(host.textContent).toContain('Storage is full');expect(button('Mark completed').disabled).toBe(false);
+    expect(host.querySelector('.exercise-card .tag')!.textContent).toBe('In progress');
+    await click('Mark completed');expect(stored().exercises.find(exercise=>exercise.id==='first')!.completed).toBe(true);
+  });
+  it('updates the active workspace status while preserving its unsaved work',async()=>{
+    await openWorkspace();await type('[aria-label="Notes"]','Unsaved reasoning');
+    await click('Exercise library');await click('Mark completed');
+    expect(stored().exercises.find(exercise=>exercise.id==='first')!.notes).toBe('Original notes');
+    await click('Workspace');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe('Unsaved reasoning');
+    expect(host.querySelector<HTMLInputElement>('.notes .check input')!.checked).toBe(true);
+    await click('Save exercise');
+    expect(stored().exercises.find(exercise=>exercise.id==='first')).toMatchObject({notes:'Unsaved reasoning',completed:true});expect(stored().exercises).toHaveLength(2);
   });
 });
 

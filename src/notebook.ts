@@ -44,6 +44,11 @@ export function putExercise(book: Notebook, exercise: Exercise): Notebook {
   const snapshot = structuredClone({ ...membership, title: exercise.title.trim(), updatedAt: new Date().toISOString() });
   return { ...book, exercises: [snapshot, ...book.exercises.filter(e => e.id !== exercise.id)] };
 }
+/** Completion is one shared saved field, independent of an open workspace draft. */
+export function putExerciseCompletion(book:Notebook,id:string,completed:boolean):Notebook{
+  if(!book.exercises.some(exercise=>exercise.id===id))throw new Error('Exercise not found.');
+  return {...book,exercises:book.exercises.map(exercise=>exercise.id===id?{...exercise,completed,updatedAt:new Date().toISOString()}:exercise)};
+}
 /** Preview edits only patch fields exposed in the library, never AI/problem content. */
 export function putExercisePreview(book:Notebook,id:string,changes:{notes:string;notesFormat?:'latex';attachments?:Attachment[];folderIds?:string[]}):Notebook{
   let next=putExerciseNotes(book,id,changes.notes,changes.notesFormat);
