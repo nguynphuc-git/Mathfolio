@@ -78,7 +78,7 @@ function undelimited(value: string): string {
   return output + prose(value.slice(cursor));
 }
 
-/** Explicit editor modes override ambiguous clipboard guesses; structured LaTeX wins. */
+/** Text mode keeps literal words; Math paste accepts mixed prose/formulas without changing typing mode. */
 export function editorPaste(value:string, mode:'math'|'text'|null, preserveLines=false):string {
   if(mode===null)return mixedTextToLatex(value,preserveLines);
   if(mode==='text'){
@@ -91,6 +91,10 @@ export function editorPaste(value:string, mode:'math'|'text'|null, preserveLines
     }
     return lines.length===1?lines[0]:lines.map(line=>`\\class{mathfolio-line}{${line}}`).join('\n');
   }
-  const converted=value.replace(/\r\n?/g,'\n').split('\n').map(line=>formula(line.replace(/^\$\$?([\s\S]*?)\$\$?$/,'$1').replace(/^\\[([]([\s\S]*?)\\[)\]]$/,'$1')));
-  return converted.length===1?converted[0]:converted.map(line=>`\\class{mathfolio-line}{${line}}`).join('\n');
+  // A complete authored TeX environment already carries its own math layout.
+  const trimmed=value.trim();
+  if(/^\\begin\{([A-Za-z*]+)\}[\s\S]*\\end\{\1\}$/.test(trimmed))return trimmed;
+  // External proofs often mix words and delimited TeX on the same line. Treating
+  // that whole line as one formula corrupts both, and PDF normalization joins paragraphs.
+  return mixedTextToLatex(value,true);
 }

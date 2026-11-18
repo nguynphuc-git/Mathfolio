@@ -26,7 +26,7 @@ html[data-theme="dark"] .appearance-settings,html[data-theme="dark"] .tool-conte
 .math-input math-field::part(placeholder){color:var(--editor-placeholder)}
 html[data-theme="dark"] .math-editor{--editor-placeholder:#a6b9ac}
 html[data-theme="dark"] .math-editor .math-input{background:repeating-linear-gradient(transparent,transparent 31px,#99af9a12 32px) #29382f;border-color:#485e4e;color:#e5eee7}
-html[data-theme="dark"] .math-editor .math-input math-field{background:transparent;color:#e5eee7;--caret-color:#a1d2ad;--selection-color:#f0fff3;--selection-background-color:#45664e;--placeholder-color:#b3cbb9;--placeholder-opacity:.8;--smart-fence-color:#d7eadb;--composition-background-color:#514b34;--composition-text-color:#f5eedc;color-scheme:dark}
+html[data-theme="dark"] .math-editor .math-input math-field{background:transparent;color:#e5eee7;--caret-color:#a1d2ad;--selection-color:#f0fff3;--selection-background-color:#45664e;--contains-highlight-background-color:#3b5444;--contains-highlight-color:#e5eee7;--highlight-text:#a1d2ad16;--placeholder-color:#b3cbb9;--placeholder-opacity:.8;--smart-fence-color:#d7eadb;--composition-background-color:#514b34;--composition-text-color:#f5eedc;color-scheme:dark}
 html[data-theme="dark"] .math-editor .math-input.compact{background:transparent}
 html[data-theme="dark"] .editor-mode-bar small{color:#a3b6a7}
 html[data-theme="dark"] .math-keyboard .more-symbols,html[data-theme="dark"] .notes-editor .notes-keyboard-toggle{background:#30483a;border-color:#57725f;color:#e3eee5}
@@ -39,12 +39,16 @@ html[data-theme="dark"] .symbol-browser .keyboard-target strong{color:#d2e6d7}
 html[data-theme="dark"] .symbol-browser .symbol-categories{border-color:#4a6250}
 /* Decorative login mathematics never intercepts input or enters the reading order. */
 .login-page{position:relative;isolation:isolate;z-index:1;min-height:100dvh}
-.login-math-backdrop{position:fixed;inset:0;overflow:hidden;z-index:0;pointer-events:none;user-select:none}
+/* Signed-out decoration reaches the edge without an unused stable scrollbar gutter. */
+html:has(.login-math-backdrop){scrollbar-gutter:auto}
+.login-math-backdrop{--login-base:#f5f4ed;position:fixed;inset:0;width:100vw;max-width:none;height:100vh;height:100dvh;margin:0;overflow:hidden;z-index:0;pointer-events:none;user-select:none;background:radial-gradient(ellipse at 100% 55%,#c2d5e94d,transparent 65%),radial-gradient(ellipse at 0 35%,#b9d8bd40,transparent 60%),var(--login-base)}
+html[data-paper=sage] .login-math-backdrop{--login-base:#eaf0e7}html[data-paper=blue] .login-math-backdrop{--login-base:#eaf0f6}html[data-paper=rose] .login-math-backdrop{--login-base:#f5ecec}
 .login-math-backdrop>span{position:absolute;font-family:'Lora',Georgia,serif;color:#527760;opacity:.16;animation:math-drift 28s ease-in-out infinite alternate}
-.login-halo{position:absolute;width:540px;height:540px;border-radius:50%;background:radial-gradient(circle,#b9d8bd55,transparent 69%)}.halo-one{top:5%;left:-12%}.halo-two{right:-15%;bottom:0;background:radial-gradient(circle,#c2d5e955,transparent 69%)}
+.login-halo{position:absolute;width:clamp(360px,55vw,900px);height:clamp(360px,55vw,900px);border-radius:50%;background:radial-gradient(circle,#b9d8bd55,transparent 69%)}.halo-one{top:5%;left:-6%}.halo-two{right:-6%;bottom:0;background:radial-gradient(circle,#c2d5e955,transparent 69%)}
 .login-page .account-panel{position:relative;margin-top:64px;border-radius:23px;padding:38px;box-shadow:0 22px 65px #193e2510;background:#fffefae8;backdrop-filter:blur(10px)}
 .login-page .account-panel h1{font-size:34px}.login-page .account-panel form{padding:6px 0}.login-page .account-panel input{border-radius:10px;min-height:47px}
 html[data-theme="dark"] .login-math-backdrop>span{color:#c2dec8;opacity:.14}
+html[data-theme="dark"] .login-math-backdrop{--login-base:#171d1a;background:radial-gradient(ellipse at 100% 55%,#627d8e26,transparent 65%),radial-gradient(ellipse at 0 35%,#6c947626,transparent 60%),var(--login-base)}
 html[data-theme="dark"] .login-page .account-panel{background:#26362ee8;border-color:#4a5f50;box-shadow:0 22px 65px #0002}
 html[data-theme="dark"] .login-math-backdrop .login-halo{opacity:.55}
 @keyframes math-drift{0%{transform:translate3d(-7px,10px,0) rotate(-6deg)}50%{transform:translate3d(9px,-13px,0) rotate(2deg)}100%{transform:translate3d(-4px,-30px,0) rotate(7deg)}}

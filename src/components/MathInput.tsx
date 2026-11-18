@@ -61,15 +61,16 @@ export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({v
       if(field.readOnly||!event.clipboardData)return;
       if(event.clipboardData.getData('application/json+mathlive'))return;
       const latex=event.clipboardData.getData('application/x-latex'),text=event.clipboardData.getData('text/plain');
-      if(!latex&&!text)return;
+      const html=event.clipboardData.getData('text/html');
+      const content=latex?'':clipboardMathText(html,text);
+      if(!latex&&!content)return;
       event.preventDefault();event.stopImmediatePropagation();
       const requestedMode=field.mode==='text'?'text':'math';
-      const html=event.clipboardData.getData('text/html');
-      const insertion=latex||editorPaste(clipboardMathText(html,text),requestedMode,options.current.preserveLines);
+      const insertion=latex||editorPaste(content,requestedMode,options.current.preserveLines);
       const selection=field.selectionIsCollapsed?'':field.getValue(field.selection,'latex');
       if(field.value.length-selection.length+insertion.length>options.current.maxLength){setInputError(`Keep this entry within ${options.current.maxLength.toLocaleString('en-US')} characters.`);return;}
       field.insert(insertion,{format:'latex',mode:'math',selectionMode:'after'});
-      if(requestedMode==='text'&&!latex)field.mode='text';
+      field.mode=requestedMode;
       handleInput();
     };
     const handleKey=(event:KeyboardEvent)=>{

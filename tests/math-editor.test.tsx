@@ -25,8 +25,9 @@ interface StubField extends HTMLElement {
 }
 let root:Root,host:HTMLDivElement; const change=vi.fn(); const handle=createRef<MathInputHandle>();
 function field(){return host.querySelector<StubField>('test-math-editor')!;}
-async function paste(mime:string,value:string){
-  const data=new DataTransfer();data.setData(mime,value);
+async function paste(mime:string|Record<string,string>,value=''){
+  const data=new DataTransfer();
+  for(const [type,content] of Object.entries(typeof mime==='string'?{[mime]:value}:mime))data.setData(type,content);
   const event=new ClipboardEvent('paste',{clipboardData:data,cancelable:true});
   await act(async()=>field().dispatchEvent(event));return event;
 }
@@ -50,6 +51,34 @@ describe('math editor event integration',()=>{
     field().insert.mockClear();
     const event=await paste('application/json+mathlive','[{"type":"genfrac"}]');
     expect(event.defaultPrevented).toBe(false);expect(field().insert).not.toHaveBeenCalled();
+  });
+  it.each(['math','text'] as const)('recovers external rendered fractions and surrounding prose while in %s',async mode=>{
+    field().mode=mode;
+    // Model MathLive moving into a trailing text atom during insertion.
+    field().insert.mockImplementationOnce((latex:string)=>{field().value+=latex;field().mode='text';return true;});
+    const html=String.raw`<p>Vì <span class="katex"><math><semantics><annotation encoding="application/x-tex">a_{m_k}\to a</annotation></semantics></math><span>duplicated visual symbols</span></span>, tồn tại K sao cho</p><p><span class="katex"><math><annotation encoding="application/x-tex">|a_{m_k}-a|&lt;\frac{\varepsilon}{2}</annotation></math></span>.</p><script>bad()</script>`;
+    const event=await paste({'text/plain':'flattened and duplicated fallback','text/html':html});
+    const inserted=field().insert.mock.calls.at(-1)?.[0];
+    expect(event.defaultPrevented).toBe(true);
+    const ending=mode==='math'?String.raw`\text{, tồn tại }K\text{ sao cho}`:String.raw`\text{, tồn tại K sao cho}`;
+    expect(inserted).toContain(String.raw`\text{Vì }a_{m_k}\to a`+ending);
+    expect(inserted).toContain(String.raw`|a_{m_k}-a|<\frac{\varepsilon}{2}`);
+    expect(inserted.match(/\\class\{mathfolio-line\}/g)).toHaveLength(2);
+    expect(inserted).not.toMatch(/duplicated|fallback|bad\(\)|<math/);
+    expect(field().mode).toBe(mode);expect(field().smartMode).toBe(false);
+    expect(change).toHaveBeenLastCalledWith(field().value);
+  });
+  it('accepts annotated HTML even without a text/plain clipboard alternative',async()=>{
+    const event=await paste('text/html',String.raw`<p>So sánh <math><annotation encoding="application/x-latex">\frac{1}{2}</annotation></math>.</p>`);
+    expect(event.defaultPrevented).toBe(true);
+    expect(field().insert).toHaveBeenCalledWith(String.raw`\text{So sánh }\frac{1}{2}\text{.}`,expect.anything());
+  });
+  it('prefers explicit LaTeX over HTML/plain alternatives and retains the chosen typing mode',async()=>{
+    field().mode='text';
+    const latex=String.raw`\frac{a+b}{c}`;
+    field().insert.mockImplementationOnce((value:string)=>{field().value+=value;field().mode='math';return true;});
+    await paste({'application/x-latex':latex,'text/plain':'flattened','text/html':'<p>ignored</p>'});
+    expect(field().insert).toHaveBeenCalledWith(latex,expect.anything());expect(field().mode).toBe('text');
   });
   it('uses native fence-aware superscripts for keyboard and toolbar actions',async()=>{
     expect(field().smartMode).toBe(false);expect(field().smartFence).toBe(true);expect(field().smartSuperscript).toBe(false);

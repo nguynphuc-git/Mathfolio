@@ -1,3 +1,12 @@
+## Mixed Math paste, fraction focus and edge-to-edge sign-in decoration
+
+- Math mode accepts pasted prose alongside formulas, retaining paragraph breaks and recovering exact TeX from annotated KaTeX/MathML clipboard HTML. Complete authored TeX environments retain their layout. Text mode keeps ordinary clipboard text literal; explicit LaTeX still takes precedence. Both modes remain selected after paste; live automatic mode detection stays disabled.
+- The shared editor accepts annotated HTML even when a source omits text/plain. Clipboard HTML is converted to text/TeX, never inserted as DOM. Existing read-only, selection replacement and length guards remain active.
+- Dark MathLive fields set the public contains-highlight variables as well as ordinary selection colors. This fixes the pale fraction/parent focus highlight when the app uses Dark while the OS uses Light, across Problem, Notes and Chat.
+- The fixed body-level login layer fills the viewport with soft edge gradients. Signed-out pages drop the unused stable scrollbar gutter, and the right halo reaches the edge. Drift cycles are now 16–36 seconds, with the same 20 symbols and reduced-motion behavior.
+
+Validation includes mixed Vietnamese proof paste, raw/delimited TeX, arrays, annotated HTML with and without plain text, MIME precedence and mode retention. Headless Chromium checks exercise native Ctrl+V through the real MathInput component, confirm error-free fraction rendering and the dark focus color with an OS Light preference, and measure the actual sign-in backdrop at 1920, 1280 and 390 px plus reduced motion. Firebase sign-in and AI inference were not exercised in these visual checks.
+
 ## Compact Appearance, aligned controls and Alt/Option entry
 
 - Fixed the remaining bright cloud-hint recommendation panels in dark mode, including their text/buttons. Folder color swatches, their current-color caption and disclosure summary are centered.

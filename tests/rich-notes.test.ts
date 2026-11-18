@@ -20,7 +20,7 @@ describe('typeset notes and clipboard sources',()=>{
     expect(book.exercises[0].notes).toBe('Old notes');expect(next.exercises[0].statement).toBe('x=1');
     expect(convertLatexToMarkup(note)).not.toContain('ML__error');
   });
-  it('keeps forced text literal while forced math bypasses word guessing',()=>{
+  it('keeps Text paste literal and preserves explicit formulas in Math paste',()=>{
     expect(editorPaste('sin x', 'text')).toBe(String.raw`\text{sin x}`);
     expect(editorPaste(String.raw`$$\frac{x}{2}$$`,'math')).toBe(String.raw`\frac{x}{2}`);
     expect(editorPaste('x^2 = 4',null)).not.toContain(String.raw`\text`);

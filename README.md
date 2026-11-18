@@ -19,6 +19,7 @@ Trình khởi động cài dependency từ lockfile, khởi động Auth Emulato
 - Chọn **Read image** để đọc đề trên thiết bị rồi kiểm tra với ảnh nguồn. Nếu local AI không hỗ trợ ảnh, dùng OCR chữ in cục bộ; công thức cần được soát lại. Bước đọc ảnh này chạy cục bộ. Ảnh minh họa được chọn có thể gửi khi bạn bật Cloud AI và chạy phân tích, hint 2/3 hoặc chat. Hint 1 luôn chạy local.
 - Bản đang làm được tự lưu riêng; tải lại trang rồi chọn **Resume draft** để tiếp tục. **Save exercise** mới cập nhật bài gốc trong thư viện.
 - Đề, ghi chú và chat có nút **Math / Text**; nhấn **Alt một lần** (**Option / ⌥** trên Mac) trong ô đang viết để chuyển nhanh. Nhận diện tự động khi gõ đã tắt. Một bàn phím nổi dùng chung sẽ nhập vào ô bạn đang chọn, có thể kéo thả và giữ mở khi bấm ra ngoài.
+- Có thể dán đoạn chữ kèm công thức trực tiếp trong **Math**, giữ xuống dòng và công thức từ nguồn có chú thích LaTeX (ví dụ KaTeX). **Text** giữ nguyên chữ, chỉ định dạng toán khi có dấu phân cách LaTeX hoặc nguồn có công thức cấu trúc. Sau khi dán, chế độ gõ vẫn theo lựa chọn của bạn; kiểm tra lại công thức nếu nguồn sao chép chỉ có văn bản phẳng.
 - Hàng đầu gồm đề (2/3) và **Illustrations** (1/3); hàng tiếp là kiến thức/hint; hàng cuối là chat/notes. Chọn **Use this illustration for AI** ở những ảnh cần cho bài toán.
 - Hint 2/3 gợi ý **Use Cloud AI** khi có mạng và hỏi đồng ý trước khi chạy.
 - Hint bao quát từng bài/ý; chọn **Reset hints** để tạo lại các tầng cũ. Bàn phím thông dụng có **xₙ**, Calculus & series có **⋃ / ⋂**.
