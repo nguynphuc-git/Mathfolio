@@ -1,14 +1,14 @@
 /** Declarative constructions only: no executable TeX, SVG or model-generated code. */
 export type Vec3 = [number, number, number];
 export interface ProofPoint {
-  id: string; kind: 'free'|'midpoint'|'foot'|'intersection'|'onCircle'|'tangent'|'circumcenter'|'lineCircle'|'circleIntersection'|'planeFoot'|'onLine'|'parallelIntersection'|'angleOnRay';
+  id: string; kind: 'free'|'midpoint'|'foot'|'intersection'|'onCircle'|'tangent'|'circumcenter'|'incenter'|'angleBisector'|'lineCircle'|'circleIntersection'|'planeFoot'|'onLine'|'parallelIntersection'|'angleOnRay';
   xyz?: Vec3; refs?: string[]; angle?: number; t?:number; branch?: 1|-1; auxiliary?: boolean;
 }
 export interface ProofCircle { id: string; center: string; through: string; auxiliary?: boolean }
 export interface ProofEdge { a: string; b: string; auxiliary?: boolean; hidden?: boolean }
 export interface ProofRelation {
-  kind: 'perpendicular'|'parallel'|'equalLength'|'collinear'|'coplanar'|'onCircle'|'between'|'equalAngle';
-  refs: string[]; source: string;
+  kind: 'perpendicular'|'parallel'|'equalLength'|'collinear'|'coplanar'|'onCircle'|'between'|'equalAngle'|'angle';
+  refs: string[]; source: string; degrees?: number;
 }
 export interface ProofScene {
   dimension: '2D'|'3D'; givens: string[]; goal: string; points: ProofPoint[];
@@ -106,6 +106,13 @@ export function resolveProofScene(scene:ProofScene):Map<string,Vec3> {
       const origin=get(refs[1]),n=cross(sub(get(refs[2]),origin),sub(get(refs[3]),origin));
       if(norm(n)<1e-6)fail('a projection plane needs three noncollinear points.');
       const q=get(refs[0]);v=sub(q,mul(n,dot(sub(q,origin),n)/dot(n,n)));
+    } else if(p.kind==='incenter'||p.kind==='angleBisector'){
+      const a=get(refs[0]),b=get(refs[1]),c=get(refs[2]);
+      const ab=norm(sub(b,a)),ac=norm(sub(c,a)),bc=norm(sub(c,b));
+      if(Math.min(ab,ac,bc)<1e-6||norm(cross(sub(b,a),sub(c,a)))<1e-8*ab*ac)fail('an incenter or angle bisector needs a nondegenerate triangle.');
+      // Side-length barycentrics select the INTERNAL center/bisector, in any plane.
+      v=p.kind==='incenter'?mul(add(add(mul(a,bc),mul(b,ac)),mul(c,ab)),1/(ab+ac+bc))
+        :mul(add(mul(b,ac),mul(c,ab)),1/(ab+ac));
     } else if(p.kind==='circumcenter'){
       const a=get(refs[0]),u=sub(get(refs[1]),a),w=sub(get(refs[2]),a),n=cross(u,w),den=2*dot(n,n);
       if(den<1e-10)fail('a circumcenter needs three noncollinear points.');
@@ -141,7 +148,10 @@ export function resolveProofScene(scene:ProofScene):Map<string,Vec3> {
       const {o,r}=circle(refs[1]);const p=get(refs[0]);valid=Math.abs(norm(sub(p,o))-r)<1e-5&&Math.abs(p[2]-o[2])<1e-5;
     }else{
       const ps=refs.map(get),u=sub(ps[1],ps[0]);
-      if(relation.kind==='equalAngle'){
+      if(relation.kind==='angle'){
+        const a=sub(ps[0],ps[1]),b=sub(ps[2],ps[1]),scale=norm(a)*norm(b);
+        valid=scale>1e-10&&Math.abs(dot(a,b)/scale-Math.cos(relation.degrees!*Math.PI/180))<1e-6;
+      }else if(relation.kind==='equalAngle'){
         const a=sub(ps[0],ps[1]),b=sub(ps[2],ps[1]),c=sub(ps[3],ps[4]),d=sub(ps[5],ps[4]);
         const first=norm(a)*norm(b),second=norm(c)*norm(d);
         valid=first>1e-10&&second>1e-10&&Math.abs(dot(a,b)/first-dot(c,d)/second)<1e-6;
@@ -170,8 +180,8 @@ export function parseProofScene(raw:string):ProofScene {
   if(!s||!['2D','3D'].includes(s.dimension)||!text(s.goal)||!s.goal.trim()||!list(s.givens,30)||!s.givens.length||!s.givens.every(text)||!list(s.points,40)||s.points.length<2||!list(s.circles,12)||!list(s.edges,80)||!list(s.relations,60)||!list(s.constructions,15)||!s.constructions.every(text)||!list(s.unresolved,15)||!s.unresolved.every(text))fail('incomplete scene data.');
   const ids=new Set<string>();
   for(const p of s.points){
-    if(!p||!label(p.id)||ids.has(p.id)||!['free','midpoint','foot','intersection','onCircle','tangent','circumcenter','lineCircle','circleIntersection','planeFoot','onLine','parallelIntersection','angleOnRay'].includes(p.kind)||(p.auxiliary!==undefined&&typeof p.auxiliary!=='boolean'))fail('invalid or duplicate point.');ids.add(p.id);
-    const counts:Record<string,number>={midpoint:2,foot:3,intersection:4,onCircle:1,tangent:2,circumcenter:3,lineCircle:3,circleIntersection:2,planeFoot:4,onLine:2,parallelIntersection:5,angleOnRay:6};
+    if(!p||!label(p.id)||ids.has(p.id)||!['free','midpoint','foot','intersection','onCircle','tangent','circumcenter','incenter','angleBisector','lineCircle','circleIntersection','planeFoot','onLine','parallelIntersection','angleOnRay'].includes(p.kind)||(p.auxiliary!==undefined&&typeof p.auxiliary!=='boolean'))fail('invalid or duplicate point.');ids.add(p.id);
+    const counts:Record<string,number>={midpoint:2,foot:3,intersection:4,onCircle:1,tangent:2,circumcenter:3,incenter:3,angleBisector:3,lineCircle:3,circleIntersection:2,planeFoot:4,onLine:2,parallelIntersection:5,angleOnRay:6};
     if(p.kind==='free'){if(!list(p.xyz,3)||p.xyz.length!==3||!p.xyz.every((x:unknown)=>typeof x==='number'&&Number.isFinite(x)))fail('invalid free point.');}
     else if(!list(p.refs,6)||p.refs.length!==counts[p.kind]||!p.refs.every(label))fail('invalid construction references.');
     if(p.kind==='onLine'&&(typeof p.t!=='number'||!Number.isFinite(p.t)))fail('invalid line parameter.');
@@ -182,21 +192,23 @@ export function parseProofScene(raw:string):ProofScene {
   const pointIds=new Set(s.points.map((p:ProofPoint)=>p.id));
   if(s.faces!==undefined&&(!list(s.faces,40)||!s.faces.every((f:unknown)=>Array.isArray(f)&&f.length===3&&new Set(f).size===3&&f.every(id=>pointIds.has(id)))))fail('invalid solid faces.');
   for(const e of s.edges)if(!e||!pointIds.has(e.a)||!pointIds.has(e.b)||[e.auxiliary,e.hidden].some(x=>x!==undefined&&typeof x!=='boolean'))fail('invalid segment.');
-  const counts:Record<string,number>={perpendicular:4,parallel:4,equalLength:4,collinear:3,coplanar:4,onCircle:2,between:3,equalAngle:6};
+  const counts:Record<string,number>={perpendicular:4,parallel:4,equalLength:4,collinear:3,coplanar:4,onCircle:2,between:3,equalAngle:6,angle:3};
   for(const r of s.relations)if(!r||!counts[r.kind]||!list(r.refs,6)||r.refs.length!==counts[r.kind]||!r.refs.every(label)||!text(r.source)||!r.source.trim())fail('invalid geometric relation.');
+  for(const r of s.relations)if(r.kind==='angle'&&(typeof r.degrees!=='number'||!Number.isFinite(r.degrees)||r.degrees<=0||r.degrees>=180))fail('invalid angle constraint.');
   if(s.points.some((p:ProofPoint)=>p.auxiliary)||s.edges.some((e:ProofEdge)=>e.auxiliary)||s.circles.some((c:ProofCircle)=>c.auxiliary))if(!s.constructions.length)fail('auxiliary objects need a construction explanation.');
   try{resolveProofScene(s);}catch(error){throw new ProofSceneGeometryError(s,error instanceof Error?error.message:'Invalid geometric construction.');}
   return s;
 }
 
 export function assertProofRepairPreservesGivens(before:ProofScene,after:ProofScene):void {
-  const relationKey=(r:ProofRelation)=>JSON.stringify([r.kind,r.refs]);
+  const relationKey=(r:ProofRelation)=>JSON.stringify([r.kind,r.refs,r.kind==='angle'?r.degrees:undefined]);
   const relations=new Set(after.relations.map(relationKey));
   const givenPoints=before.points.filter(p=>!p.auxiliary);
   const preserved=before.dimension===after.dimension&&before.goal===after.goal
     &&before.givens.every(g=>after.givens.includes(g))
     &&before.relations.every(r=>relations.has(relationKey(r)))
     &&givenPoints.every(p=>after.points.some(q=>q.id===p.id&&!q.auxiliary))
+    &&givenPoints.filter(p=>p.kind==='incenter'||p.kind==='angleBisector').every(p=>after.points.some(q=>q.id===p.id&&q.kind===p.kind&&JSON.stringify(q.refs)===JSON.stringify(p.refs)))
     &&before.circles.filter(c=>!c.auxiliary).every(c=>after.circles.some(d=>d.id===c.id&&d.center===c.center&&d.through===c.through&&!d.auxiliary))
     &&before.edges.filter(e=>!e.auxiliary).every(e=>after.edges.some(f=>!f.auxiliary&&((e.a===f.a&&e.b===f.b)||(e.a===f.b&&e.b===f.a))));
   if(!preserved)fail('the correction changed or removed a given constraint. Clarify the problem and try again.');
@@ -211,6 +223,7 @@ export function proofDiagramPrompt(statement:string):string {
 {"dimension":"2D or 3D","givens":["explicit hypothesis"],"goal":"what to prove","points":[],"circles":[],"edges":[],"relations":[],"constructions":["optional construction and why it helps, no full proof"],"unresolved":["any hypothesis or object you could not represent"]}
 Points: {id,kind:"free",xyz:[x,y,z],auxiliary?:boolean}, or {id,kind:"midpoint",refs:[A,B]}, {id,kind:"foot",refs:[P,A,B]} (foot of P on line AB), {id,kind:"intersection",refs:[A,B,C,D]} (lines AB/CD), {id,kind:"onCircle",refs:[circleId],angle:degrees}, {id,kind:"tangent",refs:[circleId,externalPoint],branch:1 or -1}. Derived points may also have auxiliary:true. Define point dependencies before use; circle center/through points must precede points on that circle.
 More point constructions: {id,kind:"circumcenter",refs:[A,B,C]}, {id,kind:"lineCircle",refs:[circleId,A,B],branch:1 or -1}, {id,kind:"circleIntersection",refs:[circleId1,circleId2],branch:1 or -1}, {id,kind:"planeFoot",refs:[P,A,B,C]} (foot of P on plane ABC). Circle intersections must be in the same xy-parallel plane. Use these instead of guessed coordinates for derived points.
+Triangle constructions: {id,kind:"incenter",refs:[A,B,C]} constructs the internal incenter of triangle ABC exactly using side-length weights, in 2D or 3D. {id,kind:"angleBisector",refs:[A,B,C]} constructs the intersection of the INTERNAL bisector of angle BAC with side BC. For E on CA with BE bisecting ABC, use angleBisector [B,C,A]. Do not guess either point or report these supported constructions as unresolved. Declare a fixed angle using {kind:"angle",refs:[B,E,K],degrees:45,source:"angle BEK = 45 degrees"}; the vertex is the middle reference. Choose the remaining free geometry to satisfy it; declaring an angle does not enforce it automatically. Never drop the condition if your coordinates fail it.
 Incidence constructions: {id,kind:"onLine",refs:[A,B],t:number} gives A+t(B-A); choose 0<t<1 for an interior segment point. {id,kind:"parallelIntersection",refs:[P,U,V,A,B]} intersects line AB with the line through P parallel to UV. {id,kind:"angleOnRay",refs:[P,T,C,U,V,W]} constructs X beyond T on ray PT with angle PXC = angle UVW (ordinary angle in (0,180)); it fails if no such point exists. NEVER guess independent free coordinates for points constrained to lines or parallel intersections. For Q on BB1 and PQ parallel AB use parallelIntersection [P,A,B,B,B1].
 Additional relations: {kind:"between",refs:[A,P,B],source} means P is strictly inside segment AB; {kind:"equalAngle",refs:[A,B,C,D,E,F],source} checks angle ABC = angle DEF. Include these to preserve point order and angle conditions, not only collinearity. For every intersection construction, verify the two defining lines are distinct and nonparallel; if the given lines are parallel, do not create an intersection and report it in unresolved. For a solid include faces:[[A,B,C],...] as triangles covering its actual boundary. Auxiliary objects use a different COLOR, not a different dash pattern. A visible auxiliary line is solid. Only occluded portions are dashed; hidden:true is only for actual occlusion in spatial scenes, never for construction lines or 2D intersections.
 Circles: {id,center:pointId,through:pointId,auxiliary?:boolean}. Circles lie parallel to xy plane. Edges: {a:pointId,b:pointId,auxiliary?:boolean,hidden?:boolean}. Point names must exactly match the problem; use simple labels A, O, A1, A'. Coordinates should be modest (-10 to 10). z=0 in 2D. Use true 3D coordinates for solids, not a pre-projected sketch. Hidden edges are dashed.

@@ -18,6 +18,8 @@ The regression scenes are human-authored fixtures. IMO 1970 P5 additionally exer
 
 For other inputs, the interpreter can use dependent line points, intersections with parallel lines and angle-constrained rays. Before requesting model correction, local incidence repair can replace guessed free coordinates with these constructions while retaining all declared hypotheses. Bounded recovery of coincident endpoints and degenerate intersections is accepted only if the entire scene passes validation. These repairs do not certify hypotheses omitted by the interpreter.
 
+Internal incenters and angle-bisector intersections with the opposite side are supported as dependent constructions in any triangle plane. Fixed-angle relations include a numeric degree value, which is validated and must survive any repair unchanged. The supplied isosceles ABC / incenter K of ADC / angle BEK = 45° problem has a conservative full-statement local path, including the PDF's broken angle glyph and LaTeX degree notation. The displayed diagram is one admissible configuration, not a claim to enumerate all solutions. Independent tests verify both the 60° and 90° apex configurations, including internal K, both original bisectors and the 45° angle; an arbitrary different triangle is rejected. Changed hypotheses still go through the interpreter.
+
 ## Proof review criteria
 
 - IMO 1968 P4: let AB be a longest edge. If the incident lengths at both A and B fail the strict triangle inequalities, then AB >= AC + AD and AB >= BC + BD. Adding the strict face inequalities AC + BC > AB and AD + BD > AB gives a contradiction. No regularity assumption is needed.

@@ -7,7 +7,7 @@ import {notebookAI,notebookPrompt,generateProofDiagram,friendlyError,type Notebo
 import {exampleProofScene} from '../src/geometry-proof-examples';
 import {resolveProofScene} from '../src/geometry-proof';
 import {geometryExamples} from '../src/geometry';
-import {imo1970PastedProblem,imo1970Scene,imo2019PastedProblem} from './fixtures/geometry-contests';
+import {imo1970PastedProblem,imo1970Scene,imo2019PastedProblem,incenterPastedProblem} from './fixtures/geometry-contests';
 import {imo2019Construction} from '../src/geometry-olympiad';
 import {mixedTextToLatex} from '../src/math-paste';
 const image={name:'triangle.png',data:'data:image/png;base64,AA=='};
@@ -88,6 +88,15 @@ describe('proof diagram AI boundary',()=>{
   it('constructs built-in examples immediately without invoking a model',async()=>{
     const result=await generateProofDiagram(geometryExamples[0].statement,'local',false,[],signal());
     expect(result.source).toBe('local_construction');expect(result.showAuxiliary).toBe(false);expect(mock.model).not.toHaveBeenCalled();
+  });
+  it('constructs the reported incenter problem with the 45 degree constraint before model initialization',async()=>{
+    for(const text of [incenterPastedProblem,mixedTextToLatex(incenterPastedProblem,true)]){
+      const result=await generateProofDiagram(text,'local',false,[],signal());
+      expect(result.source).toBe('local_construction');expect(result.scene.unresolved).toEqual([]);
+      expect(result.scene.points.find(p=>p.id==='K')?.kind).toBe('incenter');
+      expect(result.scene.relations.some(r=>r.kind==='angle'&&r.degrees===45)).toBe(true);
+    }
+    expect(mock.initialize).not.toHaveBeenCalled();expect(mock.generate).not.toHaveBeenCalled();
   });
   it('handles the exact reported IMO input through the real generation API without AI coordinates',async()=>{
     for(const statement of [imo1970PastedProblem,mixedTextToLatex(imo1970PastedProblem,true)]){

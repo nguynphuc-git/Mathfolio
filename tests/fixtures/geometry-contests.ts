@@ -1,4 +1,7 @@
 import type {ProofScene} from '../../src/geometry-proof';
+export const incenterPastedProblem=`Problem 4. Let ABC be a triangle with AB= AC. The angle bisectors of ̸ CAB and ̸ ABC
+meet the sides BC and CA at D and E, respectively. Let K be the incentre of triangle ADC.
+Suppose that ̸ BEK = 45◦. Find all possible values of ̸ CAB.`;
 export const imo2019PastedProblem=`Problem 2. In triangle ABC, point A1 lies on side BC and point B1 lies on side AC. Let P and Q
 be points on segments AA1 and BB1, respectively, such that P Q is parallel to AB. Let P1 be a point
 on line P B1, such that B1 lies strictly between P and P1, and ∠P P1C= ∠BAC. Similarly, let Q1
