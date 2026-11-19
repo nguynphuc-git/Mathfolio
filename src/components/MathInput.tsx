@@ -10,7 +10,7 @@ import 'mathlive/fonts.css';
 MathfieldElement.fontsDirectory = null;
 MathfieldElement.soundsDirectory = null;
 MathfieldElement.locale = 'en';
-export interface MathInputHandle { focus: () => void; insert: (latex: string) => void }
+export interface MathInputHandle { focus: () => void; insert: (latex: string) => void; replace: (latex: string) => void }
 interface Props { value:string; onChange?:(value:string)=>void; readOnly?:boolean; disabled?:boolean; label?:string; compact?:boolean; maxLength?:number; initialMode?:'math'|'text'; preserveLines?:boolean; placeholder?:string }
 export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({value,onChange,readOnly,disabled,label='Problem statement',compact,maxLength=6000,initialMode='math',preserveLines=false,placeholder='Type your problem here'}, ref) {
   const keyboard=useMathKeyboard(),keyboardRef=useRef(keyboard);keyboardRef.current=keyboard;const editorId=useId();
@@ -96,6 +96,12 @@ export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({v
   useEffect(()=>{if(element.current){element.current.readOnly=!!readOnly||!!disabled;element.current.setAttribute('aria-disabled',String(!!disabled));keyboardRef.current?.refresh();}},[readOnly,disabled]);
   useImperativeHandle(ref,()=>({
     focus(){element.current?.focus();},
+    replace(latex){
+      const field=element.current;if(!field||field.readOnly)return;
+      if(latex.length>options.current.maxLength){setInputError(`Keep this entry within ${options.current.maxLength.toLocaleString('en-US')} characters.`);return;}
+      // An explicit reset must reach MathLive even if the controlled value is unchanged.
+      const previous=field.mode;field.value=latex;field.mode=previous;notify.current();
+    },
     insert(latex){const field=element.current;if(!field||field.readOnly)return;field.focus();const power=/^\^\{(.*)\}$/.exec(latex);
       if(power)insertPower(field,power[1]==='#?'?undefined:power[1]);else if(latex==='_{#?}')insertSubscript(field);else field.insert(latex,{format:'latex',mode:'math',selectionMode:'placeholder'});notify.current();}
   }),[]);

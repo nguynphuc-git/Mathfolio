@@ -30,7 +30,7 @@ vi.mock('../src/components/PdfFormulaCropper', () => ({
 }));
 // MathLive caret/layout is tested manually in Chrome; these tests exercise page state and persistence.
 vi.mock('../src/components/MathInput', () => ({ MathInput: forwardRef(function Field(props: { value: string; onChange?: (value: string) => void; readOnly?: boolean; disabled?: boolean; label?: string }, ref) {
-  useImperativeHandle(ref, () => ({ focus() {}, insert(latex:string) {mocks.insert(latex);props.onChange?.(props.value+latex);} }));
+  useImperativeHandle(ref, () => ({ focus() {}, replace(latex:string) {props.onChange?.(latex);}, insert(latex:string) {mocks.insert(latex);props.onChange?.(props.value+latex);} }));
   return <textarea aria-label={props.label ?? 'Problem statement'} readOnly={props.readOnly} disabled={props.disabled} value={props.value} onChange={event => props.onChange?.(event.target.value)}/>;
 }) }));
 import App from '../src/App';
@@ -766,11 +766,11 @@ async function uploadImage(){
 describe('image problem review',()=>{
   it('requires review and confirmation before replacing an analyzed problem; leaves the saved original intact',async()=>{
     await openWorkspace();await uploadImage();
-    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Reading and transcription run on this device');
+    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Start with printed text on this device');
     expect(mocks.readImage).not.toHaveBeenCalled();
     mocks.readImage.mockResolvedValue({text:'Solve x+1=2',source:'on_device'});
-    await click('Read image on this device');
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Recognized image text"]')!.value).toBe('Solve x+1=2');
+    await click('Read with AI');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Recognized image problem"]')!.value).toContain('x+1=2');
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe('x^2+2x=0');
     await click('Use this problem');
     expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain('clears its essentials');
@@ -782,13 +782,88 @@ describe('image problem review',()=>{
     expect(stored().exercises[0].statement).toBe('x^2+2x=0');
     expect(mocks.ai).not.toHaveBeenCalled();
   });
+  it('prioritizes printed OCR, allows direct math edits, and applies edited TeX without reparsing it',async()=>{
+    await uploadImage();mocks.readImage.mockResolvedValue({text:String.raw`Solve \(\frac{x}{2}=3\).`,source:'local_ocr'});
+    expect(button('Read printed text').classList.contains('primary')).toBe(true);
+    expect(button('Read with AI').classList.contains('primary')).toBe(false);
+    await click('Read printed text');expect(mocks.readImage).toHaveBeenCalledWith(expect.anything(),expect.any(Function),expect.any(AbortSignal),true);
+    const corrected=String.raw`\class{mathfolio-line}{\text{Corrected }\frac{x+1}{2}=3}`;
+    await type('[aria-label="Recognized image problem"]',corrected);
+    await click('Use this problem');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe(corrected);
+  });
+  it('restores the latest image extraction and supports the shared symbol keyboard',async()=>{
+    await uploadImage();mocks.readImage.mockResolvedValue({text:'Solve x+1=2',source:'on_device'});
+    await click('Read with AI');expect(mocks.readImage.mock.calls[0][3]).toBe(false);
+    const original=host.querySelector<HTMLTextAreaElement>('[aria-label="Recognized image problem"]')!.value;
+    await type('[aria-label="Recognized image problem"]','CHANGED');await click('Restore extracted text');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Recognized image problem"]')!.value).toBe(original);
+    expect(host.textContent).toContain('Extracted text restored');
+    expect(host.querySelector('.image-review-tools .math-keyboard')).not.toBeNull();
+  });
+  it('opens the source image and closes its viewer without losing the review',async()=>{
+    await uploadImage();await type('[aria-label="Recognized image problem"]',String.raw`\text{Keep edits }x=7`);
+    await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Enlarge source image: problem.jpg"]')!.click());
+    expect(host.querySelector('.image-viewer')).not.toBeNull();expect(host.querySelector<HTMLElement>('.image-backdrop')!.inert).toBe(true);
+    await act(async()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
+    expect(host.querySelector('.image-viewer')).toBeNull();expect(host.querySelector('.image-import-review')).not.toBeNull();
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Recognized image problem"]')!.value).toContain('Keep edits');
+  });
+  it('asks before sending an image to Cloud AI and enables the session only after consent',async()=>{
+    await uploadImage();await type('[aria-label="Recognized image problem"]','Keep this review');
+    await chooseOption('Image reading AI','Cloud AI');expect(mocks.imageCloud).not.toHaveBeenCalled();
+    await click('Read with AI');expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain('Allow Cloud AI and read this image?');
+    expect(host.querySelector<HTMLElement>('.image-backdrop')!.inert).toBe(true);
+    await click('Not now');expect(mocks.imageCloud).not.toHaveBeenCalled();
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Recognized image problem"]')!.value).toBe('Keep this review');
+    await click('Read with AI');await click('Allow Cloud AI and read image');
+    expect(mocks.imageCloud).toHaveBeenCalledWith('data:image/jpeg;base64,AA==',expect.any(AbortSignal));
+    expect(mocks.readImage).not.toHaveBeenCalled();
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Recognized image problem"]')!.value).toContain(String.raw`\sqrt{2}`);
+    expect(host.querySelector('[role="switch"][aria-label="Cloud AI"]')?.getAttribute('aria-checked')).toBe('true');
+    await click('Read with AI');expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain('Read this image with Cloud AI?');
+    await click('Not now');expect(mocks.imageCloud).toHaveBeenCalledTimes(1);
+  });
+  it('keeps the review and shows an error when Cloud AI is offline',async()=>{
+    await uploadImage();await type('[aria-label="Recognized image problem"]','Kept review');
+    vi.spyOn(navigator,'onLine','get').mockReturnValue(false);
+    await chooseOption('Image reading AI','Cloud AI');await click('Read with AI');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('internet connection');expect(mocks.imageCloud).not.toHaveBeenCalled();
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Recognized image problem"]')!.value).toBe('Kept review');
+  });
+  it('aborts Cloud image reading and ignores late results after stop and close',async()=>{
+    await uploadImage();let finish!:(text:string)=>void;let signal!:AbortSignal;
+    mocks.imageCloud.mockImplementation((_:string,stop:AbortSignal)=>{signal=stop;return new Promise(resolve=>{finish=resolve;});});
+    await chooseOption('Image reading AI','Cloud AI');await click('Read with AI');await click('Allow Cloud AI and read image');
+    await click('Stop reading');expect(signal.aborted).toBe(true);
+    await type('[aria-label="Recognized image problem"]','Preserve manual review');
+    await act(async()=>finish('LATE CLOUD RESULT'));
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Recognized image problem"]')!.value).toBe('Preserve manual review');
+    await click('Read with AI');await click('Send image to Cloud AI');await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Close image import"]')!.click());
+    expect(signal.aborted).toBe(true);await act(async()=>finish('LATE CLOSED RESULT'));
+    expect(host.querySelector('.image-import-review')).toBeNull();expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe('');
+  });
+  it.each(['', 'x'.repeat(6001)])('keeps manual review when recognition is empty or too long (%#. result)',async text=>{
+    await uploadImage();await type('[aria-label="Recognized image problem"]','Keep manual review');
+    mocks.readImage.mockResolvedValue({text,source:'local_ocr'});await click('Read printed text');
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Recognized image problem"]')!.value).toBe('Keep manual review');
+    expect(button('Use this problem').disabled).toBe(false);
+  });
+  it('confirms before replacing chat on an unanalyzed problem',async()=>{
+    mocks.ai.mockResolvedValue({text:'Try the definition.',source:'on_device'});
+    await type('[aria-label="Discussion question"]',String.raw`\text{How should I begin?}`);await click('Send');
+    await uploadImage();await type('[aria-label="Recognized image problem"]','New problem');await click('Use this problem');
+    expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain('clears its essentials, hints and chat');
+    await click('Keep working');expect(host.textContent).toContain('How should I begin?');expect(host.querySelector('.image-import-review')).not.toBeNull();
+  });
   it('stops image reading, ignores late results, and never applies anything when closing',async()=>{
     await uploadImage();let finish!:(result:{text:string;source:string})=>void;let signal!:AbortSignal;
     mocks.readImage.mockImplementation((_:unknown,__:unknown,stop:AbortSignal)=>{signal=stop;return new Promise(resolve=>{finish=resolve;});});
-    await click('Read image on this device');await click('Stop reading');
+    await click('Read with AI');await click('Stop reading');
     expect(signal.aborted).toBe(true);
     await act(async()=>finish({text:'LATE IMAGE RESULT',source:'on_device'}));
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Recognized image text"]')!.value).toBe('');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Recognized image problem"]')!.value).toBe('');
     await click('Cancel',host.querySelector('[role="dialog"]')!);
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe('');
     expect(mocks.write).not.toHaveBeenCalled();

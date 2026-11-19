@@ -38,6 +38,16 @@ beforeEach(async()=>{
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreAllMocks();vi.unstubAllGlobals();});
 describe('math editor event integration',()=>{
+  it('explicitly restores unsynchronized native content even when the controlled value has not changed',async()=>{
+    const original=String.raw`\frac{x}{2}`;
+    await act(async()=>root.render(<MathInput ref={handle} value={original} onChange={change}/>));
+    field().value='UNSYNCHRONIZED EDIT';field().mode='text';
+    await act(async()=>handle.current!.replace(original));
+    expect(field().value).toBe(original);expect(field().mode).toBe('text');expect(change).toHaveBeenLastCalledWith(original);
+    await act(async()=>root.render(<MathInput ref={handle} value={original} onChange={change} disabled/>));
+    await act(async()=>handle.current!.replace('should not replace'));
+    expect(field().value).toBe(original);
+  });
   it('keeps plain-text paste in the mode chosen by the user',async()=>{
     await act(async()=>host.querySelector<HTMLButtonElement>('.editor-mode-toggle')!.click());
     const event=await paste('text/plain','Find x^2 = 4 now');

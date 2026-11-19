@@ -14,13 +14,14 @@ interface Props {
   onImage:(image:Attachment)=>void;
   onReadPage:(image:string,page:number,hasEdits:boolean,signal:AbortSignal)=>Promise<string|null>;
 }
-function QuestionEditor({question,number,disabled,onChange,onRemove,onRestore}:{question:ReviewedPdfQuestion;number:number;disabled:boolean;onChange:(latex:string)=>void;onRemove:()=>void;onRestore:()=>void}){
-  const input=useRef<MathInputHandle>(null);
+function QuestionEditor({question,number,disabled,onChange,onRemove}:{question:ReviewedPdfQuestion;number:number;disabled:boolean;onChange:(latex:string)=>void;onRemove:()=>void}){
+  const input=useRef<MathInputHandle>(null),[restored,setRestored]=useState(false);
   return <section className="pdf-review-question" aria-label={`Review question ${number}`}>
     <div className="row pdf-review-heading"><h4>Question {number} · Page {question.page}</h4><button type="button" disabled={disabled} onClick={onRemove} aria-label={`Deselect question ${number}`}>Deselect</button></div>
     <p className="pdf-extracted-label">Extracted question</p>
-    <MathInput ref={input} label={`Extracted question ${number}`} value={question.latex} onChange={onChange} disabled={disabled} initialMode="text" preserveLines/>
-    <div className="row pdf-review-tools"><MathKeyboard showCommon={false} disabled={disabled} onActivate={()=>input.current?.focus()} onInsert={symbol=>input.current?.insert(symbol.latex)}/><button type="button" disabled={disabled} onClick={onRestore}>Restore extracted text</button><small>{question.latex.length.toLocaleString()} characters</small></div>
+    <MathInput ref={input} label={`Extracted question ${number}`} value={question.latex} onChange={latex=>{setRestored(false);onChange(latex);}} disabled={disabled} initialMode="text" preserveLines/>
+    <div className="row pdf-review-tools"><MathKeyboard showCommon={false} disabled={disabled} onActivate={()=>input.current?.focus()} onInsert={symbol=>input.current?.insert(symbol.latex)}/><button type="button" disabled={disabled} onClick={()=>{input.current?.replace(reviewPdfQuestions([question])[0].latex);setRestored(true);}}>Restore extracted text</button><small>{question.latex.length.toLocaleString()} characters</small></div>
+    {restored&&<p className="subtle restore-status" role="status">Extracted text restored. Check recognition errors against the source.</p>}
   </section>;
 }
 export function PdfQuestionPicker({file,questions,pageCount,suspended,onClose,onUse,onImage,onReadPage}:Props){
@@ -96,7 +97,7 @@ export function PdfQuestionPicker({file,questions,pageCount,suspended,onClose,on
         </section>
         <div className="import-review-columns">
           <aside className="import-source pdf-source-column"><h3>Source page · {page}</h3><p className="subtle">Click the page to zoom. Cloud reading asks before sending this page.</p>{rendering&&<p className="subtle" role="status">Rendering source page…</p>}{preview&&<><button className="pdf-source-image" type="button" aria-label={`Enlarge PDF page ${page}`} disabled={using} onClick={()=>onImage({id:`pdf-page-${page}`,name:`${file.name} · Page ${page}`,data:preview.image,kind:'problem'})}><img src={preview.image} alt={`PDF page ${page}`}/><span>⤢ View larger</span></button><button type="button" className="primary cloud-page-read" disabled={waiting} onClick={()=>void read()}>{reading?'Reading page with Cloud AI…':'Read this page with Cloud AI'}</button></>}{reading&&<button type="button" className="stop-ai" onClick={stop}>Stop page reading</button>}</aside>
-          <section className="import-edit"><h3>Review and edit selected questions · {selected.length}</h3><p className="subtle">Recognized formulas are formatted here. Check unclear or missing symbols against the source.</p>{!selected.length&&<p className="subtle">Select questions above to review them here.</p>}{selected.map(question=>{const number=entries.indexOf(question)+1;return <QuestionEditor key={question.id} question={question} number={number} disabled={waiting} onChange={latex=>update(question.id,{latex})} onRemove={()=>update(question.id,{selected:false})} onRestore={()=>update(question.id,{latex:reviewPdfQuestions([question])[0].latex})}/>;})}</section>
+          <section className="import-edit"><h3>Review and edit selected questions · {selected.length}</h3><p className="subtle">Recognized formulas are formatted here. Check unclear or missing symbols against the source.</p>{!selected.length&&<p className="subtle">Select questions above to review them here.</p>}{selected.map(question=>{const number=entries.indexOf(question)+1;return <QuestionEditor key={question.id} question={question} number={number} disabled={waiting} onChange={latex=>update(question.id,{latex})} onRemove={()=>update(question.id,{selected:false})}/>;})}</section>
         </div>
       </div>
       <p className="subtle pdf-privacy-note">Only the current page is sent after consent. Selected questions are added together as one problem; notes and attachments are kept.</p>
