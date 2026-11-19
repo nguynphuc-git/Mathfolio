@@ -49,16 +49,25 @@ describe('illustrations are actual model input',()=>{
     expect(mock.stream.mock.calls[0][0][1]).toEqual({type:'inlineData',inlineData:{mimeType:'image/png',data:'AA=='}});
     const prompt=mock.stream.mock.calls[0][0][0].text;expect(prompt).toContain('attached illustrations');expect(prompt).not.toContain('base64');
   });
-  it.each(['knowledge','hint2','hint3','chat'] as const)('requires cloud permission before sending images for %s',async purpose=>{
+  it.each(['knowledge','hint1','hint2','hint3','chat'] as const)('requires cloud permission before sending images for %s',async purpose=>{
     await expect(notebookAI({...base,purpose,route:'cloud',cloudAllowed:false},()=>{})).rejects.toThrow('Allow cloud AI');expect(mock.model).not.toHaveBeenCalled();expect(mock.stream).not.toHaveBeenCalled();
   });
   it('sends images to cloud only on the explicitly authorized second-hint route',async()=>{
     await notebookAI({...base,purpose:'hint2',route:'cloud',cloudAllowed:true},()=>{});
     expect(mock.model.mock.calls.at(-1)?.[1].mode).toBe(InferenceMode.ONLY_IN_CLOUD);expect(mock.initialize).not.toHaveBeenCalled();expect(mock.generate.mock.calls[0][0][1].inlineData.mimeType).toBe('image/png');expect(mock.stream).not.toHaveBeenCalled();
   });
-  it('forces the visual first hint onto the device even if a caller requests cloud',async()=>{
+  it('uses cloud for a visual first hint only when explicitly selected and authorized',async()=>{
     await notebookAI({...base,purpose:'hint1',route:'cloud',cloudAllowed:true},()=>{},new AbortController().signal);
-    expect(mock.model.mock.calls.at(-1)?.[1].mode).toBe(InferenceMode.ONLY_ON_DEVICE);expect(mock.initialize).toHaveBeenCalled();expect(mock.stream.mock.calls[0][0][1].inlineData.mimeType).toBe('image/png');
+    expect(mock.initialize).not.toHaveBeenCalled();expect(mock.generate).toHaveBeenCalledOnce();expect(mock.generate.mock.calls[0][0][1].inlineData.mimeType).toBe('image/png');expect(mock.stream).not.toHaveBeenCalled();
+  });
+  it('honors explicit cloud knowledge even for a problem with a local calculation shortcut',async()=>{
+    const result=await notebookAI({...base,purpose:'knowledge',statement:'2x+3=7',images:[],route:'cloud',cloudAllowed:true},()=>{});
+    expect(result.text).toBe('Cloud result');expect(mock.generate).toHaveBeenCalledOnce();expect(mock.initialize).not.toHaveBeenCalled();
+  });
+  it('generates all worksheet exercises through an explicitly authorized cloud first hint',async()=>{
+    const result=await notebookAI({...base,purpose:'hint1',statement:worksheet,route:'cloud',cloudAllowed:true},()=>{});
+    expect(mock.generate).toHaveBeenCalledTimes(3);expect(mock.initialize).not.toHaveBeenCalled();expect(mock.stream).not.toHaveBeenCalled();
+    expect(result.text).toContain('Exercise 1');expect(result.text).toContain('Exercise 2');expect(result.text).toContain('Exercise 3');
   });
   it('fails explicitly when device vision is unavailable, without retrying in cloud or dropping images',async()=>{
     mock.initialize.mockRejectedValueOnce(new Error('No image support'));

@@ -3,7 +3,7 @@ import { createUserWithEmailAndPassword, getAuth, onAuthStateChanged, signInWith
 import { getFirebaseApp } from './firebase';
 import { friendlyError, generateProofDiagram, notebookAI, recognizeImageWithCloud, recommendsCloudForProblem, type NotebookRequest } from './ai';
 import { MarkdownView } from './components/MarkdownView';
-import { PdfFormulaCropper } from './components/PdfFormulaCropper';
+import { PdfQuestionPicker } from './components/PdfQuestionPicker';
 import { addFolder, recolorFolder, removeFolder, emptyNotebook, loadNotebook, newExercise, notebookKey, putExercise, putExerciseCompletion, putExercisePreview, exerciseFolderIds, inExerciseFolder, withExerciseFolders, sameAttachments, readAttachment, saveNotebook, type Exercise, type Notebook, type Attachment } from './notebook';
 import { ConfirmDialog, type Confirmation } from './components/ConfirmDialog';
 import { ImageViewer } from './components/ImageViewer';
@@ -16,7 +16,6 @@ import { NotesEditor } from './components/NotesEditor';
 import { MathInput, type MathInputHandle } from './components/MathInput';
 import { statementLatex,hasEditorContent } from './math-input';
 import { mixedTextToLatex } from './math-paste';
-import { normalizeProblemText } from './problem-text';
 import {MathKeyboardProvider} from './components/MathKeyboardContext';
 import {selectedIllustrations,sameIllustrations} from './problem-vision';
 import { MathKeyboard } from './components/MathKeyboard';
@@ -36,6 +35,7 @@ import {Chevron} from './components/Chevron';
 import {SelectMenu} from './components/SelectMenu';
 import {LoginBackdrop} from './components/LoginBackdrop';
 import './workspace-ui.css';
+import './pdf-picker.css';
 import {GeometryDiagramEditor} from './components/GeometryDiagramEditor';
 import {LatexMessage} from './components/LatexMessage';
 import { UsageGuide } from './components/UsageGuide';
@@ -66,18 +66,10 @@ export default function App() {
   const [imageProblem,setImageProblem]=useState<ProblemImage|null>(null);const [imagePreparing,setImagePreparing]=useState(false);const [importError,setImportError]=useState('');
   const importOperation=useRef<AbortController|null>(null);
   const [pdfQuestions, setPdfQuestions] = useState<PdfQuestion[] | null>(null);
-  const [pdfSelected, setPdfSelected] = useState<PdfQuestion | null>(null);
-  const [pdfSelectedIndex, setPdfSelectedIndex] = useState(0);
-  const [pdfQuestionFilter, setPdfQuestionFilter] = useState('');
-  const [pdfBusy, setPdfBusy] = useState(false);
-  const [pdfProgress, setPdfProgress] = useState<PdfProgress | null>(null);
-  const [pdfReplacePending, setPdfReplacePending] = useState(false);
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [pdfPreview, setPdfPreview] = useState<{ page: number; image: string } | null>(null);
-  const [pdfPreviewBusy, setPdfPreviewBusy] = useState(false);
-  const pdfPreviewRequest = useRef(0);
-  const pdfCloudReadRequest = useRef(0);
-  const [imageBusy, setImageBusy] = useState(false);
+  const [pdfBusy,setPdfBusy]=useState(false);
+  const [pdfProgress,setPdfProgress]=useState<PdfProgress|null>(null);
+  const [pdfFile,setPdfFile]=useState<File|null>(null);
+  const [pdfPageCount,setPdfPageCount]=useState(0);
   const [collapsedHints, setCollapsedHints] = useState<number[]>([]);
   const [preview, setPreview] = useState<{ id: string; notes: string; notesFormat?:'latex'; attachments:Attachment[]; folderIds:string[] } | null>(null);
   const [viewingImage,setViewingImage]=useState<Attachment|null>(null);
@@ -88,13 +80,15 @@ export default function App() {
   const [partial, setPartial] = useState(''); const [question, setQuestion] = useState('');
   const [focusMode,setFocusMode]=useState(false);
   const [responseStyle,setResponseStyle]=useState<ResponseStyle>('auto');
+  const [knowledgeRoute,setKnowledgeRoute]=useState<'local'|'cloud'>('local');
+  const [firstHintRoute,setFirstHintRoute]=useState<'local'|'cloud'>('local');
   const [cloudAllowed, setCloudAllowed] = useState(false); const [chatRoute, setChatRoute] = useState<'local' | 'cloud'>('local');
   const [online, setOnline] = useState(navigator.onLine); const [error, setError] = useState(''); const [status, setStatus] = useState('');
   const epoch = useRef(0); const key = useRef(''); const input = useRef<MathInputHandle>(null);const chatInput=useRef<MathInputHandle>(null);
   const illustrations=selectedIllustrations(draft.attachments);
-  const filteredPdfQuestions=pdfQuestions?.map((question,index)=>({question,index})).filter(({question})=>`${question.text} page ${question.page}`.toLocaleLowerCase().includes(pdfQuestionFilter.trim().toLocaleLowerCase())) ?? [];
+
   const activeAI = useRef<{ controller: AbortController; status: string; error: string } | null>(null);
-  const blocked = diagramBusy || !!busy || saving || pdfBusy || imagePreparing || imageBusy || !!recovery;
+  const blocked = diagramBusy || !!busy || saving || pdfBusy || imagePreparing || !!recovery;
   useEffect(()=>{if(!busy)return;const tick=()=>setElapsed(Math.floor((performance.now()-runStarted.current)/1000));tick();const timer=setInterval(tick,1000);return()=>clearInterval(timer);},[busy]);
   const problemPanel = useRef<HTMLElement>(null);
   const [problemHeight, setProblemHeight] = useState(520);
@@ -138,7 +132,7 @@ export default function App() {
         const version = ++epoch.current;
         confirmationResult.current?.(false); confirmationResult.current = null; setConfirmation(null);
         key.current = ''; setUser(next); setReady(false); setBook(emptyNotebook()); setDraft(newExercise()); setDirty(false);setRecovery(null);setDraftSave('idle');setDraftSavedAt('');setImageProblem(null);setImagePreparing(false);setPdfBusy(false);closePdfPicker();setImportError('');setLibraryQuery('');
-        setPartial(''); setBusy(null);setDiagramBusy(false); setSaving(false); setSaveOpen(false); setFolderDialog(false); setPreview(null);setViewingImage(null); setPreviewError(''); setCollapsedHints([]); setError(''); setStatus(''); setQuestion(''); setFolder(null); setCloudAllowed(false); setChatRoute('local');
+        setPartial(''); setBusy(null);setDiagramBusy(false); setSaving(false); setSaveOpen(false); setFolderDialog(false); setPreview(null);setViewingImage(null); setPreviewError(''); setCollapsedHints([]); setError(''); setStatus(''); setQuestion(''); setFolder(null); setCloudAllowed(false); setChatRoute('local');setKnowledgeRoute('local');setFirstHintRoute('local');
         if (!next) return;
         const nextKey = notebookKey(auth.app.options.projectId!, next.uid); key.current = nextKey;
         void Promise.all([loadNotebook(nextKey),loadWorkspaceDraft(nextKey).catch(()=>null)]).then(([value,unfinished]) => {
@@ -151,10 +145,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!saveOpen && !folderDialog && pdfQuestions === null) return;
+    if (!saveOpen && !folderDialog) return;
     const previous = documentActiveElement();
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !saving) { event.preventDefault(); setSaveOpen(false); setFolderDialog(false); closePdfPicker(); }
+      if (event.key === 'Escape' && !saving) { event.preventDefault(); setSaveOpen(false); setFolderDialog(false); }
       if (event.key !== 'Tab') return;
       const nodes = [...window.document.querySelectorAll<HTMLElement>('[role="dialog"] button:not(:disabled), [role="dialog"] input:not(:disabled), [role="dialog"] select:not(:disabled), [role="dialog"] textarea:not(:disabled)')];
       const first = nodes[0], last = nodes.at(-1);
@@ -164,7 +158,7 @@ export default function App() {
     };
     window.document.addEventListener('keydown', handleKey);
     return () => { window.document.removeEventListener('keydown', handleKey); previous?.focus(); };
-  }, [saveOpen, folderDialog, pdfQuestions, saving]);
+  }, [saveOpen, folderDialog, saving]);
   function documentActiveElement() { return window.document.activeElement instanceof HTMLElement ? window.document.activeElement : undefined; }
 
   function edit(update: Partial<Exercise>) { setDraft(value => ({ ...value, ...(update.statement!==undefined&&update.statement!==value.statement?{proofDiagram:undefined,geometryDiagram:undefined}:{}), ...update })); setDirty(true);setDraftSave('idle'); }
@@ -204,76 +198,40 @@ export default function App() {
     edit({statement,statementFormat:'latex',confirmed:false,knowledge:undefined,hints:[],messages:[],geometryDiagram:undefined,proofDiagram:undefined,attachments:keep&&draft.attachments.length<4?[...draft.attachments,attachment]:draft.attachments});
     setCollapsedHints([]);setImageProblem(null);setImportError('');setStatus('Image problem added. Check its formulas before analyzing.');
   }
-  async function loadPdf(file?: File) {
-    if (!file||blocked) return;
+  async function loadPdf(file?:File){
+    if(!file||blocked)return;
     cancelImport();const controller=new AbortController();importOperation.current=controller;const version=epoch.current;
-    setPdfBusy(true); setPdfProgress(null); setPdfReplacePending(false); setError('');setImportError(''); setStatus('');
-    try {
-      const { extractPdfQuestions } = await import('./pdf');
-      controller.signal.throwIfAborted();
-      const questions = await extractPdfQuestions(file, value=>{if(importOperation.current===controller)setPdfProgress(value);},controller.signal);
+    setPdfBusy(true);setPdfProgress(null);setError('');setStatus('');let pages=0;
+    try{
+      const {extractPdfQuestions}=await import('./pdf');controller.signal.throwIfAborted();
+      const questions=await extractPdfQuestions(file,value=>{pages=Math.max(pages,value.total);if(importOperation.current===controller)setPdfProgress(value);},controller.signal);
       if(importOperation.current!==controller||epoch.current!==version)return;
-      setPdfFile(file); setPdfPreview(null);setPdfQuestionFilter('');
-      setPdfQuestions(questions); setPdfSelected(questions[0] ? { ...questions[0], text: normalizeProblemText(questions[0].text) } : null); setPdfSelectedIndex(0);
-      if (questions[0]) void showPdfPage(file, questions[0].page);
-    } catch (e) { if(importOperation.current===controller)setError(friendlyError(e)); }
-    finally { if(importOperation.current===controller){importOperation.current=null;setPdfBusy(false); setPdfProgress(null);} }
+      setPdfFile(file);setPdfPageCount(Math.max(pages,1,...questions.map(question=>question.page)));setPdfQuestions(questions);
+    }catch(reason){if(importOperation.current===controller)setError(friendlyError(reason));}
+    finally{if(importOperation.current===controller){importOperation.current=null;setPdfBusy(false);setPdfProgress(null);}}
   }
-  async function showPdfPage(file: File, page: number) {
-    const request = ++pdfPreviewRequest.current;
-    setPdfPreview(null); setPdfPreviewBusy(true);
-    try {
-      const { renderPdfPagePreview } = await import('./pdf');
-      const image = await renderPdfPagePreview(file, page);
-      if (request === pdfPreviewRequest.current) setPdfPreview({ page, image });
-    } catch (e) {
-      if (request === pdfPreviewRequest.current) setError(friendlyError(e));
-    } finally {
-      if (request === pdfPreviewRequest.current) setPdfPreviewBusy(false);
-    }
-  }
-  function closePdfPicker() {
-    pdfPreviewRequest.current++;
-    pdfCloudReadRequest.current++;
-    setPdfQuestions(null); setPdfSelected(null); setPdfSelectedIndex(0);setPdfQuestionFilter('');
-    setPdfFile(null); setPdfPreview(null); setPdfPreviewBusy(false); setPdfReplacePending(false);
-  }
-  async function readPdfPageWithCloud(image: string) {
-    const request = ++pdfCloudReadRequest.current;
-    const version = epoch.current;
-    setImageBusy(true); setError(''); setStatus('');
-    try {
-      if (!await confirmCloudImageRead('PDF page')) return;
-      const text = await recognizeImageWithCloud(image);
-      if (request !== pdfCloudReadRequest.current || version !== epoch.current) return;
-      if (text.length > 6000) throw new Error('Cloud transcription is longer than the 6,000-character limit. Select a smaller PDF question.');
-      setPdfSelected(current => current ? { ...current, text } : current);
-      setStatus('Cloud AI transcribed the whole page. Review the text and formulas before using it.');
-    } catch (reason) {
-      if (request === pdfCloudReadRequest.current && version === epoch.current) setError(friendlyError(reason));
-    } finally {
-      setImageBusy(false);
-    }
-  }
-  function usePdfQuestion() {
-    if (!pdfSelected) return;
-    const statement = mixedTextToLatex(pdfSelected.text);
-    if (statement.length > 6000) { setImportError('This text is longer than the 6,000-character problem limit. Select a shorter question.'); return; }
-    if (draft.confirmed) { setPdfReplacePending(true); return; }
-    applyPdfQuestion(statement);
-  }
-  function applyPdfQuestion(statement: string) {
-    if (statement.length > 6000) { setError('This text is longer than the 6,000-character problem limit. Select a shorter question.'); return; }
-    edit({
-      statement,
-      statementFormat: 'latex',
-      geometryDiagram: undefined,proofDiagram:undefined,
-      ...(draft.confirmed ? { confirmed: false, knowledge: undefined, hints: [], messages: [] } : {})
+  function closePdfPicker(){setPdfQuestions(null);setPdfFile(null);setPdfPageCount(0);}
+  async function readPdfPageWithCloud(image:string,page:number,hasEdits:boolean,signal:AbortSignal){
+    signal.throwIfAborted();const version=epoch.current;
+    if(!navigator.onLine)throw new Error('Cloud page reading needs an internet connection.');
+    const accepted=await confirmChange({
+      title:cloudAllowed?'Read this page with Cloud AI?':'Allow Cloud AI and read this page?',
+      description:`${cloudAllowed?'Send only':'Enable Cloud AI for future actions you choose to run this session. For this transcription, send only'} PDF page ${page} to Google AI through Firebase for text and math transcription. No notes, chat or other attachments are sent. The result replaces extracted questions on this page; other pages are kept.${hasEdits?' Your manual edits on this page will be replaced.':''} Review the result before using it.`,
+      action:cloudAllowed?'Send image to Cloud AI':'Allow Cloud AI and read page',cancel:'Not now'
     });
-    closePdfPicker();
-    setStatus(draft.confirmed
-      ? 'PDF text replaced the previous problem. Review it and analyze again; your notes and attachments were kept.'
-      : 'PDF text added to the problem editor. Review it before analyzing.');
+    if(!accepted||version!==epoch.current||signal.aborted)return null;
+    if(!navigator.onLine)throw new Error('Cloud page reading needs an internet connection.');
+    setCloudAllowed(true);
+    return recognizeImageWithCloud(image,signal);
+  }
+  async function usePdfQuestions(statement:string){
+    const version=epoch.current;
+    if(statement.length>6000)throw new Error('Select fewer questions or shorten them to stay within 6,000 characters.');
+    const hasContext=!!(draft.confirmed||draft.knowledge||draft.hints.length||draft.messages.length);
+    if(hasContext&&!await confirmChange({title:'Replace the current problem?',description:'This replaces the current problem and clears its knowledge, hints, and chat. Your notes and attached images will be kept.',action:'Replace with PDF text',cancel:'Keep current problem'}))return;
+    if(version!==epoch.current)return;
+    edit({statement,statementFormat:'latex',confirmed:false,knowledge:undefined,hints:[],messages:[],geometryDiagram:undefined,proofDiagram:undefined});
+    closePdfPicker();setCollapsedHints([]);setStatus('PDF questions added to the problem editor. Review it before analyzing; your notes and attachments were kept.');
   }
   function confirmChange(value: Confirmation) {
     return new Promise<boolean>(resolve => { confirmationResult.current?.(false); confirmationResult.current=resolve; setConfirmation(value); });
@@ -317,22 +275,9 @@ export default function App() {
     if (!accepted || version !== epoch.current || !navigator.onLine) return false;
     setCloudAllowed(true); return true;
   }
-  async function confirmCloudImageRead(label: string): Promise<boolean> {
-    if (!navigator.onLine) { setError('Cloud image reading needs an internet connection. Local OCR is still available.'); return false; }
-    const version = epoch.current;
-    const accepted = await confirmChange({
-      title: 'Send this image to Cloud AI?',
-      description: `The selected ${label} image will be sent to Google AI through Firebase for text and math transcription. No notes, chat, or other attachments are sent. Review the result before using it.`,
-      action: 'Send image to Cloud AI',
-      cancel: 'Not now'
-    });
-    if (!accepted || version !== epoch.current) return false;
-    if (!navigator.onLine) { setError('Cloud image reading needs an internet connection. Local OCR is still available.'); return false; }
-    return true;
-  }
   async function toggleCloud() {
     if (blocked) return;
-    if (cloudAllowed) { setCloudAllowed(false); setChatRoute('local'); }
+    if (cloudAllowed) { setCloudAllowed(false); setChatRoute('local');setKnowledgeRoute('local');setFirstHintRoute('local'); }
     else await allowCloud();
   }
   async function selectChatRoute(route: 'local' | 'cloud') {
@@ -340,23 +285,27 @@ export default function App() {
     if (route === 'local') { setChatRoute('local'); return; }
     if (await allowCloud()) setChatRoute('cloud');
   }
+  async function selectStudyRoute(purpose:'knowledge'|'hint1',route:'local'|'cloud'){
+    if(blocked)return;
+    if(route==='cloud'&&!await allowCloud())return;
+    if(purpose==='knowledge')setKnowledgeRoute(route);else setFirstHintRoute(route);
+  }
   async function ask(purpose: NotebookRequest['purpose'],requestCloud=false) {
     if (!ready || blocked || activeAI.current) return;
     const version = epoch.current; const id = draft.id; const askedQuestion = question.trim();
     if (purpose !== 'knowledge' && purpose !== 'chat' && !draft.confirmed) { setError('Confirm the problem before asking for help.'); return; }
     if (purpose === 'chat' && !hasEditorContent(askedQuestion)) return;
     if (purpose === 'hint2' && draft.hints.length < 1 || purpose === 'hint3' && draft.hints.length < 2) return;
-    const requestsCloudChat = purpose === 'chat' && chatRoute === 'cloud';
-    const permitted = requestsCloudChat||requestCloud ? await allowCloud() : cloudAllowed && online;
-    if(requestCloud&&!permitted)return;
-    if (requestsCloudChat && !permitted || version !== epoch.current || activeAI.current) return;
+    const selectedRoute=purpose==='knowledge'?knowledgeRoute:purpose==='hint1'?firstHintRoute:purpose==='chat'?chatRoute:cloudAllowed&&online?'cloud':'local';
+    const requestsCloud=selectedRoute==='cloud'||requestCloud;
+    const permitted=requestsCloud?await allowCloud():cloudAllowed&&online;
+    if(requestsCloud&&!permitted||version!==epoch.current||activeAI.current)return;
     const operation = { controller: new AbortController(), status, error };
     activeAI.current = operation;
     const currentOperation = () => activeAI.current === operation && version === epoch.current && !operation.controller.signal.aborted;
     runStarted.current=performance.now();setElapsed(0);setBusy(purpose); setPartial(''); setError(''); setStatus('Waiting for AI…');
     try {
-      const route = purpose === 'chat' ? chatRoute
-        : purpose !== 'hint1' && permitted ? 'cloud' : 'local';
+      const route=requestsCloud&&permitted?'cloud':'local';
       const answer = await notebookAI({ purpose, statement: draft.statement, knowledge: draft.knowledge?.text ?? '', hints: draft.hints.map(h => h.text), messages: draft.messages, question: askedQuestion, cloudAllowed: permitted, route,responseStyle,geometryContext:draft.proofDiagram?.statement===draft.statement?proofTutorContext(draft.proofDiagram):undefined,images:illustrations }, text => {
         if (currentOperation()) { setPartial(text); setStatus('AI is answering…'); }
       }, operation.controller.signal);
@@ -639,13 +588,14 @@ export default function App() {
       {draft.proofDiagram&&<ProofDiagramView diagram={draft.proofDiagram} disabled={blocked} onToggle={showAuxiliary=>edit({proofDiagram:{...draft.proofDiagram!,showAuxiliary}})}/>}
       {!draft.proofDiagram&&draft.geometryDiagram&&<GeometryDiagramEditor diagram={draft.geometryDiagram} onChange={geometryDiagram=>edit({geometryDiagram})} onCreate={()=>createGeometryDiagram()} onAnalyze={()=>void ask('knowledge')} disabled={blocked}/>}
       <div className="guidance-row">
-        <section className="paper knowledge"><div className="panel-heading"><span className="step">02</span><h2>What you need</h2></div><p className="subtle">Only the concepts needed for this exact problem.</p><div className="knowledge-scroll" role="region" aria-label="Knowledge for this problem" tabIndex={0}><span className="source-label">{draft.knowledge ? sourceLabel(draft.knowledge.source) : cloudAllowed&&online?'Cloud AI':'Local AI'}</span>{streaming('knowledge')}{draft.knowledge && busy !== 'knowledge' ? <><MarkdownView value={draft.knowledge.text}/><small className="subtle">Processed by: {sourceLabel(draft.knowledge.source)}</small></> : busy !== 'knowledge' && <div className="empty-panel"><span>∑</span><p>Confirm your problem to see<br/>the essentials here.</p></div>}</div></section>
+        <section className="paper knowledge"><div className="panel-heading"><span className="step">02</span><h2>What you need</h2></div><div className="study-ai-choice"><SelectMenu label="Knowledge AI" value={knowledgeRoute} disabled={blocked} options={[{value:'local',label:'Local AI'},{value:'cloud',label:'Cloud AI'}]} onChange={route=>void selectStudyRoute('knowledge',route)}/><small>Choose how to run the next analysis.</small></div><p className="subtle">Only the concepts needed for this exact problem.</p><div className="knowledge-scroll" role="region" aria-label="Knowledge for this problem" tabIndex={0}><span className="source-label">{draft.knowledge ? sourceLabel(draft.knowledge.source) : knowledgeRoute==='cloud'?'Cloud AI':'Local AI'}</span>{streaming('knowledge')}{draft.knowledge && busy !== 'knowledge' ? <><MarkdownView value={draft.knowledge.text}/><small className="subtle">Processed by: {sourceLabel(draft.knowledge.source)}</small></> : busy !== 'knowledge' && <div className="empty-panel"><span>∑</span><p>Confirm your problem to see<br/>the essentials here.</p></div>}</div></section>
         <section className="paper hints">
           <div className="panel-heading"><span className="step">03</span><h2>A little help, your way</h2>{draft.hints.length>0&&<button className="reset-hints" disabled={blocked} onClick={()=>void resetHints()}>Reset hints</button>}</div>
           <p className="subtle">Open the next level only when you need it.</p>
           <div className="hints-scroll" role="region" aria-label="Exercise hints" tabIndex={0}>
           {labels.map((label, i) => <div className="hint-tier" key={label}>
-            <div className="hint-title"><span className="hint-number">{i + 1}</span><strong>{label}</strong><span className="source-label">{draft.hints[i]?sourceLabel(draft.hints[i].source):i>0&&cloudAllowed&&online?'Cloud':'Local'}</span></div>
+            <div className="hint-title"><span className="hint-number">{i + 1}</span><strong>{label}</strong>{i===0&&<div className="first-hint-ai"><SelectMenu label="Hint 1 AI" value={firstHintRoute} disabled={blocked} options={[{value:'local',label:'Local AI'},{value:'cloud',label:'Cloud AI'}]} onChange={route=>void selectStudyRoute('hint1',route)}/></div>}<span className="source-label">{draft.hints[i]?sourceLabel(draft.hints[i].source):(i===0?firstHintRoute==='cloud':cloudAllowed&&online)?'Cloud':'Local'}</span></div>
+            {i===0&&draft.hints[0]&&<small className="hint-route-note">Use Reset hints to generate again with your chosen AI.</small>}
             {i>0&&online&&!cloudAllowed&&!draft.hints[i]&&<aside className="hint-cloud-suggestion"><p>Cloud AI is available for deeper reasoning on this level.</p><button type="button" disabled={blocked||!draft.confirmed||draft.hints.length!==i} onClick={()=>void ask(`hint${i+1}` as NotebookRequest['purpose'],true)}>Use Cloud AI</button></aside>}
             {draft.hints[i] ? <>
               <button className="hint-toggle" aria-expanded={!collapsedHints.includes(i)} aria-controls={`hint-content-${i}`} onClick={() => setCollapsedHints(current => current.includes(i) ? current.filter(level => level !== i) : [...current,i])}>{collapsedHints.includes(i) ? 'Show hint ▾' : 'Hide hint ▴'}</button>
@@ -665,31 +615,5 @@ export default function App() {
     {user && ready && tab === 'library' && <section><div className="page-heading"><div><p className="eyebrow">PAGES OF PROGRESS</p><h1>{folder ? book.folders.find(f => f.id === folder)?.name : 'Exercise library'}</h1><p>Revisit your thinking. Continue where you left off.</p></div><div className="row"><button disabled={blocked} onClick={() => { setFolderName('');setCreationColor(defaultFolderColor); setError(''); setFolderDialog(true); }}>＋ New folder</button>{folder && folder !== 'general' && <button disabled={blocked} onClick={() => void deleteFolder(folder)}>Delete folder</button>}<button disabled={blocked} onClick={() => changeExercise(newExercise())}>＋ New exercise</button></div></div><div className="library-view row" role="group" aria-label="Library view"><button aria-pressed={!showPages} onClick={()=>{setLibraryView('folders');setFolder(null);setLibraryQuery('');setLibraryCompletion('all');}}>Folders</button><button aria-pressed={showPages&&!folder} onClick={()=>{setLibraryView('exercises');setFolder(null);}}>All exercises</button></div><div className="library-tools"><input type="search" aria-label="Search exercises" placeholder="Search names, problems or notes…" value={libraryQuery} onChange={e=>setLibraryQuery(e.target.value)}/><select aria-label="Exercise status" value={libraryCompletion} onChange={e=>setLibraryCompletion(e.target.value as typeof libraryCompletion)}><option value="all">All exercises</option><option value="progress">In progress</option><option value="completed">Completed</option></select><select aria-label="Sort exercises" value={librarySort} onChange={e=>{setLibrarySort(e.target.value as ExerciseSort);setLibraryView('exercises');}}><option value="recent">Recently updated</option><option value="oldest">Oldest first</option><option value="name">Name A–Z</option></select></div><div className="library-results"><p role="status">{showPages ? `${shown.length} of ${book.exercises.filter(e=>!folder||inExerciseFolder(e,folder)).length} exercises` : `${book.folders.length} folders · ${book.exercises.length} exercises`}{folder?' in this folder':''}</p>{(libraryQuery||libraryCompletion!=='all')&&<button onClick={()=>{setLibraryQuery('');setLibraryCompletion('all');}}>Clear filters</button>}</div>{showPages ? <>{folder&&<button onClick={()=>{setFolder(null);setLibraryView('folders');setLibraryQuery('');setLibraryCompletion('all');}}>← All folders</button>}<div className="exercise-list">{!shown.length && <div className="paper empty-panel"><strong>{libraryQuery.trim()||libraryCompletion!=='all'?'No matching exercises.':'No exercises yet.'}</strong><p>{libraryQuery.trim()||libraryCompletion!=='all'?'Try another search or clear the filters above.':'Create an exercise in the workspace, then save it to your library.'}</p></div>}{shown.map(e => <article className="paper exercise-card" key={e.id}><div><span className={`tag ${e.completed ? 'done' : ''}`}>{e.completed ? 'Completed' : 'In progress'}</span><h2>{e.title}</h2><MathInput value={statementLatex(e.statement, e.statementFormat)} readOnly compact label={`Problem: ${e.title}`}/><small>{new Date(e.updatedAt).toLocaleString('en-GB')} · {e.hints.length}/3 hints opened</small></div><div className="row exercise-actions"><button type="button" disabled={blocked} aria-label={`${e.completed?'Mark in progress':'Mark completed'}: ${e.title}`} onClick={()=>void changeCompletion(e.id,!e.completed)}>{e.completed?'Mark in progress':'Mark completed'}</button><button className="primary" disabled={blocked} onClick={() => openPreview(e)}>Open exercise</button><button disabled={blocked} onClick={() => void deleteExercise(e.id)}>Delete</button></div></article>)}</div></> : <div className="folder-grid">{book.folders.map(f => <article className="paper folder-card" key={f.id} data-folder-color={folderColor(f.color).id}><button className="folder-open" disabled={blocked} onClick={() => setFolder(f.id)}><span aria-hidden="true">▱</span><h2>{f.name}</h2><small>{book.exercises.filter(e => inExerciseFolder(e,f.id)).length} exercises →</small></button><details className="folder-color-menu"><summary aria-label={`Choose color for ${f.name}`}><span className="folder-color-dot" aria-hidden="true"/>Color · {folderColor(f.color).name}<Chevron/></summary><FolderColorPicker value={folderColor(f.color).id} disabled={blocked} onChange={color=>void changeFolderColor(f.id,color)}/></details>{f.id !== 'general' && <button className="folder-delete" disabled={blocked} aria-label={`Delete folder ${f.name}`} onClick={() => void deleteFolder(f.id)}>Delete folder</button>}</article>)}</div>}</section>}
     {folderDialog && <div className="modal-backdrop"><section className="paper save-dialog" role="dialog" aria-modal="true" aria-labelledby="folder-title"><p className="eyebrow">ORGANIZE YOUR THINKING</p><h2 id="folder-title">New folder</h2><form onSubmit={e => { e.preventDefault(); void createFolder(); }}><label>Folder name<input autoFocus required maxLength={80} value={folderName} disabled={saving} onChange={e => setFolderName(e.target.value)} placeholder="e.g. Algebra — week 1"/></label><p className="folder-color-label">Folder color</p><FolderColorPicker value={creationColor} disabled={saving} onChange={setCreationColor}/>{error && <p role="alert" className="error">{error}</p>}<div className="row"><button type="button" disabled={saving} onClick={() => setFolderDialog(false)}>Cancel</button><button className="primary" type="submit" disabled={saving || !folderName.trim()}>{saving ? 'Creating…' : 'Create folder'}</button></div></form></section></div>}
     {saveOpen && <div className="modal-backdrop"><section className="paper save-dialog" role="dialog" aria-modal="true" aria-labelledby="save-title"><p className="eyebrow">KEEP THIS PAGE</p><h2 id="save-title">Save to your notebook</h2><label>Exercise name<input autoFocus required maxLength={120} value={title} disabled={saving} onChange={e => setTitle(e.target.value)}/></label><FolderPicker folders={book.folders} selected={folderIds} disabled={saving} onChange={setFolderIds}/><label>Or create a new folder<input maxLength={80} aria-label="New folder name" value={newFolder} disabled={saving} onChange={e => setNewFolder(e.target.value)} placeholder="e.g. Algebra — week 1"/></label>{!!newFolder.trim()&&!book.folders.some(folder=>folder.name.toLocaleLowerCase()===newFolder.trim().toLocaleLowerCase())&&<><p className="folder-color-label">New folder color</p><FolderColorPicker value={saveFolderColor} disabled={saving} onChange={setSaveFolderColor}/></>}<p className="subtle">The problem, essentials, opened hints, notes, images and chat stay on this browser. Cloud sync is not available yet.</p>{error && <p role="alert" className="error">{error}</p>}<div className="row"><button disabled={saving} onClick={() => setSaveOpen(false)}>Not now</button><button className="primary" disabled={saving || !title.trim()} onClick={() => void save()}>{saving ? 'Saving…' : 'Save on this device'}</button></div></section></div>}
-  </main>{pdfQuestions !== null && <div className="modal-backdrop pdf-backdrop"><section className="paper save-dialog pdf-dialog" role="dialog" aria-modal="true" aria-labelledby="pdf-title">
-    <header className="pdf-dialog-header"><div><p className="eyebrow">PDF IMPORT · SELECT · REVIEW · USE</p><h2 id="pdf-title">Choose a question to solve</h2><p className="subtle">Select a detected question, review the extracted text, then add it to your workspace.</p></div><button type="button" aria-label="Close PDF import" disabled={imageBusy} onClick={closePdfPicker}>✕</button></header>
-    {!pdfQuestions.length ? <p role="status">No readable text was found after local OCR.</p> : <div className="pdf-picker">
-      <section className="pdf-question-browser" aria-label="Questions found in PDF">
-        <div className="pdf-question-browser-heading"><div><h3>Questions found</h3><span>{filteredPdfQuestions.length} of {pdfQuestions.length} shown</span></div><label>Find a question<input aria-label="Search PDF questions" type="search" value={pdfQuestionFilter} onChange={event=>setPdfQuestionFilter(event.target.value)} placeholder="Search text or page number"/></label></div>
-        <div className="pdf-question-list" role="list" aria-label="Extracted PDF questions">
-          {!filteredPdfQuestions.length&&<p className="empty-import" role="status">No questions match this search. Try another word or clear the search.</p>}
-          {filteredPdfQuestions.map(({question,index})=><button type="button" role="listitem" key={`${question.page}-${index}`} disabled={imageBusy} aria-pressed={pdfSelectedIndex===index} onClick={()=>{setPdfSelected({...question,text:normalizeProblemText(question.text)});setPdfSelectedIndex(index);if(pdfFile&&pdfPreview?.page!==question.page)void showPdfPage(pdfFile,question.page);}}>
-            <strong><span>Question {index+1}</span><small>Page {question.page}</small></strong><span>{question.text.slice(0,220)}{question.text.length>220?'…':''}</span>
-          </button>)}
-        </div>
-      </section>
-      {pdfSelected && <div className="import-review-columns">
-        <div className="import-source"><h3>Source page · {pdfSelected.page}</h3>{pdfPreviewBusy&&<p className="subtle" role="status">Rendering source page…</p>}{pdfPreview?.page===pdfSelected.page&&<PdfFormulaCropper key={pdfPreview.page} image={pdfPreview.image} imageLabel={`PDF page ${pdfSelected.page}`} cloudOnly onCloudRead={readPdfPageWithCloud} disabled={imageBusy}/>}</div>
-        <div className="import-edit"><h3>Review and edit question {pdfSelectedIndex+1}</h3>
-          <label className="pdf-selection">Extracted question<textarea aria-label="Selected PDF question" disabled={imageBusy} maxLength={6000} value={pdfSelected.text} onChange={event=>setPdfSelected({...pdfSelected,text:event.target.value})}/></label>
-          <div className="row pdf-format-actions"><button type="button" disabled={imageBusy} onClick={()=>setPdfSelected({...pdfSelected,text:normalizeProblemText(pdfSelected.text)})}>Format text</button><button type="button" disabled={imageBusy} onClick={()=>setPdfSelected({...pdfSelected,text:pdfQuestions[pdfSelectedIndex].text})}>Restore extracted text</button><span>{pdfSelected.text.length.toLocaleString()} / 6,000</span></div>
-          <details className="pdf-typeset-details"><summary>Preview formatted mathematics</summary><div className="pdf-typeset-preview"><MathInput label="Formatted PDF question" value={mixedTextToLatex(pdfSelected.text)} readOnly/></div></details>
-          {pdfSelected.text.length>6000&&<p className="error" role="alert">Select a shorter question to stay within the 6,000-character limit.</p>}
-          {importError&&<p className="notice error" role="alert">{importError}</p>}
-        </div>
-      </div>}
-    </div>}
-    <p className="subtle pdf-privacy-note">Cloud reading sends only the selected PDF page after separate consent. Review the transcription and formulas before using them.</p>
-    {pdfReplacePending && <div className="pdf-replace-confirm" role="alert"><p>This replaces the current problem and clears its knowledge, hints, and chat so they match the PDF. Your notes and attached images will be kept.</p><div className="row"><button type="button" onClick={() => setPdfReplacePending(false)}>Keep current problem</button><button type="button" className="primary" disabled={!pdfSelected || mixedTextToLatex(pdfSelected.text).length > 6000} onClick={() => { if (pdfSelected) applyPdfQuestion(mixedTextToLatex(pdfSelected.text)); }}>Replace with PDF text</button></div></div>}
-    <div className="row pdf-dialog-actions"><button type="button" disabled={imageBusy} onClick={closePdfPicker}>Cancel</button><button type="button" className="primary" disabled={imageBusy || pdfReplacePending || !pdfSelected?.text.trim() || pdfSelected.text.length > 6000} onClick={usePdfQuestion}>Use this question</button></div>
-  </section></div>} {imageProblem&&<ImageProblemReview image={imageProblem} onClose={()=>{setImageProblem(null);setImportError('');}} onApply={applyImageText} suspended={!!confirmation} error={importError} canKeepImage={draft.attachments.length<4}/>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={['My exercises',...book.folders.filter(value=>exerciseFolderIds(previewExercise).includes(value.id)).map(value=>value.name)].join(' · ')} attachments={preview.attachments} folders={book.folders} folderIds={preview.folderIds} onAttachments={attachments=>setPreview(current=>current?{...current,attachments}:current)} onAttach={file=>void attachPreview(file)} onFolders={folderIds=>setPreview(current=>current?{...current,folderIds}:current)} notes={preview.notes} notesFormat={preview.notesFormat} saving={saving} onImage={setViewingImage} suspended={!!confirmation || !!viewingImage} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes,notesFormat:'latex' } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {viewingImage&&<ImageViewer key={viewingImage.id} image={viewingImage} onClose={()=>setViewingImage(null)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</MathKeyboardProvider>;
+  </main>{pdfQuestions!==null&&pdfFile&&<PdfQuestionPicker file={pdfFile} questions={pdfQuestions} pageCount={pdfPageCount} suspended={!!confirmation||!!viewingImage} onClose={closePdfPicker} onUse={usePdfQuestions} onReadPage={readPdfPageWithCloud} onImage={setViewingImage}/>} {imageProblem&&<ImageProblemReview image={imageProblem} onClose={()=>{setImageProblem(null);setImportError('');}} onApply={applyImageText} suspended={!!confirmation} error={importError} canKeepImage={draft.attachments.length<4}/>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={['My exercises',...book.folders.filter(value=>exerciseFolderIds(previewExercise).includes(value.id)).map(value=>value.name)].join(' · ')} attachments={preview.attachments} folders={book.folders} folderIds={preview.folderIds} onAttachments={attachments=>setPreview(current=>current?{...current,attachments}:current)} onAttach={file=>void attachPreview(file)} onFolders={folderIds=>setPreview(current=>current?{...current,folderIds}:current)} notes={preview.notes} notesFormat={preview.notesFormat} saving={saving} onImage={setViewingImage} suspended={!!confirmation || !!viewingImage} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes,notesFormat:'latex' } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {viewingImage&&<ImageViewer key={viewingImage.id} image={viewingImage} kindLabel={pdfQuestions!==null?'PDF SOURCE PAGE':undefined} onClose={()=>setViewingImage(null)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</MathKeyboardProvider>;
 }

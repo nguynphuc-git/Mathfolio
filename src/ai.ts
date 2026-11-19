@@ -65,7 +65,8 @@ if (!signal) models.set(key, model);
 }
 return model;
 }
-export async function recognizeImageWithCloud(dataUrl: string): Promise<string> {
+export async function recognizeImageWithCloud(dataUrl: string,signal?:AbortSignal): Promise<string> {
+signal?.throwIfAborted();
 const match = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl);
 if (!match) throw new Error('Choose a valid PNG, JPG or WebP image.');
 const [, mimeType, data] = match;
@@ -77,7 +78,8 @@ const parts: Part[] = [
   { type: 'text', text: 'Transcribe all readable text and mathematical notation from this image. Preserve question numbering and layout. Write equations as valid LaTeX inside \\(…\\) or \\[...\\]. Do not solve the problems. If something is unclear, mark it [unclear] instead of guessing. Return only the transcription.' },
   { type: 'inlineData', inlineData: { mimeType, data } }
 ];
-const { response } = await model.generateContent(parts);
+const { response } = await abortable(model.generateContent(parts,{signal}),signal);
+signal?.throwIfAborted();
 if (response.candidates?.some(candidate => candidate.finishReason === 'MAX_TOKENS'))
   throw new Error('Cloud image transcription was cut off. Try a smaller crop.');
 const text = response.text().trim();
@@ -262,8 +264,6 @@ function hintQuality(scope?:string):string {
 export async function notebookAI(r:NotebookRequest,onText:(text:string)=>void,signal?:AbortSignal):Promise<{text:string;source:string}> {
   signal?.throwIfAborted();
   if((!hasEditorContent(r.statement)&&!(r.purpose==='chat'&&hasEditorContent(r.question)))||r.statement.length>6000||r.question.length>1000)throw new Error('The problem must be at most 6,000 characters and the question at most 1,000.');
-  // A first hint is always on-device, even for images or a stale caller's cloud route.
-  if(r.purpose==='hint1')r={...r,route:'local'};
   const problems=r.purpose.startsWith('hint')?hintProblems(r.statement):[];
   if(problems.length<2)return runNotebookAI(r,onText,signal);
   const completed:string[]=[];let source='UNKNOWN';
@@ -284,10 +284,10 @@ async function runNotebookAI(r: NotebookRequest, onText: (text: string) => void,
   const imageParts=validateIllustrations(r.images??[]);
   const quickAnswer = r.route === 'local' && !imageParts.length ? (linearHelp(r.statement, r.purpose, r.question, r.responseStyle) ?? geometryHelp(r.statement, r.purpose, r.question)) : undefined;
   if (quickAnswer) { onText(quickAnswer); return { text: quickAnswer, source: 'local_calculation' }; }
-  const reference = !imageParts.length&&r.purpose === 'knowledge' ? formulaReference(r.statement) : undefined;
+  const reference = r.route==='local'&&!imageParts.length&&r.purpose === 'knowledge' ? formulaReference(r.statement) : undefined;
   if (reference) { onText(reference); return { text: reference, source: 'local_reference' }; }
   const cloudChat = r.purpose === 'chat' && r.route === 'cloud';
-  const cloudTask = ['knowledge', 'hint2', 'hint3'].includes(r.purpose) && r.route === 'cloud';
+  const cloudTask = ['knowledge', 'hint1', 'hint2', 'hint3'].includes(r.purpose) && r.route === 'cloud';
   const cloud = cloudChat || cloudTask;
   if (cloud && !r.cloudAllowed) throw new Error('Allow cloud AI first.');
   if (cloud && typeof navigator !== 'undefined' && !navigator.onLine) throw new Error('You are offline. Turn Cloud AI off or choose local chat.');
@@ -338,7 +338,7 @@ async function runNotebookAI(r: NotebookRequest, onText: (text: string) => void,
     const result = response.text().trim();
     if (!result) throw new Error('No answer was returned. Try again or revise the problem.');
     if (!cloud && result.startsWith(localModelUnavailablePrefix))
-      throw new Error(r.purpose==='hint1'?'On-device AI is unavailable in this browser. Hint 1 needs a browser and device that support an on-device model.':'On-device AI is unavailable in this browser. Enable Cloud AI to use Firebase AI, or try a browser and device that support an on-device model.');
+      throw new Error('On-device AI is unavailable in this browser. Select Cloud AI for this task, or try a browser and device that support an on-device model.');
     if (!emitted) onText(result);
     return { text: result, source: response.inferenceSource ?? 'UNKNOWN' };
   } finally {

@@ -56,6 +56,17 @@ async function type(selector: string, value: string, scope:ParentNode=host) {
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
+async function chooseOption(label:string,text:string){
+  await act(async()=>host.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click());
+  const option=[...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(option=>option.textContent?.startsWith(text))!;
+  await act(async()=>option.click());
+}
+async function uploadPdf(questions:{page:number;text:string}[]){
+  mocks.pdf.mockResolvedValue(questions);const file=new File(['pdf'],'worksheet.pdf',{type:'application/pdf'});
+  const upload=host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;Object.defineProperty(upload,'files',{configurable:true,value:[file]});
+  await act(async()=>upload.dispatchEvent(new Event('change',{bubbles:true})));
+  return file;
+}
 async function library() { await click('Exercise library'); await click('▱'); }
 async function openWorkspace() { await library(); await click('Open exercise'); await click('Open in workspace'); }
 beforeEach(async () => {
@@ -186,6 +197,78 @@ describe('library image edits and shared folders',()=>{
   });
 });
 
+describe('explicit knowledge and first-hint routing',()=>{
+  it('chooses cloud independently for knowledge without generating until Analyze is pressed',async()=>{
+    await type('[aria-label="Problem statement"]','Prove a theorem');
+    await chooseOption('Knowledge AI','Cloud AI');expect(mocks.ai).not.toHaveBeenCalled();await click('Not now');
+    expect(host.querySelector('[aria-label="Knowledge AI"]')!.textContent).toContain('Local AI');
+    await chooseOption('Knowledge AI','Cloud AI');await click('Allow Cloud AI');expect(mocks.ai).not.toHaveBeenCalled();
+    mocks.ai.mockResolvedValue({text:'A relevant theorem.',source:'IN_CLOUD'});await click('Confirm & analyze');
+    expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'knowledge',route:'cloud',cloudAllowed:true});
+    expect(host.querySelector('[aria-label="Hint 1 AI"]')!.textContent).toContain('Local AI');
+    await chooseOption('Knowledge AI','Local AI');await click('Refresh knowledge');expect(mocks.ai.mock.calls[1][0].route).toBe('local');
+  });
+  it('runs hint 1 in cloud only when chosen, and resets choices when Cloud AI is switched off',async()=>{
+    const book=stored();book.exercises[0].hints=[];await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));await openWorkspace();
+    await chooseOption('Hint 1 AI','Cloud AI');expect(mocks.ai).not.toHaveBeenCalled();await click('Allow Cloud AI');
+    mocks.ai.mockResolvedValue({text:'Use the decisive first step.',source:'IN_CLOUD'});await click('Open level 1');
+    expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'hint1',route:'cloud',cloudAllowed:true});
+    await click('Cloud AI',host.querySelector('.workspace-actions')!);
+    expect(host.querySelector('[aria-label="Knowledge AI"]')!.textContent).toContain('Local AI');expect(host.querySelector('[aria-label="Hint 1 AI"]')!.textContent).toContain('Local AI');
+  });
+});
+
+describe('multi-question PDF review',()=>{
+  it('preserves edits and selections across pages and imports selected questions in document order',async()=>{
+    await type('[aria-label="Notes"]','Keep my notes');
+    await uploadPdf([{page:1,text:'1. Solve x^2=4'},{page:2,text:'2. Find y+1=3'},{page:2,text:'3. Find z=8'}]);
+    await type('[aria-label="Extracted question 1"]',String.raw`\text{1. Solve }x^2=9`);
+    await click('Next page');await click('Select all shown');
+    expect(host.querySelectorAll('.pdf-review-question')).toHaveLength(3);
+    await type('[aria-label="Extracted question 2"]',String.raw`\text{2. Find }y+1=5`);
+    await click('Previous page');expect(host.querySelector<HTMLInputElement>('[aria-label="Select question 1"]')!.checked).toBe(true);
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Extracted question 1"]')!.value).toContain('x^2=9');
+    await click('Use 3 questions');
+    const statement=host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value;
+    expect(statement.indexOf('x^2=9')).toBeLessThan(statement.indexOf('y+1=5'));expect(statement.indexOf('y+1=5')).toBeLessThan(statement.indexOf('z=8'));
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe('Keep my notes');expect(mocks.ai).not.toHaveBeenCalled();
+  });
+  it('keeps the 6,000-character combined limit without truncating any selected question',async()=>{
+    await uploadPdf([{page:1,text:'1. First'},{page:1,text:'2. Second'}]);
+    await click('Select all shown');await type('[aria-label="Extracted question 1"]','a'.repeat(3100));await type('[aria-label="Extracted question 2"]','b'.repeat(3100));
+    expect(button('Use 2 questions').disabled).toBe(true);expect(host.textContent).toContain('select fewer');
+    await click('Deselect',host.querySelector('[aria-label="Review question 2"]')!);expect(button('Use this question').disabled).toBe(false);await click('Use this question');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe('a'.repeat(3100));
+  });
+  it('opens the source in the image viewer and closes only that viewer on Escape',async()=>{
+    await uploadPdf([{page:1,text:'1. Find x'}]);await type('[aria-label="Extracted question 1"]',String.raw`\text{Keep my edit}`);
+    await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Enlarge PDF page 1"]')!.click());
+    expect(host.querySelector('.image-viewer')).not.toBeNull();expect(host.querySelector('.pdf-backdrop')!.hasAttribute('inert')).toBe(true);
+    await act(async()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
+    expect(host.querySelector('.image-viewer')).toBeNull();expect(host.querySelector('.pdf-dialog')).not.toBeNull();
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Extracted question 1"]')!.value).toContain('Keep my edit');
+  });
+  it('stops page reading and rejects late text while preserving the extracted questions',async()=>{
+    await uploadPdf([{page:1,text:'1. Original question'}]);let finish!:(text:string)=>void;
+    mocks.imageCloud.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+    await click('Read this page with Cloud AI');await click('Allow Cloud AI and read page');
+    const signal=mocks.imageCloud.mock.calls[0][1] as AbortSignal;await click('Stop page reading');expect(signal.aborted).toBe(true);
+    await act(async()=>finish('1. LATE RESULT'));expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Extracted question 1"]')!.value).toContain('Original question');
+    expect(host.textContent).not.toContain('LATE RESULT');expect(button('Read this page with Cloud AI').disabled).toBe(false);
+  });
+  it('replaces only the page explicitly sent to cloud, retaining other page edits and selection',async()=>{
+    await uploadPdf([{page:1,text:'1. Keep this question'},{page:2,text:'2. Old OCR'}]);
+    await type('[aria-label="Extracted question 1"]',String.raw`\text{Keep page one edit}`);await click('Next page');
+    mocks.imageCloud.mockResolvedValue(String.raw`2. Solve \(\frac{1}{2}+x=3\)
+3. Find \(a_n=n^2\)`);
+    await click('Read this page with Cloud AI');await click('Allow Cloud AI and read page');
+    expect(host.querySelectorAll('.pdf-review-question')).toHaveLength(3);
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Extracted question 1"]')!.value).toContain('Keep page one edit');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Extracted question 2"]')!.value).toContain(String.raw`\frac{1}{2}`);
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Extracted question 3"]')!.value).toContain('a_n=n^2');
+  });
+});
+
 describe('online suggestions for later hint levels',()=>{
   it('offers cloud on levels 2 and 3 and generates only after permission with the correct route',async()=>{
     await openWorkspace();const tiers=host.querySelectorAll('.hint-tier');
@@ -204,21 +287,15 @@ describe('online suggestions for later hint levels',()=>{
 });
 
 describe('saved page previews and workspace copies', () => {
-  it('normalizes fragmented PDF text, previews the result and can restore the extracted source', async () => {
+  it('formats recognized PDF notation directly in the editable question and restores the extraction',async()=>{
     const raw='Bài 2.1. Những khẳng định\nnào sau đây là đúng?\na)0 ∈ ∅ b)∅ ⊆ {0}';
-    mocks.pdf.mockResolvedValue([{page:1,text:raw}]);
-    const upload=host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
-    Object.defineProperty(upload,'files',{configurable:true,value:[new File(['pdf'],'sets.pdf',{type:'application/pdf'})]});
-    await act(async()=>upload.dispatchEvent(new Event('change',{bubbles:true})));
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Selected PDF question"]')!.value)
-      .toBe('Bài 2.1. Những khẳng định nào sau đây là đúng?\na) 0 ∈ ∅\nb) ∅ ⊆ {0}');
-    expect(host.querySelector('[aria-label="Formatted PDF question"]')).not.toBeNull();
-    await click('Restore extracted text');
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Selected PDF question"]')!.value).toBe(raw);
-    await click('Format text'); await click('Use this question');
-    const value=host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value;
-    expect(value).toContain(String.raw`\class{mathfolio-line}`); expect(value).toContain(String.raw`\subseteq`);
-    expect(mocks.ai).not.toHaveBeenCalled();
+    await uploadPdf([{page:1,text:raw}]);
+    const initial=host.querySelector<HTMLTextAreaElement>('[aria-label="Extracted question 1"]')!.value;
+    expect(initial).toContain('Những khẳng định nào sau đây là đúng?');expect(initial).toContain(String.raw`\subseteq`);
+    await type('[aria-label="Extracted question 1"]',String.raw`\frac{1}{2}`);await click('Restore extracted text');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Extracted question 1"]')!.value).toBe(initial);
+    await click('Use this question');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe(initial);expect(mocks.ai).not.toHaveBeenCalled();
   });
   it('suggests Cloud AI for a complex problem without enabling it or sending data', async () => {
     await type('[aria-label="Problem statement"]', 'Prove that the sequence converges and justify each step.');
@@ -233,32 +310,17 @@ describe('saved page previews and workspace copies', () => {
     expect(mocks.ai).not.toHaveBeenCalled();
   });
 
-  it('lets the learner choose and edit extracted PDF text before inserting it', async () => {
-    mocks.pdf.mockResolvedValue([
-      { page: 1, text: '1. Solve x^2=4' },
-      { page: 2, text: '2. Find y when y+1=3' }
-    ]);
-    const upload = host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
-    const file = new File(['mock pdf'], 'questions.pdf', { type: 'application/pdf' });
-    Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
-    await act(async () => { upload.dispatchEvent(new Event('change', { bubbles: true })); });
-    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Choose a question to solve');
-    await act(async () => { await Promise.resolve(); });
-    expect(host.querySelector('[role="dialog"]')?.textContent).not.toContain('Recognize formula as LaTeX');
-    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Mock read whole PDF page');
-    expect(host.querySelector('[aria-label="Search PDF questions"]')).not.toBeNull();
-    expect(host.querySelector('[aria-label="Formatted PDF question"]')).not.toBeNull();
-    const second = [...host.querySelectorAll<HTMLButtonElement>('[role="list"] button')].find(item => item.textContent?.includes('Page 2'))!;
-    await act(async () => { second.click(); });
-    await act(async () => { await Promise.resolve(); });
-    await type('[aria-label="Selected PDF question"]', '2. Find y when y+1=5.');
+  it('lets the learner change pages, select a question and edit its math before inserting it',async()=>{
+    const file=await uploadPdf([{page:1,text:'1. Solve x^2=4'},{page:2,text:'2. Find y when y+1=3'}]);
+    expect(host.querySelector('[role="dialog"]')!.textContent).toContain('Choose questions from your PDF');
+    await chooseOption('PDF page','Page 2');await click('Clear selection');
+    await act(async()=>host.querySelector<HTMLInputElement>('[aria-label="Select question 2"]')!.click());
+    await type('[aria-label="Extracted question 2"]',String.raw`\text{2. Find y when }y+1=5`);
     await click('Use this question');
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain('y+1=5');
-    expect(host.querySelector('[role="dialog"]')).toBeNull();
-    expect(host.textContent).toContain('Review it before analyzing');
-    expect(mocks.pdfPreview).toHaveBeenCalledWith(file, 1);
-    expect(mocks.pdfPreview).toHaveBeenCalledWith(file, 2);
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain('y+1=5');expect(host.querySelector('[role="dialog"]')).toBeNull();
+    expect(mocks.pdfPreview).toHaveBeenCalledWith(file,1);expect(mocks.pdfPreview).toHaveBeenCalledWith(file,2);expect(mocks.ai).not.toHaveBeenCalled();
   });
+
   it('requires transcription review before building a proof diagram from PDF',async()=>{
     mocks.pdf.mockResolvedValue([{page:1,text:geometryExamples[0].statement}]);
     const upload=host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
@@ -271,19 +333,14 @@ describe('saved page previews and workspace copies', () => {
     expect(mocks.diagram.mock.calls[0][1]).toBe('local');expect(mocks.ai).not.toHaveBeenCalled();
   });
 
-  it('filters extracted PDF questions without losing the selected item', async () => {
-    mocks.pdf.mockResolvedValue([
-      { page: 1, text: '1. Solve x^2=4' },
-      { page: 2, text: '2. Find y when y+1=3' }
-    ]);
-    const upload=host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
-    Object.defineProperty(upload,'files',{configurable:true,value:[new File(['pdf'],'questions.pdf',{type:'application/pdf'})]});
-    await act(async()=>upload.dispatchEvent(new Event('change',{bubbles:true})));
-    await type('[aria-label="Search PDF questions"]','Page 2');
-    const visible=[...host.querySelectorAll<HTMLButtonElement>('[role="list"] button')];
-    expect(visible).toHaveLength(1);
-    expect(visible[0].textContent).toContain('Page 2');
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Selected PDF question"]')!.value).toContain('Solve x^2=4');
+  it('filters only the active page without losing questions selected on another page',async()=>{
+    await uploadPdf([{page:1,text:'1. Solve x^2=4'},{page:2,text:'2. Find y when y+1=3'}]);
+    await click('Next page');await type('[aria-label="Search PDF questions"]','Find');
+    expect(host.querySelectorAll('[role="listitem"]')).toHaveLength(1);expect(host.querySelector('[role="listitem"]')!.textContent).toContain('Page 2');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Extracted question 1"]')!.value).toContain('Solve');
+    await act(async()=>host.querySelector<HTMLInputElement>('[aria-label="Select question 2"]')!.click());
+    await click('Previous page');expect(host.querySelector<HTMLInputElement>('[aria-label="Select question 1"]')!.checked).toBe(true);
+    expect(host.querySelectorAll('.pdf-review-question')).toHaveLength(2);
   });
 
   it('keeps illustrations for viewing and AI context without per-image reading actions',async()=>{
@@ -301,20 +358,18 @@ describe('saved page previews and workspace copies', () => {
     expect(mocks.ai).not.toHaveBeenCalled();expect(mocks.imageCloud).not.toHaveBeenCalled();expect(mocks.imageLocal).not.toHaveBeenCalled();
   });
 
-  it('requires image consent before Cloud AI reads a full PDF page', async () => {
-    mocks.pdf.mockResolvedValue([{ page: 1, text: '1. OCR text from this page.' }]);
-    const upload = host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
-    const file = new File(['mock pdf'], 'scan.pdf', { type: 'application/pdf' });
-    Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
-    await act(async () => { upload.dispatchEvent(new Event('change', { bubbles: true })); });
-    await act(async () => { await Promise.resolve(); });
-
-    await click('Mock read whole PDF page');
-    expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain('The selected PDF page image will be sent');
-    expect(mocks.imageCloud).not.toHaveBeenCalled();
-    await click('Send image to Cloud AI');
-    expect(mocks.imageCloud).toHaveBeenCalledWith('data:image/png;base64,AA==');
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Selected PDF question"]')!.value).toContain('Cloud transcription');
+  it('asks visible consent and enables Cloud AI when reading a PDF page from an off session',async()=>{
+    await uploadPdf([{page:1,text:'1. Original question'}]);
+    await click('Read this page with Cloud AI');
+    expect(host.querySelector('[role="alertdialog"]')!.textContent).toContain('Allow Cloud AI and read this page?');
+    expect(host.querySelector('.pdf-backdrop')!.hasAttribute('inert')).toBe(true);expect(mocks.imageCloud).not.toHaveBeenCalled();
+    await click('Not now');expect(mocks.imageCloud).not.toHaveBeenCalled();
+    expect(host.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('false');
+    mocks.imageCloud.mockResolvedValue(String.raw`1. Solve \(\frac{x}{2}=3\)`);
+    await click('Read this page with Cloud AI');await click('Allow Cloud AI and read page');
+    expect(mocks.imageCloud).toHaveBeenCalledWith('data:image/png;base64,AA==',expect.any(AbortSignal));
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Extracted question 1"]')!.value).toContain(String.raw`\frac{x}{2}=3`);
+    expect(host.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('true');
   });
 
   it('keeps PDF upload available and confirms replacement of an analyzed problem', async () => {
@@ -326,7 +381,7 @@ describe('saved page previews and workspace copies', () => {
     await act(async () => { upload.dispatchEvent(new Event('change', { bubbles: true })); });
     await click('Use this question');
 
-    expect(host.querySelector('.pdf-replace-confirm')?.textContent).toContain('clears its knowledge, hints, and chat');
+    expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain('clears its knowledge, hints, and chat');
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe('x^2+2x=0');
     await click('Replace with PDF text');
 

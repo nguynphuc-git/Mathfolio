@@ -3,7 +3,7 @@ import {lockBodyScroll} from '../scroll-lock';
 import {fitImage,imageZoom,type ImageSize} from '../image-view';
 import type {Attachment} from '../notebook';
 interface Anchor {x:number;y:number;clientX:number;clientY:number}
-export function ImageViewer({image,onClose}:{image:Attachment;onClose:()=>void}) {
+export function ImageViewer({image,onClose,kindLabel}:{image:Attachment;onClose:()=>void;kindLabel?:string}) {
   const [natural,setNatural]=useState<ImageSize>({width:0,height:0}),[viewport,setViewport]=useState<ImageSize>({width:0,height:0});
   const [zoom,setZoom]=useState<number|'fit'>('fit'),[error,setError]=useState(false),[dragging,setDragging]=useState(false);
   const dialog=useRef<HTMLElement>(null),stage=useRef<HTMLDivElement>(null),picture=useRef<HTMLImageElement>(null),close=useRef<HTMLButtonElement>(null);
@@ -67,7 +67,7 @@ export function ImageViewer({image,onClose}:{image:Attachment;onClose:()=>void})
   const ready=!!natural.width&&!error;
   return <div className="modal-backdrop image-viewer-backdrop" onClick={event=>{if(event.target===event.currentTarget)onClose();}}>
     <section ref={dialog} className="paper image-viewer" role="dialog" aria-modal="true" aria-labelledby="image-viewer-title" aria-describedby="image-viewer-help">
-      <header className="image-viewer-header"><div><p className="eyebrow">{image.kind==='problem'?'PROBLEM IMAGE':'YOUR SOLUTION'}</p><h2 id="image-viewer-title">{image.name}</h2></div><button ref={close} type="button" aria-label="Close image viewer" onClick={onClose}>✕</button></header>
+      <header className="image-viewer-header"><div><p className="eyebrow">{kindLabel??(image.kind==='problem'?'PROBLEM IMAGE':'YOUR SOLUTION')}</p><h2 id="image-viewer-title">{image.name}</h2></div><button ref={close} type="button" aria-label="Close image viewer" onClick={onClose}>✕</button></header>
       <div className="image-viewer-tools" role="group" aria-label="Image zoom"><button type="button" aria-label="Zoom out" disabled={!ready||scale<=.01} onClick={()=>changeZoom.current(scale*.8)}>−</button><output aria-live="polite" aria-label="Image zoom percentage">{Math.round(scale*100)}%</output><button type="button" aria-label="Zoom in" disabled={!ready||scale>=5} onClick={()=>changeZoom.current(scale*1.25)}>＋</button><button type="button" disabled={!ready} aria-pressed={zoom==='fit'} onClick={()=>changeZoom.current('fit')}>Fit to window</button><button type="button" disabled={!ready} aria-pressed={zoom===1} onClick={()=>changeZoom.current(1)}>Actual size</button><p id="image-viewer-help">Scroll to zoom · drag to move · Esc to close</p></div>
       <div ref={stage} className={`image-viewer-stage${dragging?' dragging':''}`} role="region" aria-label="Enlarged image" tabIndex={0} onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}>
         {error?<p className="notice error" role="alert">This image could not be displayed. Close this viewer and try another image.</p>:<div className="image-viewer-surface" style={{width:Math.max(viewport.width,natural.width*scale+32),height:Math.max(viewport.height,natural.height*scale+32)}}>

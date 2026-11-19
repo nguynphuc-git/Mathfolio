@@ -23,6 +23,7 @@ export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({v
   useEffect(()=>{
     const field=new MathfieldElement();
     field.defaultMode=initialMode;field.smartMode=false;field.smartFence=true;
+    field.mathModeSpace='\\ ';
     field.smartSuperscript=false;field.mathVirtualKeyboardPolicy='manual';field.value=validValue.current;
     const flowStyle=document.createElement('style');
     // Remove the anonymous inline wrapper's baseline gap, not internal fraction/root struts.
