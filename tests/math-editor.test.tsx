@@ -48,6 +48,12 @@ describe('math editor event integration',()=>{
     await act(async()=>handle.current!.replace('should not replace'));
     expect(field().value).toBe(original);
   });
+  it('keeps a math-only equation editor in math mode without exposing the Text switch',async()=>{
+    await act(async()=>root.render(<MathInput ref={handle} value="x^2" onChange={change} mathOnly initialMode="text"/>));
+    expect(field().mode).toBe('math');expect(host.querySelector('.editor-mode-bar')).toBeNull();
+    await act(async()=>{field().dispatchEvent(new KeyboardEvent('keydown',{key:'Alt'}));field().dispatchEvent(new KeyboardEvent('keyup',{key:'Alt'}));});
+    expect(field().mode).toBe('math');await act(async()=>{field().mode='text';field().dispatchEvent(new Event('mode-change'));});expect(field().mode).toBe('math');
+  });
   it('keeps plain-text paste in the mode chosen by the user',async()=>{
     await act(async()=>host.querySelector<HTMLButtonElement>('.editor-mode-toggle')!.click());
     const event=await paste('text/plain','Find x^2 = 4 now');
