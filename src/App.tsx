@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createUserWithEmailAndPassword, getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth';
 import { getFirebaseApp } from './firebase';
-import { friendlyError, generateProofDiagram, notebookAI, recognizeImageWithCloud, recommendsCloudForProblem, type NotebookRequest } from './ai';
+import { friendlyError, notebookAI, recognizeImageWithCloud, recommendsCloudForProblem, type NotebookRequest } from './ai';
 import { MarkdownView } from './components/MarkdownView';
 import { PdfQuestionPicker } from './components/PdfQuestionPicker';
 import { addFolder, recolorFolder, removeFolder, emptyNotebook, loadNotebook, newExercise, notebookKey, putExercise, putExerciseCompletion, putExercisePreview, exerciseFolderIds, inExerciseFolder, withExerciseFolders, sameAttachments, readAttachment, saveNotebook, type Exercise, type Notebook, type Attachment } from './notebook';
@@ -36,18 +36,18 @@ import {LoginBackdrop} from './components/LoginBackdrop';
 import './workspace-ui.css';
 import './pdf-picker.css';
 import './image-review.css';
-import {GeometryDiagramEditor} from './components/GeometryDiagramEditor';
 import {LatexMessage} from './components/LatexMessage';
 import { UsageGuide } from './components/UsageGuide';
 import type { ResponseStyle } from './local-tutor';
-import {proofTutorContext} from './geometry-proof';
-import {ProofDiagramView} from './components/ProofDiagramView';
 import {ProblemSourceInput} from './components/ProblemSourceInput';
+import {IllustrationDrawing} from './components/IllustrationDrawing';
+import type {DrawingScene} from './drawing';
 
 const labels = ['A starting point', 'The method', 'Full solution'];
 export default function App() {
   const appearance=useAppearance();
-  const [diagramBusy,setDiagramBusy]=useState(false);
+  const [drawingOpen,setDrawingOpen]=useState(false);
+  const drawingDraft=useRef<DrawingScene|undefined>(undefined);
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
   const [authBusy, setAuthBusy] = useState(false); const [tab, setTab] = useState<'solve' | 'library' | 'guide' | 'account'>('solve');
@@ -88,7 +88,7 @@ export default function App() {
   const illustrations=selectedIllustrations(draft.attachments);
 
   const activeAI = useRef<{ controller: AbortController; status: string; error: string } | null>(null);
-  const blocked = diagramBusy || !!busy || saving || pdfBusy || imagePreparing || !!recovery;
+  const blocked = !!busy || saving || pdfBusy || imagePreparing || !!recovery;
   useEffect(()=>{if(!busy)return;const tick=()=>setElapsed(Math.floor((performance.now()-runStarted.current)/1000));tick();const timer=setInterval(tick,1000);return()=>clearInterval(timer);},[busy]);
   const problemPanel = useRef<HTMLElement>(null);
   const [problemHeight, setProblemHeight] = useState(520);
@@ -132,7 +132,7 @@ export default function App() {
         const version = ++epoch.current;
         confirmationResult.current?.(false); confirmationResult.current = null; setConfirmation(null);
         key.current = ''; setUser(next); setReady(false); setBook(emptyNotebook()); setDraft(newExercise()); setDirty(false);setRecovery(null);setDraftSave('idle');setDraftSavedAt('');setImageProblem(null);setImagePreparing(false);setPdfBusy(false);closePdfPicker();setImportError('');setLibraryQuery('');
-        setPartial(''); setBusy(null);setDiagramBusy(false); setSaving(false); setSaveOpen(false); setFolderDialog(false); setPreview(null);setViewingImage(null); setPreviewError(''); setCollapsedHints([]); setError(''); setStatus(''); setQuestion(''); setFolder(null); setCloudAllowed(false); setChatRoute('local');setKnowledgeRoute('local');setFirstHintRoute('local');
+        setPartial(''); setBusy(null);setDrawingOpen(false);drawingDraft.current=undefined; setSaving(false); setSaveOpen(false); setFolderDialog(false); setPreview(null);setViewingImage(null); setPreviewError(''); setCollapsedHints([]); setError(''); setStatus(''); setQuestion(''); setFolder(null); setCloudAllowed(false); setChatRoute('local');setKnowledgeRoute('local');setFirstHintRoute('local');
         if (!next) return;
         const nextKey = notebookKey(auth.app.options.projectId!, next.uid); key.current = nextKey;
         void Promise.all([loadNotebook(nextKey),loadWorkspaceDraft(nextKey).catch(()=>null)]).then(([value,unfinished]) => {
@@ -162,24 +162,6 @@ export default function App() {
   function documentActiveElement() { return window.document.activeElement instanceof HTMLElement ? window.document.activeElement : undefined; }
 
   function edit(update: Partial<Exercise>) { setDraft(value => ({ ...value, ...(update.statement!==undefined&&update.statement!==value.statement?{proofDiagram:undefined,geometryDiagram:undefined}:{}), ...update })); setDirty(true);setDraftSave('idle'); }
-  async function createGeometryDiagram() {
-    if(blocked||activeAI.current||!ready)return;
-    const version=epoch.current,id=draft.id;
-    const hasGuidance=!!(draft.knowledge||draft.hints.length||draft.messages.length);
-    const operation={controller:new AbortController(),status,error};activeAI.current=operation;
-    const current=()=>activeAI.current===operation&&epoch.current===version&&!operation.controller.signal.aborted;
-    setDiagramBusy(true);setError('');setStatus(hasGuidance
-      ?'Rebuilding diagram… Existing guidance will be replaced only if the new diagram succeeds.'
-      :'Reading hypotheses and constructing the diagram…');
-    try{
-      const diagram=await generateProofDiagram(draft.statement,cloudAllowed&&online?'cloud':'local',cloudAllowed&&online,illustrations,operation.controller.signal);
-      if(!current())return;
-      setDraft(value=>value.id===id?{...value,proofDiagram:diagram,geometryDiagram:undefined,confirmed:false,knowledge:undefined,hints:[],messages:[]}:value);
-      setCollapsedHints([]);setDirty(true);setDraftSave('idle');
-      setStatus('Diagram ready. Review Given and To prove, then analyze for hints. Auxiliary constructions are hidden until you request them.');
-    }catch(e){if(current()){setError(friendlyError(e));setStatus('Diagram not changed. Clarify the problem or try again.');}}
-    finally{if(current()){activeAI.current=null;setDiagramBusy(false);}}
-  }
   function resumeDraft(){if(!recovery)return;setDraft(structuredClone(recovery.exercise));setDirty(true);setDraftSave('saved');setDraftSavedAt(recovery.savedAt);setRecovery(null);setTab('solve');setStatus('Draft restored. Save exercise when you want to update your library.');}
   async function discardRecovery(){const version=epoch.current;setSaving(true);try{await clearWorkspaceDraft(key.current);if(version===epoch.current){setRecovery(null);setDraftSave('idle');}}catch{setError('Could not remove the draft. Try again.');}finally{if(version===epoch.current)setSaving(false);}}
   function cancelImport(){importOperation.current?.abort();importOperation.current=null;setPdfBusy(false);setPdfProgress(null);setImagePreparing(false);}
@@ -260,7 +242,7 @@ export default function App() {
     if(version!==epoch.current)return false;
     cancelImport();
     activeAI.current?.controller.abort(); activeAI.current = null;
-    epoch.current++; setCollapsedHints([]); setDraft(structuredClone(value)); setDirty(false);setDraftSave('idle'); setPartial(''); setBusy(null);setDiagramBusy(false); setError(''); setStatus(''); setQuestion(''); setTab('solve');
+    epoch.current++; setCollapsedHints([]); setDraft(structuredClone(value)); setDirty(false);setDraftSave('idle'); setPartial(''); setBusy(null);setDrawingOpen(false);drawingDraft.current=undefined; setError(''); setStatus(''); setQuestion(''); setTab('solve');
     return true;
   }
   async function authenticate(register: boolean) {
@@ -320,7 +302,7 @@ export default function App() {
     runStarted.current=performance.now();setElapsed(0);setBusy(purpose); setPartial(''); setError(''); setStatus('Waiting for AI…');
     try {
       const route=requestsCloud&&permitted?'cloud':'local';
-      const answer = await notebookAI({ purpose, statement: draft.statement, knowledge: draft.knowledge?.text ?? '', hints: draft.hints.map(h => h.text), messages: draft.messages, question: askedQuestion, cloudAllowed: permitted, route,responseStyle,geometryContext:draft.proofDiagram?.statement===draft.statement?proofTutorContext(draft.proofDiagram):undefined,images:illustrations }, text => {
+      const answer = await notebookAI({ purpose, statement: draft.statement, knowledge: draft.knowledge?.text ?? '', hints: draft.hints.map(h => h.text), messages: draft.messages, question: askedQuestion, cloudAllowed: permitted, route,responseStyle,images:illustrations }, text => {
         if (currentOperation()) { setPartial(text); setStatus('AI is answering…'); }
       }, operation.controller.signal);
       if (!currentOperation()) return;
@@ -328,18 +310,18 @@ export default function App() {
         if (current.id !== id) return current;
         if (purpose === 'knowledge') return { ...current, confirmed: true, knowledge: answer };
         if (purpose === 'chat') return { ...current, messages: [...current.messages, { role: 'user', text: askedQuestion,format:'latex' }, { role: 'assistant', text: answer.text, source: answer.source }] };
-        return { ...current, hints: [...current.hints, answer],proofDiagram:current.proofDiagram&&purpose!=='hint1'?{...current.proofDiagram,showAuxiliary:true}:current.proofDiagram };
+        return { ...current, hints: [...current.hints, answer] };
       });
       if (purpose.startsWith('hint')) setCollapsedHints(current => current.filter(level => level !== Number(purpose.slice(-1)) - 1));
       setDirty(true);setDraftSave('idle'); if (purpose === 'chat') setQuestion(''); setStatus('Response ready. You can save this page.');
     } catch (e) { if (currentOperation()) { setError(friendlyError(e)); setStatus(operation.status); } }
-    finally { if (currentOperation()) { activeAI.current = null; setPartial(''); setBusy(null);setDiagramBusy(false); } }
+    finally { if (currentOperation()) { activeAI.current = null; setPartial(''); setBusy(null); } }
   }
   function stopAI() {
     const operation = activeAI.current; if (!operation) return;
     activeAI.current = null;
     operation.controller.abort();
-    setPartial(''); setBusy(null);setDiagramBusy(false); setStatus(operation.status); setError(operation.error);
+    setPartial(''); setBusy(null); setStatus(operation.status); setError(operation.error);
   }
   async function resetHints(){
     if(blocked||activeAI.current)return;
@@ -348,13 +330,20 @@ export default function App() {
     if(version!==epoch.current||activeAI.current)return;
     edit({hints:[]});setCollapsedHints([]);
   }
-  async function reviseIllustrations(next:Attachment[]){
-    if(blocked||activeAI.current)return;
+  async function reviseIllustrations(next:Attachment[]):Promise<boolean>{
+    if(blocked||activeAI.current)return false;
     const version=epoch.current,changed=!sameIllustrations(draft.attachments,next);
-    if(changed&&draft.confirmed&&!await confirmChange({title:'Update problem illustrations?',description:'The problem context changes. Its essentials, hints and conversation will be cleared for a fresh analysis. Notes and saved library pages stay.',action:'Update illustrations'}))return;
-    if(version!==epoch.current||activeAI.current)return;
+    if(changed&&draft.confirmed&&!await confirmChange({title:'Update problem illustrations?',description:'The problem context changes. Its essentials, hints and conversation will be cleared for a fresh analysis. Notes and saved library pages stay.',action:'Update illustrations'}))return false;
+    if(version!==epoch.current||activeAI.current)return false;
     edit({attachments:next,...(changed?{confirmed:false,knowledge:undefined,hints:[],messages:[],proofDiagram:undefined}: {})});
     if(changed)setCollapsedHints([]);
+    return true;
+  }
+  async function addDrawing(image:{name:string;data:string}):Promise<boolean>{
+    const version=epoch.current;if(blocked||draft.attachments.length>=4)throw new Error('Each exercise supports up to 4 images.');
+    const added=await reviseIllustrations([...draft.attachments,{id:crypto.randomUUID(),...image,kind:'problem'}]);
+    if(added&&version===epoch.current){setDrawingOpen(false);drawingDraft.current=undefined;setStatus('Drawing added to Illustrations. Save the exercise to keep it.');}
+    return added;
   }
   async function attach(file: File | undefined, kind: Attachment['kind']) {
     if (!file || blocked) return;
@@ -527,12 +516,12 @@ export default function App() {
       if(!(event.ctrlKey||event.metaKey))return;
       if(event.key.toLowerCase()==='s'){
         event.preventDefault();
-        if(viewingImage||confirmation||saveOpen||folderDialog||pdfQuestions!==null||imageProblem||blocked)return;
+        if(drawingOpen||viewingImage||confirmation||saveOpen||folderDialog||pdfQuestions!==null||imageProblem||blocked)return;
         if(preview){void savePreviewNotes();return;}
         if(tab==='solve'&&hasEditorContent(draft.statement))beginSave();
       }
       if(event.target instanceof Element&&event.target.closest('.symbol-browser'))return;
-      if(event.key==='Enter'&&tab==='solve'&&!preview&&!viewingImage&&!confirmation&&!saveOpen&&!folderDialog&&pdfQuestions===null&&!imageProblem&&!blocked){
+      if(event.key==='Enter'&&tab==='solve'&&!preview&&!drawingOpen&&!viewingImage&&!confirmation&&!saveOpen&&!folderDialog&&pdfQuestions===null&&!imageProblem&&!blocked){
         event.preventDefault();
         if((event.target as HTMLElement)?.getAttribute('aria-label')==='Discussion question')void ask('chat');
         else if(hasEditorContent(draft.statement))void ask('knowledge');
@@ -540,7 +529,7 @@ export default function App() {
     };
     window.addEventListener('keydown',keydown);return()=>window.removeEventListener('keydown',keydown);
   });
-  return <MathKeyboardProvider><main className={`notebook-app${!user&&tab!=='guide'?' login-page':''}`} style={{'--problem-font-size':`${mathSize}px`} as React.CSSProperties} inert={!!confirmation || !!preview || pdfQuestions !== null || !!imageProblem || !!viewingImage}>
+  return <MathKeyboardProvider><main className={`notebook-app${!user&&tab!=='guide'?' login-page':''}`} style={{'--problem-font-size':`${mathSize}px`} as React.CSSProperties} inert={drawingOpen || !!confirmation || !!preview || pdfQuestions !== null || !!imageProblem || !!viewingImage}>
     {!user&&tab!=='guide'&&<LoginBackdrop/>}
     <header className="notebook-header"><a className="brand" href="#" onClick={e => { e.preventDefault(); setTab('solve'); }}><span className="brand-mark" aria-hidden="true">Σ</span><span>Mathfolio<small>YOUR DIGITAL EXERCISE BOOK</small></span></a>
       <nav aria-label="Navigation"><button aria-current={tab === 'solve' ? 'page' : undefined} className={tab === 'solve' ? 'active' : ''} onClick={() => setTab('solve')}>Workspace</button><button aria-current={tab === 'library' ? 'page' : undefined} className={tab === 'library' ? 'active' : ''} onClick={() => setTab('library')}>Exercise library <span>{book.exercises.length}</span></button><button aria-current={tab === 'guide' ? 'page' : undefined} className={tab === 'guide' ? 'active' : ''} onClick={() => setTab('guide')}>How to use</button><button aria-current={tab === 'account' ? 'page' : undefined} className={tab === 'account' ? 'active' : ''} onClick={() => setTab('account')}>{user ? 'Account' : 'Sign in'}</button></nav>
@@ -551,7 +540,6 @@ export default function App() {
     {status && <p role="status" className="notice success">{status}</p>}
     {recovery&&<section className="draft-recovery paper" aria-label="Recover workspace draft"><div><strong>Continue where you left off?</strong><p>A draft of {recovery.exercise.title || 'Untitled exercise'} was saved {new Date(recovery.savedAt).toLocaleString('en-GB')}. Your library copy has not been changed.</p></div><div className="row"><button className="primary" disabled={saving} onClick={resumeDraft}>Resume draft</button><button disabled={saving} onClick={()=>void discardRecovery()}>Start fresh</button></div></section>}
     {draftSave==='error'&&<p className="notice error" role="alert">Could not autosave this draft. Keep this page open and try Save exercise.</p>}
-    {diagramBusy&&<div className="ai-toolbar" role="status"><span>Building geometry from the hypotheses…</span><button onClick={stopAI}>Stop diagram</button></div>}
     {(pdfBusy||imagePreparing)&&<div className="ai-toolbar" role="status"><span>{imagePreparing?'Preparing image…':pdfProgress?.stage==='ocr'?`Reading PDF locally · ${pdfProgress.page}/${pdfProgress.total}`:'Opening PDF…'}</span><button className="stop-ai" onClick={cancelImport}>Stop import</button></div>}
     {busy && <div className="ai-toolbar" role="status"><span>AI is working on {busy === 'knowledge' ? 'your essentials' : busy === 'chat' ? 'your conversation' : `hint ${busy.slice(-1)}`} · {elapsed}s</span><button className="stop-ai" onClick={stopAI}>■ Stop AI</button></div>}
     {((!user && tab !== 'guide') || tab === 'account') && <section className="account-panel paper">
@@ -587,10 +575,10 @@ export default function App() {
           {!draft.confirmed && <><p className="subtle">Type your problem or paste LaTeX. Insert symbols directly below.</p><MathKeyboard disabled={blocked} onActivate={()=>input.current?.focus()} onInsert={symbol => insertMath(symbol.latex)}/></>}
           {!cloudAllowed && online && draft.statement.trim() && recommendsCloudForProblem(draft.statement) && <aside className="cloud-recommendation" aria-label="Cloud AI recommendation"><p>This may need several reasoning steps. Cloud AI can provide deeper analysis; your problem is sent only after you enable it and run analysis.</p><button type="button" disabled={blocked} onClick={() => void allowCloud('Cloud AI may provide deeper reasoning for this problem. Your problem and related tutoring context are sent only when you choose to run an AI action with Cloud AI enabled. Allow Cloud AI for this session?')}>Consider Cloud AI</button></aside>}
 
-          <div className="row">{draft.confirmed && <button disabled={blocked} onClick={editStatement}>Edit problem</button>}<button type="button" disabled={blocked||!hasEditorContent(draft.statement)} onClick={()=>void createGeometryDiagram()}>{draft.proofDiagram?'Update diagram':'Create diagram'}</button><button className="primary" title="Analyze problem (Ctrl+Enter)" disabled={blocked || !hasEditorContent(draft.statement)} onClick={() => void ask('knowledge')}>{draft.confirmed ? 'Refresh knowledge' : 'Confirm & analyze'}</button></div>
+          <div className="row">{draft.confirmed && <button disabled={blocked} onClick={editStatement}>Edit problem</button>}<button className="primary" title="Analyze problem (Ctrl+Enter)" disabled={blocked || !hasEditorContent(draft.statement)} onClick={() => void ask('knowledge')}>{draft.confirmed ? 'Refresh knowledge' : 'Confirm & analyze'}</button></div>
         </section>
         <aside className="paper problem-images" aria-label="Problem illustrations"><div className="panel-heading"><h2>Illustrations</h2><span className="tag">{illustrations.length} FOR AI</span></div>
-          <label className="attachment-button">＋ Add illustration<input aria-label="Attach a problem illustration" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked||draft.attachments.length>=4} onChange={event=>{const file=event.target.files?.[0];event.target.value='';void attach(file,'problem');}}/></label>
+          <div className="illustration-actions"><button type="button" className="primary" disabled={blocked||draft.attachments.length>=4} onClick={()=>setDrawingOpen(true)}>Draw illustration</button><label className="attachment-button">＋ Add illustration<input aria-label="Attach a problem illustration" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked||draft.attachments.length>=4} onChange={event=>{const file=event.target.files?.[0];event.target.value='';void attach(file,'problem');}}/></label></div>
           <p className="subtle">Selected illustrations are included in new AI requests. Refresh knowledge to update earlier analysis. Notes and solution images are excluded.</p>
           <div className="illustrations-scroll">{!draft.attachments.some(image=>image.kind==='problem')&&<p className="empty-illustrations">Add a diagram, graph or image needed to understand the problem. Click any image to zoom.</p>}
             <AttachmentGallery images={draft.attachments.filter(image=>image.kind==='problem')} onOpen={setViewingImage} disabled={blocked} onRename={(id,name)=>edit({attachments:draft.attachments.map(image=>image.id===id?{...image,name}:image)})} onRemove={id=>void reviseIllustrations(draft.attachments.filter(image=>image.id!==id))} onAISelection={(id,included)=>void reviseIllustrations(draft.attachments.map(image=>image.id===id?{...image,useForAI:included}:image))}/>
@@ -599,8 +587,6 @@ export default function App() {
           <p className="subtle">{cloudAllowed&&online?'Cloud actions send selected illustrations. Local chat stays on your device.':'Local AI needs a compatible device to understand illustrations. Images are not sent to cloud while Cloud AI is off.'}</p>
         </aside>
       </div>
-      {draft.proofDiagram&&<ProofDiagramView diagram={draft.proofDiagram} disabled={blocked} onToggle={showAuxiliary=>edit({proofDiagram:{...draft.proofDiagram!,showAuxiliary}})}/>}
-      {!draft.proofDiagram&&draft.geometryDiagram&&<GeometryDiagramEditor diagram={draft.geometryDiagram} onChange={geometryDiagram=>edit({geometryDiagram})} onCreate={()=>createGeometryDiagram()} onAnalyze={()=>void ask('knowledge')} disabled={blocked}/>}
       <div className="guidance-row">
         <section className="paper knowledge"><div className="panel-heading"><span className="step">02</span><h2>What you need</h2></div><div className="study-ai-choice"><SelectMenu label="Knowledge AI" value={knowledgeRoute} disabled={blocked} options={[{value:'local',label:'Local AI'},{value:'cloud',label:'Cloud AI'}]} onChange={route=>void selectStudyRoute('knowledge',route)}/><small>Choose how to run the next analysis.</small></div><p className="subtle">Only the concepts needed for this exact problem.</p><div className="knowledge-scroll" role="region" aria-label="Knowledge for this problem" tabIndex={0}><span className="source-label">{draft.knowledge ? sourceLabel(draft.knowledge.source) : knowledgeRoute==='cloud'?'Cloud AI':'Local AI'}</span>{streaming('knowledge')}{draft.knowledge && busy !== 'knowledge' ? <><MarkdownView value={draft.knowledge.text}/><small className="subtle">Processed by: {sourceLabel(draft.knowledge.source)}</small></> : busy !== 'knowledge' && <div className="empty-panel"><span>∑</span><p>Confirm your problem to see<br/>the essentials here.</p></div>}</div></section>
         <section className="paper hints">
@@ -621,7 +607,7 @@ export default function App() {
           {!online && <p className="subtle">Offline: on-device AI can work if the device model is ready.</p>}
         </section>
       </div><div className="workbench">
-        <section className="paper discussion"><div className="panel-heading"><span className="step">04</span><h2>Another way to think about it?</h2><div className="chat-routes" role="group" aria-label="Chat processing"><button type="button" aria-pressed={chatRoute === 'local'} disabled={blocked} onClick={() => void selectChatRoute('local')}>Local AI</button><button type="button" aria-pressed={chatRoute === 'cloud'} disabled={blocked || !online} onClick={() => void selectChatRoute('cloud')}>Cloud AI</button></div></div><p className="subtle">Start a conversation anytime. AI uses the current problem and any essentials or hints you have opened, plus up to 6 recent messages.</p><div className="messages">{!draft.messages.length && <div className="empty-chat">“What if I try a different approach?”<small>Start with what you are thinking.</small></div>}{draft.messages.map((m, i) => <div className={`message ${m.role}`} key={i}><small>{m.role === 'user' ? 'You' : `Mathfolio · ${sourceLabel(m.source)}`}</small><>{m.role==='user'&&m.format==='latex'?<LatexMessage value={m.text} label="Your question"/>:<MarkdownView value={m.text}/>}</></div>)}{streaming('chat')}</div><form className="chat-form" onSubmit={e => { e.preventDefault(); void ask('chat'); }}><div className="chat-entry"><MathInput ref={chatInput} label="Discussion question" maxLength={1000} value={question} disabled={blocked} initialMode="text" onChange={setQuestion} placeholder="Ask a question or describe your approach…"/><MathKeyboard showCommon={false} disabled={blocked} onActivate={()=>chatInput.current?.focus()} onInsert={symbol=>chatInput.current?.insert(symbol.latex)}/></div><button className="primary" disabled={blocked || !hasEditorContent(question)} type="submit">Send ↗</button></form></section>
+        <section className="paper discussion"><div className="panel-heading"><span className="step">04</span><h2>Another way to think about it?</h2><div className="chat-routes" role="group" aria-label="Chat processing"><button type="button" aria-pressed={chatRoute === 'local'} disabled={blocked} onClick={() => void selectChatRoute('local')}>Local AI</button><button type="button" aria-pressed={chatRoute === 'cloud'} disabled={blocked || !online} onClick={() => void selectChatRoute('cloud')}>Cloud AI</button></div></div><p className="subtle">Start a conversation anytime. AI uses the current problem and any essentials or hints you have opened, plus up to 6 recent messages.</p><div className="messages">{!draft.messages.length && <div className="empty-chat">“What if I try a different approach?”<small>Start with what you are thinking.</small></div>}{draft.messages.map((m, i) => <div className={`message ${m.role}`} key={i}><small>{m.role === 'user' ? 'You' : `Mathfolio · ${sourceLabel(m.source)}`}</small><>{m.role==='user'&&m.format==='latex'?<LatexMessage value={m.text} label="Your question"/>:<MarkdownView value={m.text}/>}</></div>)}{streaming('chat')}</div><form className="chat-form" onSubmit={e => { e.preventDefault(); void ask('chat'); }}><div className="chat-entry"><MathInput ref={chatInput} label="Discussion question" maxLength={1000} value={question} disabled={blocked} initialMode="text" onChange={setQuestion} placeholder="Ask a question or describe your approach…"/><MathKeyboard disabled={blocked} onActivate={()=>chatInput.current?.focus()} onInsert={symbol=>chatInput.current?.insert(symbol.latex)}/></div><button className="primary" disabled={blocked || !hasEditorContent(question)} type="submit">Send ↗</button></form></section>
         <section className="paper notes"><div className="panel-heading"><span className="step">05</span><h2>Your working notes</h2></div><NotesEditor label="Notes" value={draft.notes} format={draft.notesFormat} disabled={blocked} onChange={notes => edit({ notes,notesFormat:'latex' })}/><label className="attachment-button">＋ Attach my solution<input type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked || draft.attachments.length >= 4} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; void attach(file, 'solution'); }}/></label><AttachmentGallery images={draft.attachments.filter(a=>a.kind==='solution')} onOpen={setViewingImage} disabled={blocked} onRename={(id,name)=>edit({attachments:draft.attachments.map(image=>image.id===id?{...image,name}:image)})} onRemove={id=>edit({attachments:draft.attachments.filter(a=>a.id!==id)})}/><label className="check"><input type="checkbox" checked={draft.completed} disabled={blocked} onChange={e => edit({ completed: e.target.checked })}/>I have completed this exercise</label><p className="subtle">Notes and images are stored when you select Save exercise.</p></section>
 
       </div></div><p className="footer-note">AI can be wrong. Check assumptions and steps. The work is yours.</p>
@@ -629,5 +615,5 @@ export default function App() {
     {user && ready && tab === 'library' && <section><div className="page-heading"><div><p className="eyebrow">PAGES OF PROGRESS</p><h1>{folder ? book.folders.find(f => f.id === folder)?.name : 'Exercise library'}</h1><p>Revisit your thinking. Continue where you left off.</p></div><div className="row"><button disabled={blocked} onClick={() => { setFolderName('');setCreationColor(defaultFolderColor); setError(''); setFolderDialog(true); }}>＋ New folder</button>{folder && folder !== 'general' && <button disabled={blocked} onClick={() => void deleteFolder(folder)}>Delete folder</button>}<button disabled={blocked} onClick={() => changeExercise(newExercise())}>＋ New exercise</button></div></div><div className="library-view row" role="group" aria-label="Library view"><button aria-pressed={!showPages} onClick={()=>{setLibraryView('folders');setFolder(null);setLibraryQuery('');setLibraryCompletion('all');}}>Folders</button><button aria-pressed={showPages&&!folder} onClick={()=>{setLibraryView('exercises');setFolder(null);}}>All exercises</button></div><div className="library-tools"><input type="search" aria-label="Search exercises" placeholder="Search names, problems or notes…" value={libraryQuery} onChange={e=>setLibraryQuery(e.target.value)}/><select aria-label="Exercise status" value={libraryCompletion} onChange={e=>setLibraryCompletion(e.target.value as typeof libraryCompletion)}><option value="all">All exercises</option><option value="progress">In progress</option><option value="completed">Completed</option></select><select aria-label="Sort exercises" value={librarySort} onChange={e=>{setLibrarySort(e.target.value as ExerciseSort);setLibraryView('exercises');}}><option value="recent">Recently updated</option><option value="oldest">Oldest first</option><option value="name">Name A–Z</option></select></div><div className="library-results"><p role="status">{showPages ? `${shown.length} of ${book.exercises.filter(e=>!folder||inExerciseFolder(e,folder)).length} exercises` : `${book.folders.length} folders · ${book.exercises.length} exercises`}{folder?' in this folder':''}</p>{(libraryQuery||libraryCompletion!=='all')&&<button onClick={()=>{setLibraryQuery('');setLibraryCompletion('all');}}>Clear filters</button>}</div>{showPages ? <>{folder&&<button onClick={()=>{setFolder(null);setLibraryView('folders');setLibraryQuery('');setLibraryCompletion('all');}}>← All folders</button>}<div className="exercise-list">{!shown.length && <div className="paper empty-panel"><strong>{libraryQuery.trim()||libraryCompletion!=='all'?'No matching exercises.':'No exercises yet.'}</strong><p>{libraryQuery.trim()||libraryCompletion!=='all'?'Try another search or clear the filters above.':'Create an exercise in the workspace, then save it to your library.'}</p></div>}{shown.map(e => <article className="paper exercise-card" key={e.id}><div><span className={`tag ${e.completed ? 'done' : ''}`}>{e.completed ? 'Completed' : 'In progress'}</span><h2>{e.title}</h2><MathInput value={statementLatex(e.statement, e.statementFormat)} readOnly compact label={`Problem: ${e.title}`}/><small>{new Date(e.updatedAt).toLocaleString('en-GB')} · {e.hints.length}/3 hints opened</small></div><div className="row exercise-actions"><button type="button" disabled={blocked} aria-label={`${e.completed?'Mark in progress':'Mark completed'}: ${e.title}`} onClick={()=>void changeCompletion(e.id,!e.completed)}>{e.completed?'Mark in progress':'Mark completed'}</button><button className="primary" disabled={blocked} onClick={() => openPreview(e)}>Open exercise</button><button disabled={blocked} onClick={() => void deleteExercise(e.id)}>Delete</button></div></article>)}</div></> : <div className="folder-grid">{book.folders.map(f => <article className="paper folder-card" key={f.id} data-folder-color={folderColor(f.color).id}><button className="folder-open" disabled={blocked} onClick={() => setFolder(f.id)}><span aria-hidden="true">▱</span><h2>{f.name}</h2><small>{book.exercises.filter(e => inExerciseFolder(e,f.id)).length} exercises →</small></button><details className="folder-color-menu"><summary aria-label={`Choose color for ${f.name}`}><span className="folder-color-dot" aria-hidden="true"/>Color · {folderColor(f.color).name}<Chevron/></summary><FolderColorPicker value={folderColor(f.color).id} disabled={blocked} onChange={color=>void changeFolderColor(f.id,color)}/></details>{f.id !== 'general' && <button className="folder-delete" disabled={blocked} aria-label={`Delete folder ${f.name}`} onClick={() => void deleteFolder(f.id)}>Delete folder</button>}</article>)}</div>}</section>}
     {folderDialog && <div className="modal-backdrop"><section className="paper save-dialog" role="dialog" aria-modal="true" aria-labelledby="folder-title"><p className="eyebrow">ORGANIZE YOUR THINKING</p><h2 id="folder-title">New folder</h2><form onSubmit={e => { e.preventDefault(); void createFolder(); }}><label>Folder name<input autoFocus required maxLength={80} value={folderName} disabled={saving} onChange={e => setFolderName(e.target.value)} placeholder="e.g. Algebra — week 1"/></label><p className="folder-color-label">Folder color</p><FolderColorPicker value={creationColor} disabled={saving} onChange={setCreationColor}/>{error && <p role="alert" className="error">{error}</p>}<div className="row"><button type="button" disabled={saving} onClick={() => setFolderDialog(false)}>Cancel</button><button className="primary" type="submit" disabled={saving || !folderName.trim()}>{saving ? 'Creating…' : 'Create folder'}</button></div></form></section></div>}
     {saveOpen && <div className="modal-backdrop"><section className="paper save-dialog" role="dialog" aria-modal="true" aria-labelledby="save-title"><p className="eyebrow">KEEP THIS PAGE</p><h2 id="save-title">Save to your notebook</h2><label>Exercise name<input autoFocus required maxLength={120} value={title} disabled={saving} onChange={e => setTitle(e.target.value)}/></label><FolderPicker folders={book.folders} selected={folderIds} disabled={saving} onChange={setFolderIds}/><label>Or create a new folder<input maxLength={80} aria-label="New folder name" value={newFolder} disabled={saving} onChange={e => setNewFolder(e.target.value)} placeholder="e.g. Algebra — week 1"/></label>{!!newFolder.trim()&&!book.folders.some(folder=>folder.name.toLocaleLowerCase()===newFolder.trim().toLocaleLowerCase())&&<><p className="folder-color-label">New folder color</p><FolderColorPicker value={saveFolderColor} disabled={saving} onChange={setSaveFolderColor}/></>}<p className="subtle">The problem, essentials, opened hints, notes, images and chat stay on this browser. Cloud sync is not available yet.</p>{error && <p role="alert" className="error">{error}</p>}<div className="row"><button disabled={saving} onClick={() => setSaveOpen(false)}>Not now</button><button className="primary" disabled={saving || !title.trim()} onClick={() => void save()}>{saving ? 'Saving…' : 'Save on this device'}</button></div></section></div>}
-  </main>{pdfQuestions!==null&&pdfFile&&<PdfQuestionPicker file={pdfFile} questions={pdfQuestions} pageCount={pdfPageCount} suspended={!!confirmation||!!viewingImage} onClose={closePdfPicker} onUse={usePdfQuestions} onReadPage={readPdfPageWithCloud} onImage={setViewingImage}/>} {imageProblem&&<ImageProblemReview image={imageProblem} onClose={()=>{setImageProblem(null);setImportError('');}} onApply={applyImageText} onCloudRead={readImageWithCloud} onImage={()=>setViewingImage({id:'image-import-source',name:imageProblem.name,data:imageProblem.data,kind:'problem'})} suspended={!!confirmation||!!viewingImage} error={importError} canKeepImage={draft.attachments.length<4}/>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={['My exercises',...book.folders.filter(value=>exerciseFolderIds(previewExercise).includes(value.id)).map(value=>value.name)].join(' · ')} attachments={preview.attachments} folders={book.folders} folderIds={preview.folderIds} onAttachments={attachments=>setPreview(current=>current?{...current,attachments}:current)} onAttach={file=>void attachPreview(file)} onFolders={folderIds=>setPreview(current=>current?{...current,folderIds}:current)} notes={preview.notes} notesFormat={preview.notesFormat} saving={saving} onImage={setViewingImage} suspended={!!confirmation || !!viewingImage} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes,notesFormat:'latex' } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {viewingImage&&<ImageViewer key={viewingImage.id} image={viewingImage} kindLabel={pdfQuestions!==null?'PDF SOURCE PAGE':imageProblem?'IMAGE SOURCE':undefined} onClose={()=>setViewingImage(null)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</MathKeyboardProvider>;
+  </main>{drawingOpen&&<IllustrationDrawing initialScene={drawingDraft.current} onScene={scene=>{drawingDraft.current=scene;}} onClose={()=>setDrawingOpen(false)} onUse={addDrawing} suspended={!!confirmation}/>} {pdfQuestions!==null&&pdfFile&&<PdfQuestionPicker file={pdfFile} questions={pdfQuestions} pageCount={pdfPageCount} suspended={!!confirmation||!!viewingImage} onClose={closePdfPicker} onUse={usePdfQuestions} onReadPage={readPdfPageWithCloud} onImage={setViewingImage}/>} {imageProblem&&<ImageProblemReview image={imageProblem} onClose={()=>{setImageProblem(null);setImportError('');}} onApply={applyImageText} onCloudRead={readImageWithCloud} onImage={()=>setViewingImage({id:'image-import-source',name:imageProblem.name,data:imageProblem.data,kind:'problem'})} suspended={!!confirmation||!!viewingImage} error={importError} canKeepImage={draft.attachments.length<4}/>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={['My exercises',...book.folders.filter(value=>exerciseFolderIds(previewExercise).includes(value.id)).map(value=>value.name)].join(' · ')} attachments={preview.attachments} folders={book.folders} folderIds={preview.folderIds} onAttachments={attachments=>setPreview(current=>current?{...current,attachments}:current)} onAttach={file=>void attachPreview(file)} onFolders={folderIds=>setPreview(current=>current?{...current,folderIds}:current)} notes={preview.notes} notesFormat={preview.notesFormat} saving={saving} onImage={setViewingImage} suspended={!!confirmation || !!viewingImage} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes,notesFormat:'latex' } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {viewingImage&&<ImageViewer key={viewingImage.id} image={viewingImage} kindLabel={pdfQuestions!==null?'PDF SOURCE PAGE':imageProblem?'IMAGE SOURCE':undefined} onClose={()=>setViewingImage(null)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</MathKeyboardProvider>;
 }

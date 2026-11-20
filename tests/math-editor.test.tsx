@@ -207,6 +207,7 @@ describe('shared math palette with real editor registration',()=>{
     expect(editor('Notes').value).toBe(String.raw`\emptyset`);expect(editor('Problem').value).toBe(first);
     await act(async()=>editor('Chat').focus());expect(palette()).toBe(original);expect(original.textContent).toContain('Typing in: Chat');await symbol();
     expect(editor('Chat').value).toBe(String.raw`\emptyset`);expect(editor('Notes').value).toBe(String.raw`\emptyset`);
+    await act(async()=>host.querySelectorAll<HTMLButtonElement>('.more-symbols')[1].click());expect(document.querySelectorAll('.symbol-browser')).toHaveLength(0);
     await act(async()=>host.querySelectorAll<HTMLButtonElement>('.more-symbols')[1].click());expect(document.querySelectorAll('.symbol-browser')).toHaveLength(1);
     await act(async()=>editor('Problem').focus());await symbol();expect(editor('Problem').value).toBe(first+String.raw`\emptyset`);
   });

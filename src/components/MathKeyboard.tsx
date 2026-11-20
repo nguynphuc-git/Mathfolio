@@ -9,7 +9,7 @@ export function MathKeyboard({onInsert,onActivate,disabled,notes=false,showCommo
   const open=shared?.open??expanded;
   return <div className="math-keyboard">
     {showCommon&&<div className="math-keys">{commonSymbols.slice(0,17).map(symbol=><button type="button" key={symbol.label} disabled={disabled} title={symbol.name} aria-label={`Insert ${symbol.label}${notes?' in notes':''}`} onMouseDown={event=>event.preventDefault()} onClick={()=>insert(symbol)}>{symbol.label}</button>)}</div>}
-    <button ref={trigger} type="button" className="more-symbols" disabled={disabled} aria-expanded={open} onMouseDown={event=>event.preventDefault()} onClick={()=>{onActivate?.();if(shared)shared.show();else setExpanded(true);}}>{open?'Math symbols ↗':'More symbols ▾'}</button>
+    <button ref={trigger} type="button" className="more-symbols" disabled={disabled} aria-expanded={open} onMouseDown={event=>event.preventDefault()} onClick={()=>{onActivate?.();if(shared){if(open)shared.close();else shared.show();}else setExpanded(value=>!value);}}>{open?'Math symbols ↗':'More symbols ▾'}</button>
     {!shared&&expanded&&<SymbolPanel recent={recent} onInsert={insert} disabled={disabled} onClose={()=>{setExpanded(false);trigger.current?.focus();}} targetLabel={notes?'Notes':'Problem'} position={position} onPosition={setPosition}/>}
   </div>;
 }

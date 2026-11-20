@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NotebookRequest } from '../src/ai';
 import type { Answer, Notebook } from '../src/notebook';
 
-const mocks = vi.hoisted(() => ({ values: new Map<string, unknown>(),signedIn:true, ai: vi.fn(), diagram:vi.fn(), imageCloud: vi.fn(), imageLocal: vi.fn(), readAttachment: vi.fn(), write: vi.fn(), pdf: vi.fn(), pdfPreview: vi.fn(), prepareImage: vi.fn(), readImage: vi.fn(), insert: vi.fn() }));
+const mocks = vi.hoisted(() => ({ values: new Map<string, unknown>(),signedIn:true, ai: vi.fn(), diagram:vi.fn(), drawingExport:vi.fn(), imageCloud: vi.fn(), imageLocal: vi.fn(), readAttachment: vi.fn(), write: vi.fn(), pdf: vi.fn(), pdfPreview: vi.fn(), prepareImage: vi.fn(), readImage: vi.fn(), insert: vi.fn() }));
 vi.mock('idb-keyval', () => ({ get: vi.fn(async (key: string) => structuredClone(mocks.values.get(key))), del: async (key: string) => { mocks.values.delete(key); }, set: async (key: string, value: unknown) => { mocks.write(key, value); mocks.values.set(key, structuredClone(value)); } }));
 vi.mock('../src/notebook', async () => ({ ...(await vi.importActual<typeof import('../src/notebook')>('../src/notebook')), readAttachment: mocks.readAttachment }));
 vi.mock('../src/firebase', () => ({ getFirebaseApp: () => ({}) }));
@@ -21,6 +21,7 @@ vi.mock('../src/ai', () => ({
   friendlyError: (error: Error) => error.message,
   recommendsCloudForProblem: (statement: string) => /\bprove\b/i.test(statement)
 }));
+vi.mock('../src/drawing-export',()=>({exportDrawing:mocks.drawingExport}));
 vi.mock('../src/image-import',async original=>({...await original<typeof import('../src/image-import')>(),prepareProblemImage:mocks.prepareImage,readProblemImage:mocks.readImage}));
 vi.mock('../src/pdf', () => ({ extractPdfQuestions: mocks.pdf, renderPdfPagePreview: mocks.pdfPreview }));
 vi.mock('../src/pdf-ocr', () => ({ recognizeImageLocally: mocks.imageLocal }));
@@ -77,7 +78,7 @@ beforeEach(async () => {
   mocks.diagram.mockReset().mockImplementation(async(statement:string)=>({statement,scene:exampleProofScene(geometryExamples[0].statement)!,source:'local_construction',showAuxiliary:false}));
   mocks.ai.mockReset(); mocks.imageCloud.mockReset(); mocks.imageLocal.mockReset(); mocks.readAttachment.mockReset(); mocks.insert.mockReset(); mocks.write.mockReset(); mocks.pdf.mockReset(); mocks.pdfPreview.mockReset(); mocks.values.clear();
   mocks.prepareImage.mockReset().mockResolvedValue({ data: 'data:image/jpeg;base64,AA==', name: 'problem.jpg' });
-  mocks.readImage.mockReset();
+  mocks.readImage.mockReset();mocks.drawingExport.mockReset().mockResolvedValue('data:image/png;base64,AA==');
   mocks.pdfPreview.mockResolvedValue('data:image/png;base64,AA==');
   mocks.imageCloud.mockResolvedValue(String.raw`Cloud transcription: \(x^2 + \sqrt{2}\)`);
   mocks.imageLocal.mockResolvedValue('Local transcription: x squared plus root two');
@@ -321,16 +322,10 @@ describe('saved page previews and workspace copies', () => {
     expect(mocks.pdfPreview).toHaveBeenCalledWith(file,1);expect(mocks.pdfPreview).toHaveBeenCalledWith(file,2);expect(mocks.ai).not.toHaveBeenCalled();
   });
 
-  it('requires transcription review before building a proof diagram from PDF',async()=>{
-    mocks.pdf.mockResolvedValue([{page:1,text:geometryExamples[0].statement}]);
-    const upload=host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
-    Object.defineProperty(upload,'files',{configurable:true,value:[new File(['pdf'],'proof.pdf',{type:'application/pdf'})]});
-    await act(async()=>upload.dispatchEvent(new Event('change',{bubbles:true})));
-    expect(mocks.diagram).not.toHaveBeenCalled();
-    await click('Use this question');expect(host.querySelector('.proof-board')).toBeNull();
-    await click('Create diagram');
-    expect(host.querySelector('.proof-board')?.textContent).toContain('To prove');
-    expect(mocks.diagram.mock.calls[0][1]).toBe('local');expect(mocks.ai).not.toHaveBeenCalled();
+  it('imports geometry from PDF without generating a diagram',async()=>{
+    await uploadPdf([{page:1,text:geometryExamples[0].statement}]);await click('Use this question');
+    expect(host.querySelector('.proof-board')).toBeNull();expect(host.textContent).not.toContain('Create diagram');
+    expect(button('Draw illustration').disabled).toBe(false);expect(mocks.diagram).not.toHaveBeenCalled();
   });
 
   it('filters only the active page without losing questions selected on another page',async()=>{
@@ -870,6 +865,36 @@ describe('image problem review',()=>{
   });
 });
 
+describe('manual illustration drawing',()=>{
+  async function drawPoint(){await click('Draw illustration');await type('[aria-label="Point name"]','A');await type('[aria-label="Point x"]','-2');await type('[aria-label="Point y"]','3');await click('Add point');}
+  it('attaches an exported drawing as a problem illustration and keeps notes',async()=>{
+    await type('[aria-label="Notes"]',String.raw`\text{Keep my notes}`);await drawPoint();await type('[aria-label="Drawing image name"]','My construction');
+    await click('Add to illustrations');expect(host.querySelector('.drawing-dialog')).toBeNull();
+    expect(host.querySelector('.problem-images')?.textContent).toContain('My construction.png');expect(host.querySelector('.notes')?.textContent).not.toContain('My construction.png');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toContain('Keep my notes');expect(mocks.ai).not.toHaveBeenCalled();
+    expect(mocks.drawingExport).toHaveBeenCalledWith(expect.anything(),null,expect.any(AbortSignal));
+  });
+  it('retains the drawing after closing and cancelling an analyzed-context replacement',async()=>{
+    await openWorkspace();await drawPoint();await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Close drawing"]')!.click());
+    await click('Draw illustration');expect(host.querySelector('.drawing-object-list')?.textContent).toContain('A');await click('Add to illustrations');
+    expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain('Update problem illustrations?');expect(host.querySelector<HTMLElement>('.drawing-backdrop')!.inert).toBe(true);
+    await click('Keep working');expect(host.querySelector('.drawing-dialog')).not.toBeNull();expect(host.textContent).toContain('Original essentials');
+    await click('Add to illustrations');await click('Update illustrations');expect(host.querySelector('.drawing-dialog')).toBeNull();expect(host.textContent).not.toContain('Original essentials');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toContain('Original notes');
+  });
+  it('clears unattached drawing drafts when changing exercise and respects the four-image limit',async()=>{
+    await drawPoint();await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Close drawing"]')!.click());await click('＋ New exercise');await click('Draw illustration');
+    expect(host.querySelector('.drawing-object-list')?.textContent).not.toContain('A');await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Close drawing"]')!.click());
+    stored().exercises[0].attachments=Array.from({length:4},(_,i)=>({id:String(i),name:`image${i}.png`,kind:'problem',data:'data:image/png;base64,AA=='}));
+    await act(async()=>{root.unmount();root=createRoot(host);root.render(<App/>);});await openWorkspace();expect(button('Draw illustration').disabled).toBe(true);
+  });
+  it('shows export errors in the drawing dialog and keeps the work',async()=>{
+    await drawPoint();mocks.drawingExport.mockRejectedValueOnce(new Error('Image export failed'));await click('Add to illustrations');
+    expect(host.querySelector('.drawing-dialog [role="alert"]')?.textContent).toContain('Image export failed');expect(host.querySelector('.drawing-object-list')?.textContent).toContain('A');
+    expect(button('Add to illustrations').disabled).toBe(false);
+  });
+});
+
 describe('attachment zoom viewer across workspace and library',()=>{
   it('opens a saved attachment over the library preview and returns without losing unsaved notes',async()=>{
     await library();await click('Open exercise');await type('[aria-label="Saved exercise notes"]','Keep unsaved notes');
@@ -1002,55 +1027,21 @@ describe('workspace comfort and English guide',()=>{
     expect(host.querySelector<HTMLElement>('.appearance-preview')!.classList.contains('preview-paper')).toBe(true);
     expect(JSON.parse(localStorage.getItem('mathfolio-appearance-v1')!)).toMatchObject({theme:'dark',font:'serif',textColor:'blue',textSize:19});
   });
-  it('accepts geometry directly in Problem without a sample gallery',async()=>{
-    expect(host.textContent).not.toContain('Geometry studio');expect(host.textContent).not.toContain('Try this proof');
-    expect(host.querySelector('[aria-label="Problem source"]')).not.toBeNull();
+  it('accepts geometry directly and offers manual illustrations instead of generated diagrams',async()=>{
+    expect(host.textContent).not.toContain('Geometry studio');expect(host.textContent).not.toContain('Create diagram');
     await type('[aria-label="Problem statement"]','Prove that ABCD is cyclic.');
-    expect(button('Create diagram').disabled).toBe(false);
+    expect(button('Draw illustration').disabled).toBe(false);expect(mocks.diagram).not.toHaveBeenCalled();
+    await click('Draw illustration');expect(host.querySelector('[aria-labelledby="drawing-title"]')).not.toBeNull();
+    expect(host.querySelector<HTMLElement>('main')!.inert).toBe(true);
+    await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Close drawing"]')!.click());
+    expect(host.querySelector('[aria-labelledby="drawing-title"]')).toBeNull();
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain('ABCD');
   });
-  it('rebuilds a diagram without an extra confirmation and clears old guidance only on success',async()=>{
-    await openWorkspace();
-    expect(host.textContent).toContain('Original essentials');
-    expect(host.textContent).toContain('Original hint');
-    await click('Create diagram');
-    expect(host.querySelector('[role="alertdialog"]')).toBeNull();
-    expect(mocks.diagram).toHaveBeenCalledOnce();
-    expect(host.textContent).not.toContain('Original essentials');
-    expect(host.textContent).not.toContain('Original hint');
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe(String.raw`\text{Original notes}`);
-    expect(host.querySelector('.proof-board')).not.toBeNull();
-  });
-  it('keeps existing guidance when diagram regeneration fails',async()=>{
-    await openWorkspace();mocks.diagram.mockRejectedValueOnce(new Error('Could not construct a valid diagram.'));
-    await click('Create diagram');
-    expect(host.querySelector('[role="alertdialog"]')).toBeNull();
-    expect(host.textContent).toContain('Original essentials');
-    expect(host.textContent).toContain('Original hint');
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not construct a valid diagram.');
-  });
-  it('shares a construction plan with hints and reveals auxiliary lines at level two',async()=>{
-    await type('[aria-label="Problem statement"]',geometryExamples[0].statement);await click('Create diagram');
-    const board=host.querySelector<HTMLElement>('.proof-board')!;
-    expect(board.querySelectorAll('line[stroke="#8050b5"]')).toHaveLength(0);
-    mocks.ai.mockResolvedValue({text:'Use tangent-radius perpendicularity.',source:'on_device'});
-    await click('Confirm & analyze');expect(mocks.ai.mock.calls[0][0].geometryContext).toContain('Join OA');
-    await click('Open level 1');expect(board.querySelectorAll('line[stroke="#8050b5"]')).toHaveLength(0);
-    await click('Open level 2');expect(board.querySelectorAll('line[stroke="#8050b5"]').length).toBeGreaterThan(0);
-    await click('Hide auxiliary constructions');expect(board.querySelectorAll('line[stroke="#8050b5"]')).toHaveLength(0);
-  });
-  it('cancels diagram requests and ignores late results',async()=>{
-    let finish!:(value:unknown)=>void;let signal!:AbortSignal;
-    mocks.diagram.mockImplementation((statement,route,allowed,images,stop)=>{signal=stop;return new Promise(resolve=>{finish=resolve;});});
-    await type('[aria-label="Problem statement"]',geometryExamples[0].statement);await click('Create diagram');await click('Stop diagram');
-    expect(signal.aborted).toBe(true);
-    await act(async()=>finish({statement:geometryExamples[0].statement,scene:exampleProofScene(geometryExamples[0].statement),showAuxiliary:false,source:'on_device'}));
-    expect(host.querySelector('.proof-board')).toBeNull();expect(button('Create diagram').disabled).toBe(false);
-  });
-  it('accepts pasted LaTeX and clears a stale diagram on problem edits',async()=>{
-    await type('[aria-label="Problem source"]',String.raw`Let $ABCD$ be cyclic. Prove $\\angle A + \\angle C = 180^\\circ$.`);
-    await click('Use pasted problem');
-    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toContain(String.raw`\\angle`);
-    await click('Create diagram');expect(host.querySelector('.proof-board')).not.toBeNull();
-    await type('[aria-label="Problem statement"]','Prove a different theorem.');expect(host.querySelector('.proof-board')).toBeNull();
+  it('provides common symbols in chat and toggles the expanded keyboard with its trigger',async()=>{
+    const keyboard=host.querySelector('.discussion .math-keyboard')!;
+    expect(keyboard.querySelectorAll('.math-keys button').length).toBeGreaterThan(10);
+    await click('More symbols',keyboard);expect(document.querySelector('.symbol-browser')).not.toBeNull();
+    await click('Math symbols',keyboard);expect(document.querySelector('.symbol-browser')).toBeNull();
+    expect(mocks.ai).not.toHaveBeenCalled();
   });
 });
