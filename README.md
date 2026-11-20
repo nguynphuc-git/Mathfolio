@@ -1,15 +1,29 @@
-# Mathfolio · StudyLens
+# Mathfolio
 
-Sổ bài tập toán của StudyLens. Nhập công thức, viết lời giải, đính kèm ảnh và lưu bài trong thư mục riêng của tài khoản trên trình duyệt hiện tại.
+Sổ bài tập toán cá nhân. Nhập công thức, viết lời giải, đính kèm ảnh và lưu bài trong thư mục riêng của tài khoản trên trình duyệt hiện tại.
+
+Repo chính: [nguynphuc-git/Mathfolio](https://github.com/nguynphuc-git/Mathfolio), nhánh **main**. Dự án được tách từ nhánh `feat/digital-exercise-notebook` của StudyLens, giữ nguyên toàn bộ lịch sử commit đến `76006fc`.
 
 ## Chạy thử trên máy của đồng đội
 
 1. Cài [Node.js 24 LTS](https://nodejs.org/). Lần chạy đầu cần Internet để tải các gói.
-2. Trong GitHub Desktop, clone [StudyLens](https://github.com/nguynphuc-git/StudyLens), rồi chọn **Current branch → feat/digital-exercise-notebook**. Nếu đã clone, chọn nhánh này rồi **Fetch origin → Pull origin**. Cũng có thể tải [ZIP của nhánh Mathfolio](https://github.com/nguynphuc-git/StudyLens/archive/refs/heads/feat/digital-exercise-notebook.zip) và giải nén.
+2. Trong GitHub Desktop, clone [Mathfolio](https://github.com/nguynphuc-git/Mathfolio), rồi chọn **Current branch → main**. Nếu đã clone repo này, chọn **Fetch origin → Pull origin**. Cũng có thể tải [ZIP của Mathfolio](https://github.com/nguynphuc-git/Mathfolio/archive/refs/heads/main.zip) và giải nén.
 3. Mở **Start-Mathfolio.cmd** trên Windows hoặc **Start-Mathfolio.command** trên macOS. Trên Linux, từ thư mục dự án chạy `npm run local`. Nếu macOS yêu cầu xác nhận cho tệp đã tải về, mở từ Finder theo hướng dẫn của hệ thống. Có thể chạy `npm run local` trên cả ba hệ điều hành.
 4. Trình duyệt sẽ mở [Mathfolio trên máy này](http://localhost:5173). Nhập email thử và mật khẩu từ 6 ký tự, chọn **Create account**. Lần sau dùng **Sign in** trong cùng trình duyệt. Mỗi máy có tài khoản emulator riêng.
 
 Trình khởi động cài dependency từ lockfile, khởi động Auth Emulator cho project demo và mở Vite. Sổ bài tập lưu bằng IndexedDB nên chế độ này chỉ cần Auth Emulator. Không cần Java, tài khoản Firebase, file môi trường hay quota để chạy luồng cơ bản. Khi dừng, nhấn **Ctrl+C một lần** và chờ xuất dữ liệu trước khi đóng cửa sổ. Dữ liệu Auth ở `.mathfolio-auth/`. Lần đầu, nếu có bản xuất của cách chạy cũ ở `.emulator-data/` hoặc `../studylens-emulator-data/`, trình khởi động sẽ nhập lại tài khoản. Giữ cùng origin, trình duyệt và UID để đọc lại sổ.
+
+## Tiếp tục dùng thư mục StudyLens hiện có
+
+Trong thư mục đang chạy Mathfolio, chuyển kết nối Git sang repo mới rồi tạo nhánh làm việc theo dõi `origin/main`:
+
+```sh
+git remote set-url origin https://github.com/nguynphuc-git/Mathfolio.git
+git fetch origin
+git switch -c mathfolio-main --track origin/main
+```
+
+Các lần sau dùng `git pull --ff-only`. Nhánh cũ vẫn nằm trong repo StudyLens để đối chiếu. Việc đổi remote không thay đổi cấu hình Firebase, dữ liệu emulator hay dữ liệu trong trình duyệt; tiếp tục chạy ở cùng địa chỉ như trước.
 
 ## Thử một bài trong hai phút
 
@@ -29,7 +43,7 @@ Trình khởi động cài dependency từ lockfile, khởi động Auth Emulato
 - Appearance và Study options tự đóng khi bấm ra ngoài; các lựa chọn có menu riêng với dấu tick. Dark mode áp dụng cho cả đề, ghi chú, chat và bàn phím toán. Trang đăng nhập có ký hiệu toán chuyển động nhẹ, tôn trọng cài đặt giảm chuyển động.
 - Nhấn ảnh đề/bài làm trong Workspace hoặc thư viện để xem lớn, zoom và kéo ảnh; nhấn Escape để quay lại.
 - **Illustrations** chỉ giữ ảnh minh họa để xem và đưa vào ngữ cảnh AI; không còn nút đọc chữ dưới mỗi ảnh. Để đọc đề từ ảnh, dùng **Add content → Read image**. Trong PDF, chọn trang ở **PDF page**, chọn nhiều câu qua các trang rồi sửa công thức trực tiếp trong từng ô **Extracted question**. Ảnh **Source page** bấm để zoom; phần nguồn và các ô sửa dùng chung thanh cuộn ngoài. **Use N questions** nhập các câu đã chọn thành một đề nhiều bài (tối đa 6.000 ký tự).
-- Xem [các tính năng Mathfolio](NOTEBOOK.md) và [checklist sprint chung](https://github.com/nguynphuc-git/StudyLens/issues/2).
+- Xem [các tính năng Mathfolio](NOTEBOOK.md) và [checklist sprint gốc ở StudyLens](https://github.com/nguynphuc-git/StudyLens/issues/2).
 
 ## Môi trường Firebase khi được cấp quota
 
