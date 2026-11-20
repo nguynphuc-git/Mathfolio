@@ -866,13 +866,21 @@ describe('image problem review',()=>{
 });
 
 describe('manual illustration drawing',()=>{
-  async function drawPoint(){await click('Draw illustration');await type('[aria-label="Point name"]','A');await type('[aria-label="Point x"]','-2');await type('[aria-label="Point y"]','3');await click('Add point');}
+  async function drawPoint(){await click('Draw illustration');await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Start with coordinate plane"]')!.click());await type('[aria-label="Point name"]','A');await type('[aria-label="Point x"]','-2');await type('[aria-label="Point y"]','3');await click('Add point');}
+  it('starts with a choice and restricts coordinate tools to the selected mode',async()=>{
+    await click('Draw illustration');expect(host.querySelector('.drawing-canvas')).toBeNull();
+    await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Start with blank canvas"]')!.click());
+    expect(host.querySelector('.drawing-canvas')).not.toBeNull();expect(host.querySelector('[aria-label="Point x"]')).toBeNull();expect(host.querySelector('[aria-label="Function equation"]')).toBeNull();
+    await click('Coordinate plane');expect(host.querySelector('[aria-label="Function equation"]')).not.toBeNull();expect(host.querySelector('[aria-label="Point x"]')).not.toBeNull();
+    expect(host.textContent).not.toContain('Select area');expect(host.querySelector('.drawing-selection-actions [aria-label="Delete selected objects"]')).not.toBeNull();
+    await click('Blank canvas');expect(host.querySelector('[aria-label="Function equation"]')).toBeNull();
+  });
   it('attaches an exported drawing as a problem illustration and keeps notes',async()=>{
     await type('[aria-label="Notes"]',String.raw`\text{Keep my notes}`);await drawPoint();await type('[aria-label="Drawing image name"]','My construction');
     await click('Add to illustrations');expect(host.querySelector('.drawing-dialog')).toBeNull();
     expect(host.querySelector('.problem-images')?.textContent).toContain('My construction.png');expect(host.querySelector('.notes')?.textContent).not.toContain('My construction.png');
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toContain('Keep my notes');expect(mocks.ai).not.toHaveBeenCalled();
-    expect(mocks.drawingExport).toHaveBeenCalledWith(expect.anything(),null,expect.any(AbortSignal));
+    expect(mocks.drawingExport).toHaveBeenCalledWith(expect.anything(),expect.any(AbortSignal));
   });
   it('retains the drawing after closing and cancelling an analyzed-context replacement',async()=>{
     await openWorkspace();await drawPoint();await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Close drawing"]')!.click());
@@ -884,7 +892,7 @@ describe('manual illustration drawing',()=>{
   });
   it('clears unattached drawing drafts when changing exercise and respects the four-image limit',async()=>{
     await drawPoint();await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Close drawing"]')!.click());await click('＋ New exercise');await click('Draw illustration');
-    expect(host.querySelector('.drawing-object-list')?.textContent).not.toContain('A');await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Close drawing"]')!.click());
+    expect(host.querySelector('.drawing-mode-choice')).not.toBeNull();await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Close drawing"]')!.click());
     stored().exercises[0].attachments=Array.from({length:4},(_,i)=>({id:String(i),name:`image${i}.png`,kind:'problem',data:'data:image/png;base64,AA=='}));
     await act(async()=>{root.unmount();root=createRoot(host);root.render(<App/>);});await openWorkspace();expect(button('Draw illustration').disabled).toBe(true);
   });
