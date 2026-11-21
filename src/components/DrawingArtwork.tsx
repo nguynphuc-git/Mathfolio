@@ -1,5 +1,5 @@
 import {memo,useMemo} from 'react';
-import {drawingSize,clippedLine,circleGeometry,pointPosition,plotDrawingFunction,toScreen,toWorld,type DrawingScene,type DrawingObject,type DrawingEquation,type Vec} from '../drawing';
+import {drawingSize,drawingStrokePoints,clippedLine,circleGeometry,pointPosition,plotDrawingFunction,toScreen,toWorld,type DrawingScene,type DrawingObject,type DrawingEquation,type Vec} from '../drawing';
 import {drawingEquationGeometry,prepareDrawingEquations,type PreparedEquation,type RelationGeometry} from '../drawing-equations';
 const ink=(color:string)=>color==='ink'?'var(--drawing-ink)':color;
 const coordinates=(points:Vec[])=>points.map(point=>`${point.x},${point.y}`).join(' ');
@@ -13,7 +13,7 @@ function Shape({object,scene,selected=false,equations,plots}:{object:DrawingObje
   if(line)drawing=<line x1={line[0].x} y1={line[0].y} x2={line[1].x} y2={line[1].y} markerEnd={object.type==='vector'?'url(#drawing-arrow)':undefined}/>;
   else if(object.type==='circle'){const circle=circleGeometry(scene,object.id);if(circle){const center=toScreen(circle.center,scene.view);drawing=<circle cx={center.x} cy={center.y} r={circle.radius*scene.view.scale}/>;}}
   else if(object.type==='polygon'){const points=object.points.map(id=>pointPosition(scene,id));if(points.every(Boolean))drawing=<polygon points={coordinates((points as Vec[]).map(point=>toScreen(point,scene.view)))} fill={ink(object.style.color)} fillOpacity=".065"/>;}
-  else if(object.type==='freehand')drawing=<polyline points={coordinates(object.points.map(point=>toScreen(point,scene.view)))}/>;
+  else if(object.type==='freehand')drawing=<polyline points={coordinates(drawingStrokePoints(scene,object).map(point=>toScreen(point,scene.view)))}/>;
   else if(object.type==='label'){const point=toScreen(object.at,scene.view);drawing=<text x={point.x} y={point.y} fill={ink(object.style.color)} stroke="none" fontSize="20" fontFamily="Georgia,serif">{object.text}</text>;}
   else if(object.type==='equation')drawing=<EquationPlot relation={equations.get(object.id)!} geometry={plots.get(object.id)!} color={object.style.color}/>;
   else if(object.type==='function')drawing=<Plot expression={object.expression} view={scene.view} offset={object.offset}/>;
