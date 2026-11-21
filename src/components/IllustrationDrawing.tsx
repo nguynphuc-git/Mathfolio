@@ -1,5 +1,5 @@
 import {useEffect,useLayoutEffect,useMemo,useReducer,useRef,useState,type PointerEvent as ReactPointerEvent} from 'react';
-import {drawingSize,defaultDrawingStyle,deleteDrawingObjects,distance,drawingHistory,drawingHitsRect,emptyDrawing,fitDrawingView,intersections,lineGeometry,circleGeometry,moveDrawingObjects,nextPointLabel,pointPosition,selectionRect,snapDrawingPoint,styleDrawingObjects,toScreen,toWorld,zoomDrawing,type DrawingMode,type DrawingObject,type DrawingScene,type DrawingStyle,type DrawingEquation,type Rect,type Vec} from '../drawing';
+import {drawingSize,defaultDrawingStyle,deleteDrawingObjects,distance,drawingHistory,drawingHitsRect,emptyDrawing,findDrawingSnap,fitDrawingView,isDrawingPath,projectDrawingObject,intersections,lineGeometry,moveDrawingObjects,nextPointLabel,pointPosition,selectionRect,snapDrawingPoint,styleDrawingObjects,toScreen,toWorld,zoomDrawing,type DrawingMode,type DrawingObject,type DrawingScene,type DrawingStyle,type DrawingEquation,type DrawingSnap,type DrawingPoint,type Rect,type Vec} from '../drawing';
 import {prepareDrawingEquations} from '../drawing-equations';
 import {DrawingEquations} from './DrawingEquations';
 import {exportDrawing} from '../drawing-export';
@@ -8,16 +8,16 @@ import {DrawingArtwork} from './DrawingArtwork';
 import {MathInput} from './MathInput';
 import {SelectMenu} from './SelectMenu';
 import '../drawing.css';
-type Tool='select'|'pan'|'point'|'segment'|'line'|'ray'|'vector'|'midpoint'|'circle'|'parallel'|'perpendicular'|'intersection'|'polygon'|'rectangle'|'angle'|'freehand'|'label';
+type Tool='select'|'pan'|'point'|'segment'|'line'|'ray'|'vector'|'midpoint'|'circle'|'parallel'|'perpendicular'|'perpendicular-segment'|'intersection'|'polygon'|'rectangle'|'angle'|'freehand'|'label';
 const tools:{id:Tool;label:string;icon:string;hint:string}[]=[
   {id:'select',label:'Select / move',icon:'↖',hint:'Drag empty space to pan. Shift + click or drag to select more. Drag a selected shape to move it.'},{id:'pan',label:'Pan',icon:'↔',hint:'Drag the canvas to move the view. Scroll to zoom.'},
   {id:'point',label:'Point',icon:'•',hint:'Click to place a point. Use Coordinates for exact placement.'},{id:'midpoint',label:'Midpoint',icon:'M',hint:'Choose two existing points. The midpoint follows them.'},
   {id:'segment',label:'Segment',icon:'╱',hint:'Choose or place two endpoints.'},{id:'line',label:'Line',icon:'⟷',hint:'Choose or place two points on the infinite line.'},
   {id:'ray',label:'Ray',icon:'⟶',hint:'Choose the start, then a point in the direction of the ray.'},{id:'vector',label:'Vector',icon:'→',hint:'Choose or place the start and end.'},
   {id:'circle',label:'Circle',icon:'○',hint:'Choose or place the center, then a point on the circle.'},{id:'parallel',label:'Parallel',icon:'∥',hint:'Choose a line or segment, then a point for the parallel line.'},
-  {id:'perpendicular',label:'Perpendicular',icon:'⊥',hint:'Choose a line or segment, then a point for the perpendicular.'},{id:'intersection',label:'Intersection',icon:'⋂',hint:'Choose two lines, segments, rays or circles.'},
+  {id:'perpendicular',label:'Perpendicular',icon:'⊥',hint:'Choose a line or segment, then a point for the perpendicular.'},{id:'perpendicular-segment',label:'Perp. segment',icon:'⊥',hint:'Choose a base line, then a point. Draw a segment from that point to its perpendicular foot.'},{id:'intersection',label:'Intersection',icon:'⋂',hint:'Choose two paths: lines, circles, freehand strokes or equation curves.'},
   {id:'polygon',label:'Polygon',icon:'△',hint:'Choose vertices, then click the first vertex or Finish polygon.'},{id:'rectangle',label:'Rectangle',icon:'▭',hint:'Click two opposite corners.'},
-  {id:'angle',label:'Angle',icon:'∠',hint:'Choose three existing points: arm, vertex, arm.'},{id:'freehand',label:'Freehand',icon:'〰',hint:'Drag to draw a freehand stroke.'},
+  {id:'angle',label:'Angle',icon:'∠',hint:'Choose three points: arm, vertex, arm. Nearby paths can supply a shared point.'},{id:'freehand',label:'Freehand',icon:'〰',hint:'Drag to draw a freehand stroke.'},
   {id:'label',label:'Text label',icon:'T',hint:'Enter label text below, then click where it belongs.'}
 ];
 interface Props {initialScene?:DrawingScene;onScene:(scene:DrawingScene)=>void;onClose:()=>void;onUse:(image:{name:string;data:string})=>Promise<boolean>;suspended:boolean}
@@ -29,7 +29,7 @@ export function IllustrationDrawing({initialScene,onScene,onClose,onUse,suspende
   const sceneRef=useRef(scene);sceneRef.current=scene;
   const [toolboxOpen,setToolboxOpen]=useState(window.innerWidth>850);
   const [tool,setTool]=useState<Tool>('select'),[pending,setPending]=useState<string[]>([]),[selected,setSelected]=useState<string[]>([]);
-  const [style,setStyle]=useState<DrawingStyle>({...defaultDrawingStyle}),[marquee,setMarquee]=useState<Rect|null>(null),[error,setError]=useState(''),[working,setWorking]=useState(false);
+  const [style,setStyle]=useState<DrawingStyle>({...defaultDrawingStyle}),[marquee,setMarquee]=useState<Rect|null>(null),[error,setError]=useState(''),[hover,setHover]=useState<DrawingSnap|null>(null),[working,setWorking]=useState(false);
   const [label,setLabel]=useState('Label'),[name,setName]=useState('My illustration');
   const [pointName,setPointName]=useState(''),[pointX,setPointX]=useState('0'),[pointY,setPointY]=useState('0');
   const svg=useRef<SVGSVGElement>(null),dialog=useRef<HTMLElement>(null),close=useRef<HTMLButtonElement>(null),drag=useRef<Drag|null>(null),operation=useRef<AbortController|null>(null);
@@ -43,8 +43,8 @@ export function IllustrationDrawing({initialScene,onScene,onClose,onUse,suspende
   useEffect(()=>onScene(scene),[scene,onScene]);
   useEffect(()=>{const query=window.matchMedia('(max-width:850px)');const update=()=>setToolboxOpen(!query.matches);update();query.addEventListener('change',update);return()=>query.removeEventListener('change',update);},[]);
   function show(next:DrawingScene,preview=false,before?:DrawingScene){sceneRef.current=next;dispatch(preview?{type:'preview',scene:next}:{type:'commit',scene:next,before});}
-  function chooseMode(mode:DrawingMode){dispatch({type:'mode',mode});setPending([]);setSelected([]);setError('');}
-  function chooseTool(next:Tool){setTool(next);setPending([]);setError('');if(window.innerWidth<=850)setToolboxOpen(false);}
+  function chooseMode(mode:DrawingMode){setHover(null);dispatch({type:'mode',mode});setPending([]);setSelected([]);setError('');}
+  function chooseTool(next:Tool){setHover(null);setTool(next);setPending([]);setError('');if(window.innerWidth<=850)setToolboxOpen(false);}
   function undo(){drag.current=null;setPending([]);setSelected([]);setMarquee(null);dispatch({type:'undo'});}
   function redo(){drag.current=null;setPending([]);setSelected([]);setMarquee(null);dispatch({type:'redo'});}
   function deleteSelected(){if(!selected.length)return;show(deleteDrawingObjects(sceneRef.current,selected));setSelected([]);setPending([]);}
@@ -81,22 +81,29 @@ export function IllustrationDrawing({initialScene,onScene,onClose,onUse,suspende
   wheelHandler.current=event=>{if(state.current.working||state.current.suspended||drag.current)return;event.preventDefault();show({...sceneRef.current,view:zoomDrawing(sceneRef.current.view,event.deltaY>0?.9:1.1,localPosition(event.clientX,event.clientY))});};
   useEffect(()=>{const element=svg.current;const handle=(event:WheelEvent)=>wheelHandler.current(event);element?.addEventListener('wheel',handle,{passive:false});return()=>element?.removeEventListener('wheel',handle);},[scene.mode]);
   function append(items:DrawingObject[],base=sceneRef.current){if(base.objects.length+items.length>300){setError('This drawing supports up to 300 objects.');return false;}show({...base,objects:[...base.objects,...items]});setSelected(items.at(-1)?[items.at(-1)!.id]:[]);setError('');return true;}
-  function makePoint(position:Vec,objects=sceneRef.current.objects):DrawingObject{return {id:uid(),type:'point',label:nextPointLabel(objects),...position,style:{...style}};}
+  function makePoint(position:Vec,objects=sceneRef.current.objects):DrawingPoint{return {id:uid(),type:'point',label:nextPointLabel(objects),...position,style:{...style}};}
   function nearby(position:Vec):string|null{let result:string|null=null,best=14;for(const item of sceneRef.current.objects)if(item.type==='point'){const point=pointPosition(sceneRef.current,item.id);if(point){const d=distance(toScreen(point,sceneRef.current.view),position);if(d<best){best=d;result=item.id;}}}return result;}
+  function snapRadius(){const bounds=svg.current?.getBoundingClientRect();return bounds?.width?14*drawingSize(sceneRef.current.view).width/bounds.width:14;}
+  function sharedPoint(snap:DrawingSnap,objects=sceneRef.current.objects):DrawingPoint|null{if(snap.pointId)return null;return {...makePoint(snap.position,objects),derived:snap.derived};}
+  function nearestPath(position:Vec,exclude:string[]=[],lineOnly=false):string|null{let best=snapRadius(),id:string|null=null;const base=sceneRef.current;for(const item of base.objects){if(exclude.includes(item.id)||!isDrawingPath(base,item.id)||lineOnly&&!lineGeometry(base,item.id))continue;const projection=projectDrawingObject(base,item.id,toWorld(position,base.view));if(projection){const d=distance(toScreen(projection.position,base.view),position);if(d<best){best=d;id=item.id;}}}return id;}
   function finishPolygon(){if(pending.length<3){setError('Choose at least three vertices.');return;}if(append([{id:uid(),type:'polygon',points:pending,style:{...style}}]))setPending([]);}
   function pick(id:string){
     const base=sceneRef.current,hit=base.objects.find(item=>item.id===id);if(!hit)return;
     if(tool==='select'){setSelected([id]);return;}
     if(tool==='intersection'){
-      if(!lineGeometry(base,id)&&!circleGeometry(base,id)){setError('Choose a line, segment, ray or circle.');return;}
+      if(!isDrawingPath(base,id)){setError('Choose a line, circle, freehand stroke or equation curve.');return;}
       if(!pending.length){setPending([id]);setSelected([id]);return;}if(pending[0]===id)return;
       const points=intersections(base,pending[0],id);if(!points.length){setError('These objects do not have a unique visible intersection.');return;}
-      const items:DrawingObject[]=[];for(const [branch,position] of points.entries()){const item=makePoint(position,[...base.objects,...items]);if(item.type==='point')item.derived={kind:'intersection',a:pending[0],b:id,branch};items.push(item);}append(items);setPending([]);return;
+      const items:DrawingObject[]=[],ids:string[]=[];for(const [branch,position] of points.entries()){const existing=[...base.objects,...items].find(item=>item.type==='point'&&(()=>{const p=pointPosition({...base,objects:[...base.objects,...items]},item.id);return p&&distance(toScreen(p,base.view),toScreen(position,base.view))<1.5;})());if(existing){ids.push(existing.id);continue;}const item=makePoint(position,[...base.objects,...items]);item.derived={kind:'intersection',a:pending[0],b:id,branch,...(base.objects.some(o=>[pending[0],id].includes(o.id)&&['function','equation'].includes(o.type))?{view:{...base.view}}:{})};items.push(item);ids.push(item.id);}if(items.length)append(items);setSelected(ids);setError('');setPending([]);return;
     }
-    if(tool==='parallel'||tool==='perpendicular'){
+    if(tool==='parallel'||tool==='perpendicular'||tool==='perpendicular-segment'){
       if(!pending.length){if(!lineGeometry(base,id)){setError('Choose a line or segment first.');return;}setPending([id]);setSelected([id]);return;}
       if(hit.type!=='point'){setError('Choose a point for the new line.');return;}
-      append([{id:uid(),type:tool,line:pending[0],point:id,style:{...style}}]);setPending([]);return;
+      if(tool==='perpendicular-segment'){
+        const foot=makePoint({x:0,y:0});foot.derived={kind:'projection',line:pending[0],point:id};const next={...base,objects:[...base.objects,foot]},position=pointPosition(next,foot.id),from=pointPosition(base,id);
+        if(!position||!from||distance(position,from)<1e-8){setError('Choose a point away from the base line.');return;}
+        foot.x=position.x;foot.y=position.y;append([foot,{id:uid(),type:'segment',a:id,b:foot.id,style:{...style}}]);
+      }else append([{id:uid(),type:tool,line:pending[0],point:id,style:{...style}}]);setPending([]);return;
     }
     if(hit.type!=='point'){setError('Choose a point.');return;}
     if(tool==='point'){setSelected([id]);return;}
@@ -118,10 +125,10 @@ export function IllustrationDrawing({initialScene,onScene,onClose,onUse,suspende
   function down(event:ReactPointerEvent<SVGSVGElement>){
     if(working||suspended||event.button!==0)return;const position=localPosition(event.clientX,event.clientY),base=sceneRef.current,{width,height}=drawingSize(base.view);if(position.x<0||position.y<0||position.x>width||position.y>height)return;
     event.preventDefault();svg.current?.focus({preventScroll:true});svg.current?.setPointerCapture?.(event.pointerId);
-    const world=snapDrawingPoint(toWorld(position,base.view),base),hit=(event.target as Element).closest('[data-object-id]')?.getAttribute('data-object-id')??null,point=nearby(position);
+    setHover(null);const snap=['select','pan','intersection','label'].includes(tool)||['parallel','perpendicular','perpendicular-segment'].includes(tool)&&!pending.length?null:findDrawingSnap(base,position,snapRadius()),world=snap?.position??snapDrawingPoint(toWorld(position,base.view),base),hit=(event.target as Element).closest('[data-object-id]')?.getAttribute('data-object-id')??null,point=nearby(position);
     if(tool==='pan'){drag.current={kind:'pan',start:position,before:base,ids:[],baseSelection:selected};return;}
     if(tool==='freehand'){
-      if(base.objects.length>=300){setError('This drawing supports up to 300 objects.');return;}const item:DrawingObject={id:uid(),type:'freehand',points:[world],style:{...style}};show({...base,objects:[...base.objects,item]},true);setSelected([item.id]);drag.current={kind:'freehand',start:position,before:base,id:item.id,ids:[item.id],baseSelection:selected};return;
+      if(base.objects.length>=300){setError('This drawing supports up to 300 objects.');return;}const anchor=snap?sharedPoint(snap):null;if(anchor&&base.objects.length>=299){setError('This drawing supports up to 300 objects.');return;}const item:DrawingObject={id:uid(),type:'freehand',points:[world],start:snap?.pointId??anchor?.id,style:{...style}};show({...base,objects:[...base.objects,...(anchor?[anchor]:[]),item]},true);setSelected([item.id]);drag.current={kind:'freehand',start:position,before:base,id:item.id,ids:[item.id],baseSelection:selected};return;
     }
     if(tool==='label'){if(!label.trim()){setError('Enter label text first.');return;}append([{id:uid(),type:'label',at:world,text:label.trim().slice(0,120),style:{...style}}]);return;}
     if(tool==='select'){
@@ -132,18 +139,33 @@ export function IllustrationDrawing({initialScene,onScene,onClose,onUse,suspende
       }else{const group=event.shiftKey?selected:[];setSelected(group);drag.current={kind:event.shiftKey?'marquee':'pan',start:position,before:base,ids:[],baseSelection:group};}
       return;
     }
-    if(tool==='intersection'||((tool==='parallel'||tool==='perpendicular')&&!pending.length)){if(hit)pick(hit);else setError('Choose an existing line or circle.');return;}
+    if(tool==='intersection'||((tool==='parallel'||tool==='perpendicular'||tool==='perpendicular-segment')&&!pending.length)){const path=nearestPath(position,pending,tool!=='intersection');if(path)pick(path);else setError('Choose an existing path.');return;}
+    if(snap){const anchor=sharedPoint(snap);if(anchor){if(append([anchor]))pick(anchor.id);}else if(snap.pointId)pick(snap.pointId);return;}
     if(point){pick(point);return;}if(tool==='midpoint'||tool==='angle'){setError('Place the defining points first, then choose them.');return;}
     const item=makePoint(world);if(append([item]))pick(item.id);
   }
   function move(event:ReactPointerEvent<SVGSVGElement>){
-    const job=drag.current;if(!job)return;const position=localPosition(event.clientX,event.clientY),base=sceneRef.current;if(distance(job.start,position)<2)return;
+    const job=drag.current,position=localPosition(event.clientX,event.clientY),base=sceneRef.current;
+    if(!job){if(working||suspended||['select','pan','intersection','label'].includes(tool)||['parallel','perpendicular','perpendicular-segment'].includes(tool)&&!pending.length){setHover(null);return;}setHover(findDrawingSnap(base,position,snapRadius()));return;}if(distance(job.start,position)<2)return;
     if(job.kind==='marquee'){const {width,height}=drawingSize(base.view),rect=selectionRect(job.start,position,width,height);setMarquee(rect);setSelected([...new Set([...job.baseSelection,...base.objects.filter(item=>drawingHitsRect(base,item.id,rect)).map(item=>item.id)])]);return;}
     if(job.kind==='pan'){show({...base,view:{...job.before.view,cx:job.before.view.cx-(position.x-job.start.x)/job.before.view.scale,cy:job.before.view.cy+(position.y-job.start.y)/job.before.view.scale}},true);return;}
     if(job.kind==='group'){const start=toWorld(job.start,job.before.view),end=toWorld(position,job.before.view),delta={x:end.x-start.x,y:end.y-start.y};if(job.before.snap){delta.x=Math.round(delta.x);delta.y=Math.round(delta.y);}show(moveDrawingObjects(job.before,job.ids,delta),true);return;}
     const world=toWorld(position,job.before.view);show({...base,objects:base.objects.map(item=>item.id===job.id&&item.type==='freehand'&&item.points.length<1500&&distance(item.points.at(-1)!,world)>1/base.view.scale?{...item,points:[...item.points,world]}:item)},true);
   }
-  function up(event:ReactPointerEvent<SVGSVGElement>,cancel=false){const job=drag.current;if(!job)return;drag.current=null;svg.current?.releasePointerCapture?.(event.pointerId);if(cancel){show(job.before,true);setSelected(job.baseSelection);setMarquee(null);return;}if(job.kind==='marquee'){setMarquee(null);return;}if(job.kind==='freehand'&&sceneRef.current.objects.some(item=>item.id===job.id&&item.type==='freehand'&&item.points.length<2)){show(job.before,true);setSelected([]);return;}show(sceneRef.current,false,job.before);}
+  function up(event:ReactPointerEvent<SVGSVGElement>,cancel=false){
+    const job=drag.current;if(!job)return;drag.current=null;svg.current?.releasePointerCapture?.(event.pointerId);setHover(null);
+    if(cancel){show(job.before,true);setSelected(job.baseSelection);setMarquee(null);return;}
+    if(job.kind==='marquee'){setMarquee(null);return;}
+    if(job.kind==='freehand'){
+      const stroke=sceneRef.current.objects.find(item=>item.id===job.id);if(stroke?.type==='freehand'){
+        if(stroke.points.length<2){show(job.before,true);setSelected([]);return;}
+        const base=sceneRef.current,target=findDrawingSnap({...base,objects:base.objects.filter(item=>item.id!==stroke.id)},localPosition(event.clientX,event.clientY),snapRadius());
+        if(target){const anchor=sharedPoint(target),end=target.pointId??anchor?.id;if(!anchor||base.objects.length<300)show({...base,objects:[...base.objects.map(item=>item.id===stroke.id?{...stroke,end}:item),...(anchor?[anchor]:[])]},true);}
+      }
+    }
+    show(sceneRef.current,false,job.before);
+  }
+
   function changeStyle(changes:Partial<DrawingStyle>){setStyle(current=>({...current,...changes}));if(selected.length)show(styleDrawingObjects(sceneRef.current,selected,changes));}
   function addPoint(){const x=Number(pointX),y=Number(pointY);if(!pointX.trim()||!pointY.trim()||!Number.isFinite(x)||!Number.isFinite(y)||Math.abs(x)>1e6||Math.abs(y)>1e6){setError('Enter finite coordinates between −1,000,000 and 1,000,000.');return;}const item=makePoint({x,y});if(item.type==='point'&&pointName.trim())item.label=pointName.trim().slice(0,24);if(append([item])){setPointName('');chooseTool('select');}}
   function updateEquation(row:DrawingEquation){const base=sceneRef.current;if(!base.objects.some(item=>item.id===row.id)){if(base.objects.filter(item=>item.type==='equation').length>=16||base.objects.length>=300){setError('Use up to 16 expression lines and 300 drawing objects.');return;}show({...base,objects:[...base.objects,row]});}else show({...base,objects:base.objects.map(item=>item.id===row.id?row:item)});}
@@ -162,8 +184,8 @@ export function IllustrationDrawing({initialScene,onScene,onClose,onUse,suspende
       <details className="drawing-object-list"><summary>Objects · {scene.objects.length}</summary>{scene.objects.filter(item=>item.type!=='equation').map(item=><button type="button" key={item.id} aria-pressed={selected.includes(item.id)||pending.includes(item.id)} disabled={working} onClick={event=>{if(tool==='select'&&event.shiftKey)setSelected(current=>current.includes(item.id)?current.filter(id=>id!==item.id):[...current,item.id]);else pick(item.id);}}>{item.type==='point'?item.label:item.type==='function'?`Function ${scene.objects.filter(value=>value.type==='function').findIndex(value=>value.id===item.id)+1}`:item.type==='label'?item.text:item.type}</button>)}</details>
     </aside><div className="drawing-workspace"><div className="drawing-canvas-toolbar"><div className="drawing-history-tools"><button type="button" disabled={working||!history.past.length} onClick={undo}>↶ Undo</button><button type="button" disabled={working||!history.future.length} onClick={redo}>↷ Redo</button><button type="button" disabled={working||!scene.objects.length} onClick={()=>{show({...scene,objects:[]});setPending([]);setSelected([]);}}>Clear</button></div><div className="drawing-selection-actions"><span role="status">{selectedObjects.length?`${selectedObjects.length} selected`:'New strokes'}</span><div role="group" aria-label="Stroke style"><button type="button" aria-pressed={solid} disabled={working} onClick={()=>changeStyle({dashed:false})}>Solid ━</button><button type="button" aria-pressed={dashed} disabled={working} onClick={()=>changeStyle({dashed:true})}>Dashed ┄</button></div><button type="button" className="drawing-delete" aria-label="Delete selected objects" disabled={working||!selected.length} onClick={deleteSelected}>Delete</button></div></div>
       <div className="drawing-instruction"><span><strong>{info.label}</strong> · {info.hint}{pending.length>0&&` ${pending.length} chosen.`}</span>{tool==='polygon'&&<button type="button" disabled={working||pending.length<3} onClick={finishPolygon}>Finish polygon</button>}</div>
-      <div className="drawing-canvas-shell"><svg ref={svg} className={`drawing-canvas tool-${tool}`} role="img" aria-label="2D drawing canvas" tabIndex={0} viewBox={`0 0 ${size.width} ${size.height}`} preserveAspectRatio="none" onPointerDown={down} onPointerMove={move} onPointerUp={event=>up(event)} onPointerCancel={event=>up(event,true)} onKeyDown={event=>{if(event.key==='Enter'&&tool==='polygon'&&pending.length>=3){event.preventDefault();finishPolygon();}}}>
-        <DrawingArtwork scene={scene} selected={selected}/><g data-ui="true" pointerEvents="none">{pending.map(id=>{const point=pointPosition(scene,id);if(!point)return null;const p=toScreen(point,scene.view);return <circle key={id} cx={p.x} cy={p.y} r="11" fill="none" stroke="var(--drawing-selection)" strokeWidth="2"/>;})}{marquee&&<rect x={marquee.x} y={marquee.y} width={marquee.width} height={marquee.height} fill="var(--drawing-selection)" fillOpacity=".10" stroke="var(--drawing-selection)" strokeWidth="1.5" strokeDasharray="7 4"/>}</g>
+      <div className="drawing-canvas-shell"><svg ref={svg} className={`drawing-canvas tool-${tool}`} role="img" aria-label="2D drawing canvas" tabIndex={0} viewBox={`0 0 ${size.width} ${size.height}`} preserveAspectRatio="none" onPointerDown={down} onPointerMove={move} onPointerLeave={()=>{if(!drag.current)setHover(null);}} onPointerUp={event=>up(event)} onPointerCancel={event=>up(event,true)} onKeyDown={event=>{if(event.key==='Enter'&&tool==='polygon'&&pending.length>=3){event.preventDefault();finishPolygon();}}}>
+        <DrawingArtwork scene={scene} selected={selected}/><g data-ui="true" pointerEvents="none">{pending.map(id=>{const point=pointPosition(scene,id);if(!point)return null;const p=toScreen(point,scene.view);return <circle key={id} cx={p.x} cy={p.y} r="11" fill="none" stroke="var(--drawing-selection)" strokeWidth="2"/>;})}{hover&&(()=>{const p=toScreen(hover.position,scene.view);return <g className="drawing-snap-preview" data-snap-kind={hover.kind}><circle cx={p.x} cy={p.y} r="10" fill="var(--drawing-bg)" fillOpacity=".75" stroke="var(--drawing-selection)" strokeWidth="2"/><circle cx={p.x} cy={p.y} r="3" fill="var(--drawing-selection)"/><text x={p.x+14} y={p.y-13} fontSize="12" fill="var(--drawing-selection)" stroke="var(--drawing-bg)" strokeWidth="3" paintOrder="stroke">{hover.kind==='point'?'Shared point':hover.kind==='intersection'?'Intersection':'Point on path'}</text></g>;})()}{marquee&&<rect x={marquee.x} y={marquee.y} width={marquee.width} height={marquee.height} fill="var(--drawing-selection)" fillOpacity=".10" stroke="var(--drawing-selection)" strokeWidth="1.5" strokeDasharray="7 4"/>}</g>
       </svg></div>
       <div className="drawing-view-toolbar"><span>This visible frame will be added as the image.</span><div className="drawing-zoom-tools"><button type="button" aria-label="Zoom drawing out" disabled={working} onClick={()=>show({...scene,view:zoomDrawing(scene.view,.8)})}>−</button><output>{zoomLabel}</output><button type="button" aria-label="Zoom drawing in" disabled={working} onClick={()=>show({...scene,view:zoomDrawing(scene.view,1.25)})}>+</button><button type="button" disabled={working} onClick={()=>show({...scene,view:{...scene.view,cx:0,cy:0,scale:45}})}>Reset view</button><button type="button" disabled={working||!scene.objects.length} onClick={()=>show({...scene,view:fitDrawingView(scene)})}>Fit drawing</button></div></div>
       {error&&<p className="notice error drawing-error" role="alert">{error}</p>}

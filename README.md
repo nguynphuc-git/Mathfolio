@@ -4,7 +4,7 @@ Sổ bài tập toán cá nhân. Nhập công thức, viết lời giải, đín
 
 Repo chính: [nguynphuc-git/Mathfolio](https://github.com/nguynphuc-git/Mathfolio), nhánh **main**. Dự án được tách từ nhánh `feat/digital-exercise-notebook` của StudyLens, giữ nguyên toàn bộ lịch sử commit đến `76006fc`.
 
-Khung vẽ Illustration có chế độ nền trắng hoặc tọa độ. Ở chế độ tọa độ, nhập nhiều phương trình tự do, bất phương trình, biến có thanh trượt và dãy giá trị; kéo nền để dịch khung nhìn, giữ Shift để chọn nhiều hình. Focus mode vẫn cho tự vẽ, và ảnh thêm tại đây mặc định không dùng cho AI.
+Khung vẽ Illustration có chế độ nền trắng hoặc tọa độ. Ở chế độ tọa độ, nhập nhiều phương trình tự do, bất phương trình, biến có thanh trượt và dãy giá trị; kéo nền để dịch khung nhìn, giữ Shift để chọn nhiều hình. Focus mode cho tự vẽ hoặc tải ảnh lên; ảnh thêm tại đây mặc định không dùng cho AI. Công cụ Perp. segment hạ đoạn vuông góc từ một điểm xuống đường gốc. Khi vẽ, đưa con trỏ gần điểm hoặc đường để bắt điểm dùng chung; Intersection dùng được với cả nét vẽ tay.
 
 ## Chạy thử trên máy của đồng đội
 

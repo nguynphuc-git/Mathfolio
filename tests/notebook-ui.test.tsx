@@ -893,7 +893,7 @@ describe('manual illustration drawing',()=>{
   it('allows manual sketches in Focus and persists their exclusion from AI without clearing guidance',async()=>{
     await openWorkspace();await click('Focus mode');
     const illustrations=host.querySelector('.problem-images')!;
-    expect(illustrations.querySelector('[aria-label="Attach a problem illustration"]')).toBeNull();
+    expect(illustrations.querySelector('[aria-label="Attach a problem illustration"]')).not.toBeNull();
     expect(illustrations.textContent).not.toMatch(/FOR AI|Cloud AI|Use this illustration for AI/);
     await drawPoint();await click('Add to illustrations');
     expect(host.querySelector('[role="alertdialog"]')).toBeNull();
@@ -908,6 +908,18 @@ describe('manual illustration drawing',()=>{
     mocks.ai.mockResolvedValue({text:'Reply',source:'on_device'});
     await type('[aria-label="Discussion question"]','Explain');await click('Send');
     expect(mocks.ai).toHaveBeenLastCalledWith(expect.objectContaining({images:[]}),expect.any(Function),expect.any(AbortSignal));
+  });
+  it('uploads and views images in Focus without AI selection or clearing analyzed context',async()=>{
+    await openWorkspace();await click('Focus mode');const upload=host.querySelector<HTMLInputElement>('[aria-label="Attach a problem illustration"]')!;
+    Object.defineProperty(upload,'files',{configurable:true,value:[new File(['image'],'Focus photo.png',{type:'image/png'})]});
+    await act(async()=>upload.dispatchEvent(new Event('change',{bubbles:true})));
+    expect(host.querySelector('[role="alertdialog"]')).toBeNull();expect(host.textContent).toContain('Original essentials');
+    expect(host.querySelector('.problem-images input[type="checkbox"]')).toBeNull();
+    await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="View image: Focus photo.png"]')!.click());expect(host.querySelector('.image-viewer')).not.toBeNull();
+    await act(async()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
+    await click('Exit focus mode');expect(host.querySelector<HTMLInputElement>('.problem-images input[type="checkbox"]')!.checked).toBe(false);
+    await click('Save exercise');expect(stored().exercises.find(item=>item.id==='first')!.attachments.find(image=>image.kind==='problem')).toMatchObject({useForAI:false,name:'Focus photo.png'});
+    expect(mocks.ai).not.toHaveBeenCalled();expect(mocks.imageCloud).not.toHaveBeenCalled();expect(mocks.imageLocal).not.toHaveBeenCalled();
   });
   it('attaches an exported drawing as a problem illustration and keeps notes',async()=>{
     await type('[aria-label="Notes"]',String.raw`\text{Keep my notes}`);await drawPoint();await type('[aria-label="Drawing image name"]','My construction');

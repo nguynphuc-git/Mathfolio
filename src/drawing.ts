@@ -7,12 +7,12 @@ export interface DrawingView {cx:number;cy:number;scale:number;width?:number;hei
 export const drawingSize=(view:DrawingView)=>({width:view.width??BOARD_WIDTH,height:view.height??BOARD_HEIGHT});
 export interface DrawingStyle {color:string;width:number;dashed:boolean}
 interface Base {id:string;style:DrawingStyle}
-export interface DrawingPoint extends Base {type:'point';label:string;x:number;y:number;derived?:{kind:'midpoint';a:string;b:string}|{kind:'intersection';a:string;b:string;branch:number}}
+export interface DrawingPoint extends Base {type:'point';label:string;x:number;y:number;derived?:{kind:'midpoint';a:string;b:string}|{kind:'intersection';a:string;b:string;branch:number;view?:DrawingView}|{kind:'on-object';object:string;parameter:number;part?:number;view?:DrawingView}|{kind:'projection';line:string;point:string}}
 export interface DrawingLine extends Base {type:'segment'|'line'|'ray'|'vector';a:string;b:string}
 export interface DrawingParallel extends Base {type:'parallel'|'perpendicular';line:string;point:string}
 export interface DrawingCircle extends Base {type:'circle';center:string;through:string}
 export interface DrawingPolygon extends Base {type:'polygon';points:string[]}
-export interface DrawingStroke extends Base {type:'freehand';points:Vec[]}
+export interface DrawingStroke extends Base {type:'freehand';points:Vec[];start?:string;end?:string}
 export interface DrawingLabel extends Base {type:'label';at:Vec;text:string}
 export interface DrawingPlot extends Base {type:'function';expression:string;latex?:string;offset?:Vec}
 export interface DrawingEquation extends Base {type:'equation';latex:string;visible?:boolean;offset?:Vec;slider?:{min:number;max:number;step:number}}
@@ -29,7 +29,9 @@ export function pointPosition(scene:DrawingScene,id:string,seen=new Set<string>(
   if(seen.has(id))return null;const point=scene.objects.find(object=>object.id===id);if(point?.type!=='point')return null;
   const visited=new Set(seen).add(id);if(!point.derived)return {x:point.x,y:point.y};
   if(point.derived.kind==='midpoint'){const a=pointPosition(scene,point.derived.a,visited),b=pointPosition(scene,point.derived.b,visited);return a&&b?{x:(a.x+b.x)/2,y:(a.y+b.y)/2}:null;}
-  return intersections(scene,point.derived.a,point.derived.b,visited)[point.derived.branch]??null;
+  if(point.derived.kind==='on-object')return drawingPointOnObject(scene,point.derived.object,point.derived.parameter,point.derived.part,visited,point.derived.view);
+  if(point.derived.kind==='projection'){const line=lineGeometry(scene,point.derived.line,visited),from=pointPosition(scene,point.derived.point,visited);return line&&from?projectToLine(from,line,false).position:null;}
+  return intersections(scene,point.derived.a,point.derived.b,visited,point.derived.view)[point.derived.branch]??null;
 }
 export interface LineGeometry {p:Vec;d:Vec;min:number;max:number}
 export function lineGeometry(scene:DrawingScene,id:string,seen=new Set<string>()):LineGeometry|null{
@@ -51,8 +53,7 @@ const cross=(a:Vec,b:Vec)=>a.x*b.y-a.y*b.x;
 const subtract=(a:Vec,b:Vec):Vec=>({x:a.x-b.x,y:a.y-b.y});
 const at=(line:LineGeometry,t:number):Vec=>({x:line.p.x+line.d.x*t,y:line.p.y+line.d.y*t});
 const within=(line:LineGeometry,t:number)=>t>=line.min-1e-8&&t<=line.max+1e-8;
-export function intersections(scene:DrawingScene,a:string,b:string,seen=new Set<string>()):Vec[]{
-  if(a===b)return [];const l1=lineGeometry(scene,a,seen),l2=lineGeometry(scene,b,seen),c1=circleGeometry(scene,a,seen),c2=circleGeometry(scene,b,seen);
+function analyticIntersections(l1:LineGeometry|null,l2:LineGeometry|null,c1:ReturnType<typeof circleGeometry>,c2:ReturnType<typeof circleGeometry>):Vec[]{
   if(l1&&l2){const divisor=cross(l1.d,l2.d);if(Math.abs(divisor)<1e-9)return [];const offset=subtract(l2.p,l1.p),t=cross(offset,l2.d)/divisor,u=cross(offset,l1.d)/divisor;return within(l1,t)&&within(l2,u)?[at(l1,t)]:[];}
   if((l1&&c2)||(l2&&c1)){
     const line=(l1??l2)!,circle=(c1??c2)!,v=subtract(line.p,circle.center),aa=line.d.x**2+line.d.y**2,bb=2*(v.x*line.d.x+v.y*line.d.y),cc=v.x**2+v.y**2-circle.radius**2,disc=bb**2-4*aa*cc;
@@ -61,13 +62,26 @@ export function intersections(scene:DrawingScene,a:string,b:string,seen=new Set<
   if(c1&&c2){const d=distance(c1.center,c2.center);if(d<1e-9||d>c1.radius+c2.radius+1e-9||d<Math.abs(c1.radius-c2.radius)-1e-9)return [];const k=(c1.radius**2-c2.radius**2+d*d)/(2*d),h=Math.sqrt(Math.max(0,c1.radius**2-k*k)),dx=(c2.center.x-c1.center.x)/d,dy=(c2.center.y-c1.center.y)/d,p={x:c1.center.x+k*dx,y:c1.center.y+k*dy};return h<1e-9?[p]:[{x:p.x-h*dy,y:p.y+h*dx},{x:p.x+h*dy,y:p.y-h*dx}];}
   return [];
 }
+const intersectionCache=new WeakMap<DrawingScene,GeometryCache<Vec[]>>();
+/** Exact geometry stays analytic; sampled curves intersect their actual rendered segments. */
+export function intersections(scene:DrawingScene,a:string,b:string,seen=new Set<string>(),view=scene.view):Vec[]{
+  if(a===b)return [];const cache=getGeometryCache(intersectionCache,scene),key=JSON.stringify([a,b,view,[...seen].sort()]),previous=cache.get(key);if(previous)return previous;const remember=(points:Vec[])=>{if(cache.size<128)cache.set(key,points);return points;};const l1=lineGeometry(scene,a,seen),l2=lineGeometry(scene,b,seen),c1=circleGeometry(scene,a,seen),c2=circleGeometry(scene,b,seen);
+  if((l1||c1)&&(l2||c2))return remember(analyticIntersections(l1,l2,c1,c2));
+  const first=l1?[l1]:drawingCurveSegments(scene,a,seen,view).map(asLine),second=l2?[l2]:drawingCurveSegments(scene,b,seen,view).map(asLine),points:Vec[]=[];
+  const add=(hits:Vec[])=>{for(const p of hits)if(Number.isFinite(p.x)&&Number.isFinite(p.y)&&!points.some(other=>distance(other,p)<Math.max(1e-8,1e-4/view.scale)))points.push(p);};
+  if(c1)for(const line of second)add(analyticIntersections(null,line,c1,null));
+  else if(c2)for(const line of first)add(analyticIntersections(line,null,null,c2));
+  else for(const line of first)for(const other of second){if(points.length>=200)break;if(!segmentBoxesOverlap(line,other))continue;add(analyticIntersections(line,other,null,null));}
+  return remember(points.sort((p,q)=>p.x-q.x||p.y-q.y).slice(0,200));
+}
+
 export function clippedLine(scene:DrawingScene,id:string):[Vec,Vec]|null{
   const line=lineGeometry(scene,id);if(!line)return null;const {view}=scene,{width,height}=drawingSize(view),p=toScreen(line.p,view),d={x:line.d.x*view.scale,y:-line.d.y*view.scale};let low=line.min,high=line.max;
   for(const [origin,direction,size] of [[p.x,d.x,width],[p.y,d.y,height]]){if(Math.abs(direction)<1e-9){if(origin<0||origin>size)return null;continue;}const a=-origin/direction,b=(size-origin)/direction;low=Math.max(low,Math.min(a,b));high=Math.min(high,Math.max(a,b));}
   return low<=high?[{x:p.x+d.x*low,y:p.y+d.y*low},{x:p.x+d.x*high,y:p.y+d.y*high}]:null;
 }
 export function drawingDependencies(object:DrawingObject):string[]{
-  switch(object.type){case 'point':return object.derived?[object.derived.a,object.derived.b]:[];case 'segment':case 'line':case 'ray':case 'vector':return [object.a,object.b];case 'parallel':case 'perpendicular':return [object.line,object.point];case 'circle':return [object.center,object.through];case 'polygon':return object.points;case 'angle':return [object.a,object.vertex,object.b];default:return [];}
+  switch(object.type){case 'point':{const d=object.derived;return !d?[]:d.kind==='on-object'?[d.object]:d.kind==='projection'?[d.line,d.point]:[d.a,d.b];}case 'segment':case 'line':case 'ray':case 'vector':return [object.a,object.b];case 'parallel':case 'perpendicular':return [object.line,object.point];case 'freehand':return [object.start,object.end].filter((id):id is string=>!!id);case 'circle':return [object.center,object.through];case 'polygon':return object.points;case 'angle':return [object.a,object.vertex,object.b];default:return [];}
 }
 export function deleteDrawingObject(scene:DrawingScene,id:string):DrawingScene{
   return deleteDrawingObjects(scene,[id]);
@@ -106,7 +120,7 @@ export function fitDrawingView(scene:DrawingScene):DrawingView{
   for(const object of scene.objects){
     if(object.type==='point'){const p=pointPosition(scene,object.id);if(p)points.push(p);}
     else if(object.type==='circle'){const c=circleGeometry(scene,object.id);if(c)points.push({x:c.center.x-c.radius,y:c.center.y-c.radius},{x:c.center.x+c.radius,y:c.center.y+c.radius});}
-    else if(object.type==='freehand')points.push(...object.points);
+    else if(object.type==='freehand')points.push(...drawingStrokePoints(scene,object));
     else if(object.type==='label')points.push(object.at);
   }
   if(!points.length)return scene.view;
@@ -144,10 +158,65 @@ export function drawingHitsRect(scene:DrawingScene,id:string,rect:Rect):boolean{
   if(object.type==='point'){const p=pointPosition(scene,id);return !!p&&inside(toScreen(p,scene.view));}
   if(object.type==='circle'){const circle=circleGeometry(scene,id);if(!circle)return false;const c=toScreen(circle.center,scene.view),r=circle.radius*scene.view.scale,nearest={x:Math.max(rect.x,Math.min(rect.x+rect.width,c.x)),y:Math.max(rect.y,Math.min(rect.y+rect.height,c.y))};const farthest=Math.max(...[{x:rect.x,y:rect.y},{x:rect.x+rect.width,y:rect.y},{x:rect.x,y:rect.y+rect.height},{x:rect.x+rect.width,y:rect.y+rect.height}].map(p=>distance(p,c)));return distance(nearest,c)<=r&&farthest>=r;}
   if(object.type==='polygon'){const points=object.points.map(point=>pointPosition(scene,point)).filter((p):p is Vec=>!!p).map(p=>toScreen(p,scene.view));return !!points.length&&polyline([...points,points[0]]);}
-  if(object.type==='freehand')return polyline(object.points.map(p=>toScreen(p,scene.view)));
+  if(object.type==='freehand')return polyline(drawingStrokePoints(scene,object).map(p=>toScreen(p,scene.view)));
   if(object.type==='equation'){if(object.visible===false)return false;const prepared=prepareDrawingEquations(scene.objects.filter((item):item is DrawingEquation=>item.type==='equation')).get(object.id);if(!prepared)return false;const geometry=drawingEquationGeometry(prepared,scene.view,object.offset);return geometry.paths.some(path=>{const points=[...path.matchAll(/M([\d.-]+) ([\d.-]+)L([\d.-]+) ([\d.-]+)/g)];return points.some(match=>segment({x:Number(match[1]),y:Number(match[2])},{x:Number(match[3]),y:Number(match[4])}));});}
   if(object.type==='function')return plotDrawingFunction(object.expression,scene.view,object.offset).some(polyline);
   if(object.type==='label'){const p=toScreen(object.at,scene.view);return p.x<rect.x+rect.width&&p.x+Math.max(12,object.text.length*11)>rect.x&&p.y>rect.y&&p.y-22<rect.y+rect.height;}
   if(object.type==='angle'){const p=pointPosition(scene,object.vertex);if(!p)return false;const screen=toScreen(p,scene.view);return screen.x+45>=rect.x&&screen.x-45<=rect.x+rect.width&&screen.y+45>=rect.y&&screen.y-45<=rect.y+rect.height;}
   return false;
+}
+
+interface CurveSegment {a:Vec;b:Vec}
+interface GeometryCache<T>{objects:DrawingObject[];count:number;values:Map<string,T>}
+function getGeometryCache<T>(source:WeakMap<DrawingScene,GeometryCache<T>>,scene:DrawingScene):Map<string,T>{let cached=source.get(scene);if(!cached||cached.objects!==scene.objects||cached.count!==scene.objects.length){cached={objects:scene.objects,count:scene.objects.length,values:new Map()};source.set(scene,cached);}return cached.values;}
+const curveCache=new WeakMap<DrawingScene,GeometryCache<CurveSegment[]>>();
+function asLine(segment:CurveSegment):LineGeometry{return {p:segment.a,d:subtract(segment.b,segment.a),min:0,max:1};}
+function segmentBoxesOverlap(a:LineGeometry,b:LineGeometry):boolean{
+  if(!Number.isFinite(a.min)||!Number.isFinite(a.max)||!Number.isFinite(b.min)||!Number.isFinite(b.max))return true;
+  const p=at(a,a.min),q=at(a,a.max),r=at(b,b.min),s=at(b,b.max),epsilon=1e-8;
+  return Math.min(p.x,q.x)<=Math.max(r.x,s.x)+epsilon&&Math.max(p.x,q.x)>=Math.min(r.x,s.x)-epsilon&&Math.min(p.y,q.y)<=Math.max(r.y,s.y)+epsilon&&Math.max(p.y,q.y)>=Math.min(r.y,s.y)-epsilon;
+}
+function drawingCurveSegments(scene:DrawingScene,id:string,seen=new Set<string>(),view=scene.view):CurveSegment[]{
+  if(seen.has(id))return [];const object=scene.objects.find(o=>o.id===id);if(!object)return [];
+  if(object.type==='polygon'){const visited=new Set(seen).add(id),points=object.points.map(id=>pointPosition(scene,id,visited));if(points.some(p=>!p))return [];return (points as Vec[]).map((a,i)=>({a,b:points[(i+1)%points.length]!}));}
+  const cache=getGeometryCache(curveCache,scene),key=id+JSON.stringify(view),previous=cache.get(key);if(previous)return previous;
+  const segments:CurveSegment[]=[];const polyline=(points:Vec[])=>{for(let i=1;i<points.length;i++)if(distance(points[i-1],points[i])>1e-10)segments.push({a:points[i-1],b:points[i]});};
+  if(object.type==='freehand')polyline(drawingStrokePoints(scene,object,new Set(seen).add(id)));
+  else if(object.type==='function')for(const path of plotDrawingFunction(object.expression,view,object.offset))polyline(path.map(p=>toWorld(p,view)));
+  else if(object.type==='equation'&&object.visible!==false){const prepared=prepareDrawingEquations(scene.objects.filter((o):o is DrawingEquation=>o.type==='equation')).get(id);if(prepared)for(const path of drawingEquationGeometry(prepared,view,object.offset).paths)for(const match of path.matchAll(/M([\d.-]+) ([\d.-]+)L([\d.-]+) ([\d.-]+)/g))segments.push({a:toWorld({x:Number(match[1]),y:Number(match[2])},view),b:toWorld({x:Number(match[3]),y:Number(match[4])},view)});}
+  if(cache.size<600)cache.set(key,segments);return segments;
+}
+export interface DrawingProjection {position:Vec;parameter:number;part?:number;view?:DrawingView}
+function projectToLine(point:Vec,line:LineGeometry,clamp=true):DrawingProjection{
+  let parameter=((point.x-line.p.x)*line.d.x+(point.y-line.p.y)*line.d.y)/(line.d.x**2+line.d.y**2);if(clamp)parameter=Math.max(line.min,Math.min(line.max,parameter));return {position:at(line,parameter),parameter};
+}
+export function projectDrawingObject(scene:DrawingScene,id:string,point:Vec,seen=new Set<string>(),view=scene.view):DrawingProjection|null{
+  const line=lineGeometry(scene,id,seen);if(line)return projectToLine(point,line);
+  const circle=circleGeometry(scene,id,seen);if(circle){const parameter=Math.atan2(point.y-circle.center.y,point.x-circle.center.x);return {position:{x:circle.center.x+circle.radius*Math.cos(parameter),y:circle.center.y+circle.radius*Math.sin(parameter)},parameter};}
+  let best:DrawingProjection|null=null,d=Infinity;const object=scene.objects.find(o=>o.id===id),segments=drawingCurveSegments(scene,id,seen,view);
+  for(let part=0;part<segments.length;part++){const candidate=projectToLine(point,asLine(segments[part])),dist=distance(point,candidate.position);if(dist<d){d=dist;best={...candidate,part,...(object?.type==='function'||object?.type==='equation'?{view:{...view}}:{})};}}
+  return best;
+}
+export function drawingPointOnObject(scene:DrawingScene,id:string,parameter:number,part?:number,seen=new Set<string>(),view=scene.view):Vec|null{
+  const line=lineGeometry(scene,id,seen);if(line)return at(line,Math.max(line.min,Math.min(line.max,parameter)));
+  const circle=circleGeometry(scene,id,seen);if(circle)return {x:circle.center.x+circle.radius*Math.cos(parameter),y:circle.center.y+circle.radius*Math.sin(parameter)};
+  const segment=drawingCurveSegments(scene,id,seen,view)[part??0];return segment?at(asLine(segment),Math.max(0,Math.min(1,parameter))):null;
+}
+export function isDrawingPath(scene:DrawingScene,id:string):boolean{const object=scene.objects.find(o=>o.id===id);return !!object&&['segment','line','ray','vector','parallel','perpendicular','circle','polygon','freehand','function','equation'].includes(object.type)&&!(object.type==='equation'&&object.visible===false);}
+export interface DrawingSnap {position:Vec;pointId?:string;derived?:DrawingPoint['derived'];objects:string[];kind:'point'|'intersection'|'path'}
+export function findDrawingSnap(scene:DrawingScene,screen:Vec,radius=14):DrawingSnap|null{
+  let closest:DrawingSnap|null=null,best=radius;
+  for(const object of scene.objects)if(object.type==='point'){const p=pointPosition(scene,object.id);if(p){const d=distance(toScreen(p,scene.view),screen);if(d<best){best=d;closest={position:p,pointId:object.id,objects:[object.id],kind:'point'};}}}
+  if(closest)return closest;
+  const world=toWorld(screen,scene.view),near:{id:string;projection:DrawingProjection;distance:number}[]=[];
+  for(const object of scene.objects)if(isDrawingPath(scene,object.id)){const projection=projectDrawingObject(scene,object.id,world);if(projection){const d=distance(toScreen(projection.position,scene.view),screen);if(d<radius)near.push({id:object.id,projection,distance:d});}}
+  near.sort((a,b)=>a.distance-b.distance);best=radius;
+  // Only nearby paths can contribute a crossing. Avoid comparing every object on each pointer move.
+  for(let i=0;i<Math.min(near.length,6);i++)for(let j=i+1;j<Math.min(near.length,6);j++){const hits=intersections(scene,near[i].id,near[j].id);for(const [branch,p] of hits.entries()){const d=distance(toScreen(p,scene.view),screen);if(d<best){best=d;const sampled=near[i].projection.view||near[j].projection.view;closest={position:p,derived:{kind:'intersection',a:near[i].id,b:near[j].id,branch,...(sampled?{view:{...scene.view}}:{})},objects:[near[i].id,near[j].id],kind:'intersection'};}}}
+  if(closest)return closest;
+  const first=near[0];return first?{position:first.projection.position,derived:{kind:'on-object',object:first.id,parameter:first.projection.parameter,part:first.projection.part,view:first.projection.view},objects:[first.id],kind:'path'}:null;
+}
+
+export function drawingStrokePoints(scene:DrawingScene,stroke:DrawingStroke,seen=new Set<string>()):Vec[]{
+  return stroke.points.map((p,index)=>{const id=index===0?stroke.start:index===stroke.points.length-1?stroke.end:undefined;return id?pointPosition(scene,id,seen)??p:p;});
 }
