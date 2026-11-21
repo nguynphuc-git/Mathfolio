@@ -1,4 +1,5 @@
 import {compileDrawingFunction} from './drawing-expression';
+import {drawingEquationGeometry,prepareDrawingEquations} from './drawing-equations';
 export const BOARD_WIDTH=1000,BOARD_HEIGHT=640;
 export interface Vec {x:number;y:number}
 export type DrawingMode='blank'|'coordinates';
@@ -14,8 +15,9 @@ export interface DrawingPolygon extends Base {type:'polygon';points:string[]}
 export interface DrawingStroke extends Base {type:'freehand';points:Vec[]}
 export interface DrawingLabel extends Base {type:'label';at:Vec;text:string}
 export interface DrawingPlot extends Base {type:'function';expression:string;latex?:string;offset?:Vec}
+export interface DrawingEquation extends Base {type:'equation';latex:string;visible?:boolean;offset?:Vec;slider?:{min:number;max:number;step:number}}
 export interface DrawingAngle extends Base {type:'angle';a:string;vertex:string;b:string}
-export type DrawingObject=DrawingPoint|DrawingLine|DrawingParallel|DrawingCircle|DrawingPolygon|DrawingStroke|DrawingLabel|DrawingPlot|DrawingAngle;
+export type DrawingObject=DrawingPoint|DrawingLine|DrawingParallel|DrawingCircle|DrawingPolygon|DrawingStroke|DrawingLabel|DrawingPlot|DrawingAngle|DrawingEquation;
 export interface DrawingScene {mode?:DrawingMode;objects:DrawingObject[];view:DrawingView;axes:boolean;grid:boolean;snap:boolean}
 export interface Rect {x:number;y:number;width:number;height:number}
 export const defaultDrawingStyle:DrawingStyle={color:'ink',width:2,dashed:false};
@@ -122,7 +124,7 @@ export function moveDrawingObjects(scene:DrawingScene,ids:string[],delta:Vec):Dr
     if(object.type==='point'&&!object.derived)return {...object,x:object.x+delta.x,y:object.y+delta.y};
     if(object.type==='label')return {...object,at:{x:object.at.x+delta.x,y:object.at.y+delta.y}};
     if(object.type==='freehand')return {...object,points:object.points.map(p=>({x:p.x+delta.x,y:p.y+delta.y}))};
-    if(object.type==='function')return {...object,offset:{x:(object.offset?.x??0)+delta.x,y:(object.offset?.y??0)+delta.y}};
+    if(object.type==='function'||object.type==='equation')return {...object,offset:{x:(object.offset?.x??0)+delta.x,y:(object.offset?.y??0)+delta.y}};
     return object;
   })};
 }
@@ -143,6 +145,7 @@ export function drawingHitsRect(scene:DrawingScene,id:string,rect:Rect):boolean{
   if(object.type==='circle'){const circle=circleGeometry(scene,id);if(!circle)return false;const c=toScreen(circle.center,scene.view),r=circle.radius*scene.view.scale,nearest={x:Math.max(rect.x,Math.min(rect.x+rect.width,c.x)),y:Math.max(rect.y,Math.min(rect.y+rect.height,c.y))};const farthest=Math.max(...[{x:rect.x,y:rect.y},{x:rect.x+rect.width,y:rect.y},{x:rect.x,y:rect.y+rect.height},{x:rect.x+rect.width,y:rect.y+rect.height}].map(p=>distance(p,c)));return distance(nearest,c)<=r&&farthest>=r;}
   if(object.type==='polygon'){const points=object.points.map(point=>pointPosition(scene,point)).filter((p):p is Vec=>!!p).map(p=>toScreen(p,scene.view));return !!points.length&&polyline([...points,points[0]]);}
   if(object.type==='freehand')return polyline(object.points.map(p=>toScreen(p,scene.view)));
+  if(object.type==='equation'){if(object.visible===false)return false;const prepared=prepareDrawingEquations(scene.objects.filter((item):item is DrawingEquation=>item.type==='equation')).get(object.id);if(!prepared)return false;const geometry=drawingEquationGeometry(prepared,scene.view,object.offset);return geometry.paths.some(path=>{const points=[...path.matchAll(/M([\d.-]+) ([\d.-]+)L([\d.-]+) ([\d.-]+)/g)];return points.some(match=>segment({x:Number(match[1]),y:Number(match[2])},{x:Number(match[3]),y:Number(match[4])}));});}
   if(object.type==='function')return plotDrawingFunction(object.expression,scene.view,object.offset).some(polyline);
   if(object.type==='label'){const p=toScreen(object.at,scene.view);return p.x<rect.x+rect.width&&p.x+Math.max(12,object.text.length*11)>rect.x&&p.y>rect.y&&p.y-22<rect.y+rect.height;}
   if(object.type==='angle'){const p=pointPosition(scene,object.vertex);if(!p)return false;const screen=toScreen(p,scene.view);return screen.x+45>=rect.x&&screen.x-45<=rect.x+rect.width&&screen.y+45>=rect.y&&screen.y-45<=rect.y+rect.height;}

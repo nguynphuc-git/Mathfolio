@@ -77,3 +77,5 @@ html[data-theme="dark"] .pdf-question-list button{background:#202c25;border-colo
 html[data-theme="dark"] .pdf-question-list button[aria-pressed="true"]{background:#36533f;border-color:#7eaa88;box-shadow:inset 3px 0 #a0c8a6}
 html[data-theme="dark"] .pdf-question-list button:hover:not(:disabled){background:#304b39;border-color:#7eaa88}
 html[data-theme="dark"] .pdf-question-list button span,html[data-theme="dark"] .pdf-question-list button strong small,html[data-theme="dark"] .pdf-question-browser-heading>div span,html[data-theme="dark"] .pdf-format-actions>span,html[data-theme="dark"] .pdf-typeset-details>summary,html[data-theme="dark"] .pdf-replace-confirm p{color:#c1d4c5}
+
+.focus-mode .problem-images{display:flex}.focus-mode .problem-row{grid-template-columns:minmax(0,2fr) minmax(250px,1fr)}.workspace-content.focus-mode{max-width:1400px}@media(max-width:800px){.focus-mode .problem-row{grid-template-columns:minmax(0,1fr)}}

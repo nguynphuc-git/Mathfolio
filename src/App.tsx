@@ -341,7 +341,7 @@ export default function App() {
   }
   async function addDrawing(image:{name:string;data:string}):Promise<boolean>{
     const version=epoch.current;if(blocked||draft.attachments.length>=4)throw new Error('Each exercise supports up to 4 images.');
-    const added=await reviseIllustrations([...draft.attachments,{id:crypto.randomUUID(),...image,kind:'problem'}]);
+    const added=await reviseIllustrations([...draft.attachments,{id:crypto.randomUUID(),...image,kind:'problem',...(focusMode?{useForAI:false}:{})}]);
     if(added&&version===epoch.current){setDrawingOpen(false);drawingDraft.current=undefined;setStatus('Drawing added to Illustrations. Save the exercise to keep it.');}
     return added;
   }
@@ -566,7 +566,7 @@ export default function App() {
             <button className="cloud-switch" role="switch" aria-checked={cloudAllowed} aria-label="Cloud AI" disabled={blocked} onClick={()=>void toggleCloud()}><span className="switch-track" aria-hidden="true"><span/></span>Cloud AI <strong>{cloudAllowed?'On':'Off'}</strong></button>
         </div>
       </div>
-      {focusMode&&<p className="focus-notice" role="status">Focus mode · Your hints, illustrations and discussion are kept. Exit focus mode to see them.</p>}
+      {focusMode&&<p className="focus-notice" role="status">Focus mode · Problem, sketches and notes. New drawings stay out of AI context.</p>}
       <div className={focusMode?'workspace-content focus-mode':'workspace-content'}>
       <div className="problem-row">
         <section className="paper problem"><div className="panel-heading"><span className="step">01</span><h2>Problem</h2><span className="tag">YOUR PROBLEM</span></div>
@@ -577,14 +577,14 @@ export default function App() {
 
           <div className="row">{draft.confirmed && <button disabled={blocked} onClick={editStatement}>Edit problem</button>}<button className="primary" title="Analyze problem (Ctrl+Enter)" disabled={blocked || !hasEditorContent(draft.statement)} onClick={() => void ask('knowledge')}>{draft.confirmed ? 'Refresh knowledge' : 'Confirm & analyze'}</button></div>
         </section>
-        <aside className="paper problem-images" aria-label="Problem illustrations"><div className="panel-heading"><h2>Illustrations</h2><span className="tag">{illustrations.length} FOR AI</span></div>
-          <div className="illustration-actions"><button type="button" className="primary" disabled={blocked||draft.attachments.length>=4} onClick={()=>setDrawingOpen(true)}>Draw illustration</button><label className="attachment-button">＋ Add illustration<input aria-label="Attach a problem illustration" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked||draft.attachments.length>=4} onChange={event=>{const file=event.target.files?.[0];event.target.value='';void attach(file,'problem');}}/></label></div>
-          <p className="subtle">Selected illustrations are included in new AI requests. Refresh knowledge to update earlier analysis. Notes and solution images are excluded.</p>
+        <aside className="paper problem-images" aria-label="Problem illustrations"><div className="panel-heading"><h2>Illustrations</h2>{!focusMode&&<span className="tag">{illustrations.length} FOR AI</span>}</div>
+          <div className="illustration-actions"><button type="button" className="primary" disabled={blocked||draft.attachments.length>=4} onClick={()=>setDrawingOpen(true)}>Draw illustration</button>{!focusMode&&<label className="attachment-button">＋ Add illustration<input aria-label="Attach a problem illustration" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked||draft.attachments.length>=4} onChange={event=>{const file=event.target.files?.[0];event.target.value='';void attach(file,'problem');}}/></label>}</div>
+          <p className="subtle">{focusMode?'Draw your own figure here. Sketches added in Focus mode are excluded from AI requests.':'Selected illustrations are included in new AI requests. Refresh knowledge to update earlier analysis. Notes and solution images are excluded.'}</p>
           <div className="illustrations-scroll">{!draft.attachments.some(image=>image.kind==='problem')&&<p className="empty-illustrations">Add a diagram, graph or image needed to understand the problem. Click any image to zoom.</p>}
-            <AttachmentGallery images={draft.attachments.filter(image=>image.kind==='problem')} onOpen={setViewingImage} disabled={blocked} onRename={(id,name)=>edit({attachments:draft.attachments.map(image=>image.id===id?{...image,name}:image)})} onRemove={id=>void reviseIllustrations(draft.attachments.filter(image=>image.id!==id))} onAISelection={(id,included)=>void reviseIllustrations(draft.attachments.map(image=>image.id===id?{...image,useForAI:included}:image))}/>
+            <AttachmentGallery images={draft.attachments.filter(image=>image.kind==='problem')} onOpen={setViewingImage} disabled={blocked} onRename={(id,name)=>edit({attachments:draft.attachments.map(image=>image.id===id?{...image,name}:image)})} onRemove={id=>void reviseIllustrations(draft.attachments.filter(image=>image.id!==id))} onAISelection={focusMode?undefined:(id,included)=>void reviseIllustrations(draft.attachments.map(image=>image.id===id?{...image,useForAI:included}:image))}/>
 
           </div>
-          <p className="subtle">{cloudAllowed&&online?'Cloud actions send selected illustrations. Local chat stays on your device.':'Local AI needs a compatible device to understand illustrations. Images are not sent to cloud while Cloud AI is off.'}</p>
+          {!focusMode&&<p className="subtle">{cloudAllowed&&online?'Cloud actions send selected illustrations. Local chat stays on your device.':'Local AI needs a compatible device to understand illustrations. Images are not sent to cloud while Cloud AI is off.'}</p>}
         </aside>
       </div>
       <div className="guidance-row">
