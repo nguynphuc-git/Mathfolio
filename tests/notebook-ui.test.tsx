@@ -870,10 +870,44 @@ describe('manual illustration drawing',()=>{
   it('starts with a choice and restricts coordinate tools to the selected mode',async()=>{
     await click('Draw illustration');expect(host.querySelector('.drawing-canvas')).toBeNull();
     await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Start with blank canvas"]')!.click());
-    expect(host.querySelector('.drawing-canvas')).not.toBeNull();expect(host.querySelector('[aria-label="Point x"]')).toBeNull();expect(host.querySelector('[aria-label="Function equation"]')).toBeNull();
-    await click('Coordinate plane');expect(host.querySelector('[aria-label="Function equation"]')).not.toBeNull();expect(host.querySelector('[aria-label="Point x"]')).not.toBeNull();
+    expect(host.querySelector('.drawing-canvas')).not.toBeNull();expect(host.querySelector('[aria-label="Point x"]')).toBeNull();expect(host.querySelector('[aria-label="Equation 1"]')).toBeNull();
+    await click('Coordinate plane');expect(host.querySelector('[aria-label="Equation 1"]')).not.toBeNull();expect(host.querySelector('[aria-label="Point x"]')).not.toBeNull();
     expect(host.textContent).not.toContain('Select area');expect(host.querySelector('.drawing-selection-actions [aria-label="Delete selected objects"]')).not.toBeNull();
-    await click('Blank canvas');expect(host.querySelector('[aria-label="Function equation"]')).toBeNull();
+    await click('Blank canvas');expect(host.querySelector('[aria-label="Equation 1"]')).toBeNull();
+  });
+  it('offers free equation rows, supported keys and parameter sliders',async()=>{
+    await click('Draw illustration');await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Start with coordinate plane"]')!.click());
+    const sidebar=host.querySelector('.drawing-sidebar')!;
+    expect(sidebar.firstElementChild?.textContent).toBe('Snap to gridGridAxes');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Equation 1"]')!.value).toBe('');
+    const keys=host.querySelector('[aria-label="Equation math keyboard"]')!;
+    expect(keys.textContent).not.toMatch(/[∅∈∫ℝΣ]/);expect(keys.textContent).toContain('sin');
+    await type('[aria-label="Equation 1"]','x-y=b');await click('Add slider for b');
+    expect(host.querySelector('[aria-label="Slider b"]')).not.toBeNull();
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Equation 2"]')!.value).toBe('b=1');
+    expect(host.querySelector('.equation-error')).toBeNull();
+    await type('[aria-label="Slider b"]','-3.13');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Equation 2"]')!.value).toBe('b=-3.13');
+    await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Remove expression 2"]')!.click());expect(host.querySelector('.equation-error')?.textContent).toContain('Define b');
+  });
+  it('allows manual sketches in Focus and persists their exclusion from AI without clearing guidance',async()=>{
+    await openWorkspace();await click('Focus mode');
+    const illustrations=host.querySelector('.problem-images')!;
+    expect(illustrations.querySelector('[aria-label="Attach a problem illustration"]')).toBeNull();
+    expect(illustrations.textContent).not.toMatch(/FOR AI|Cloud AI|Use this illustration for AI/);
+    await drawPoint();await click('Add to illustrations');
+    expect(host.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(illustrations.querySelectorAll('img')).toHaveLength(1);
+    expect(illustrations.querySelector('input[type="checkbox"]')).toBeNull();
+    await click('Exit focus mode');
+    expect(illustrations.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false);
+    expect(host.textContent).toContain('Original essentials');expect(host.textContent).toContain('Original hint');
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toContain('Original notes');
+    await click('Save exercise');
+    expect(stored().exercises.find(item=>item.id==='first')!.attachments.find(image=>image.kind==='problem')).toMatchObject({useForAI:false});
+    mocks.ai.mockResolvedValue({text:'Reply',source:'on_device'});
+    await type('[aria-label="Discussion question"]','Explain');await click('Send');
+    expect(mocks.ai).toHaveBeenLastCalledWith(expect.objectContaining({images:[]}),expect.any(Function),expect.any(AbortSignal));
   });
   it('attaches an exported drawing as a problem illustration and keeps notes',async()=>{
     await type('[aria-label="Notes"]',String.raw`\text{Keep my notes}`);await drawPoint();await type('[aria-label="Drawing image name"]','My construction');

@@ -4,6 +4,8 @@ Sổ bài tập toán cá nhân. Nhập công thức, viết lời giải, đín
 
 Repo chính: [nguynphuc-git/Mathfolio](https://github.com/nguynphuc-git/Mathfolio), nhánh **main**. Dự án được tách từ nhánh `feat/digital-exercise-notebook` của StudyLens, giữ nguyên toàn bộ lịch sử commit đến `76006fc`.
 
+Khung vẽ Illustration có chế độ nền trắng hoặc tọa độ. Ở chế độ tọa độ, nhập nhiều phương trình tự do, bất phương trình, biến có thanh trượt và dãy giá trị; kéo nền để dịch khung nhìn, giữ Shift để chọn nhiều hình. Focus mode vẫn cho tự vẽ, và ảnh thêm tại đây mặc định không dùng cho AI.
+
 ## Chạy thử trên máy của đồng đội
 
 1. Cài [Node.js 24 LTS](https://nodejs.org/). Lần chạy đầu cần Internet để tải các gói.
