@@ -96,15 +96,8 @@ html[data-theme="dark"] .pdf-question-list button span,html[data-theme="dark"] .
 
 /* Import tools belong to the problem they change. */
 .problem > .panel-heading { margin-bottom: 0; }
-.problem-import { margin: 0 0 0 auto; }
-.problem-import > summary { font-size: 13px; padding: 7px 10px; }
-.problem-import .tool-content {
-  left: auto;
-  right: 0;
-  width: min(340px, calc(100vw - 76px));
-}
-.problem-import .import-actions { flex-direction: column; align-items: stretch; }
-.problem-import .attachment-button { min-width: 0; margin: 0; text-align: left; }
+.problem-import { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: 100%; margin: 0 0 0 auto; }
+.problem-import .attachment-button { min-width: 0; min-height: 40px; margin: 0; padding: 8px 10px; font-size: 13px; text-align: center; white-space: nowrap; }
 .problem-import input { width: 100%; }
 .problem {
   overflow: visible;
@@ -204,13 +197,6 @@ html[data-theme="dark"] .preview-section .message small { color: var(--menu-mute
   .symbol-browser .symbol-drag-handle { padding: 0; }
   .symbol-browser .symbol-drag-handle strong { font-size: 17px; }
   .symbol-browser .keyboard-target { margin: 0; font-size: 11px; flex-shrink: 0; }
-  .symbol-browser > input {
-    flex-shrink: 0;
-    min-height: 32px;
-    padding: 3px 8px;
-    margin: 0;
-    font-size: 16px;
-  }
   .symbol-browser .recent-symbols { display: none; }
   .symbol-browser .symbol-categories {
     flex-shrink: 0;
