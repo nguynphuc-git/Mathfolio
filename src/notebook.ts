@@ -1,4 +1,5 @@
-import { get, set } from 'idb-keyval';
+import { get } from 'idb-keyval';
+import { persistNotebook } from './notebook-sync-store';
 import {defaultFolderColor,isFolderColor,type FolderColor} from './folder-colors';
 import type { GeometryDiagram } from './geometry-diagram';
 import type { ProofDiagram } from './geometry-proof';
@@ -41,7 +42,7 @@ export async function loadNotebook(key: string): Promise<Notebook> {
   // Translate the previous built-in folder label, preserving user-created names.
   return { ...book, folders: book.folders.map(folder => folder.id === 'general' && folder.name === 'Bài tập của tôi' ? { ...folder, name: 'My exercises' } : folder) };
 }
-export async function saveNotebook(key: string, value: Notebook) { await set(key, value); }
+export async function saveNotebook(key: string, value: Notebook, before?: Notebook): Promise<Notebook> { return persistNotebook(key, value, before); }
 /** general is an implicit history view; legacy single-folder records remain readable. */
 export function exerciseFolderIds(exercise:Pick<Exercise,'folderId'|'folderIds'>):string[]{
   return [...new Set(exercise.folderIds??[exercise.folderId])].filter(id=>id!=='general');

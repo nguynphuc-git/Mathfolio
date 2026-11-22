@@ -10,6 +10,15 @@ allow create: if owner()
 && request.resource.contentType in ['application/pdf', 'text/markdown', 'text/plain'];
 allow update: if false;
 }
+match /users/{uid}/notebook-snapshots/{exerciseId}/{fileName} {
+function owner() { return request.auth != null && request.auth.uid == uid; }
+allow read, delete: if owner();
+allow create: if owner() && resource == null && exerciseId.matches('[a-zA-Z0-9_-]{1,200}')
+  && fileName.matches('[a-zA-Z0-9-]{1,80}[.]json')
+  && request.resource.contentType == 'application/json'
+  && request.resource.size > 0 && request.resource.size <= 32 * 1024 * 1024;
+allow update: if false;
+}
 match /{allPaths=**} { allow read, write: if false; }
 }
 }

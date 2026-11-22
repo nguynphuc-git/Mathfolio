@@ -1,6 +1,6 @@
 # Mathfolio
 
-Sổ bài tập toán cá nhân. Nhập công thức, viết lời giải, đính kèm ảnh và lưu bài trong thư mục riêng của tài khoản trên trình duyệt hiện tại.
+Sổ bài tập toán cá nhân. Nhập công thức, viết lời giải, đính kèm ảnh và lưu bài trên máy; bật Cloud sync để đồng bộ thư viện theo tài khoản sang các thiết bị khác.
 
 Repo chính: [nguynphuc-git/Mathfolio](https://github.com/nguynphuc-git/Mathfolio), nhánh **main**. Dự án được tách từ nhánh `feat/digital-exercise-notebook` của StudyLens, giữ nguyên toàn bộ lịch sử commit đến `76006fc`.
 
@@ -64,6 +64,8 @@ Các biến `VITE_*` xuất hiện trong trình duyệt. Chỉ điền cấu hì
 Auth Emulator và Firebase thật có bộ tài khoản riêng. Sổ phân vùng theo project và UID trên thiết bị, nên đổi sang project của ban tổ chức sẽ mở một sổ riêng. Khi hết sprint, xác nhận thời điểm thu hồi quota và quyền với ban tổ chức trước khi tiếp tục dùng AI.
 
 ## Kiểm tra kỹ thuật
+
+Cloud sync gồm đề, lời giải AI đã mở, ghi chú, chat, ảnh và thư mục. Bật tại **Account → Enable cloud sync** trên từng thiết bị. Khi offline, bài vẫn lưu trên máy và chờ đồng bộ; bản nháp Workspace không đồng bộ. Xem [cấu hình Firebase và kiểm tra Cloud sync](CLOUD_SYNC.md) trước khi triển khai.
 
 ```sh
 npm ci

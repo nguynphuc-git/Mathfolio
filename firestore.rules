@@ -29,6 +29,38 @@ allow create, update: if request.auth != null && request.auth.uid == uid
 && request.resource.data.markdown.size() <= 30000
 && request.resource.data.updatedAt == request.time;
 }
+// Private notebook index. Exercise bodies (including images) are immutable Storage snapshots.
+match /users/{uid}/notebook/{entryId} {
+function owner() { return request.auth != null && request.auth.uid == uid; }
+function valid() {
+  let data = request.resource.data;
+  let base = 'users/' + uid + '/notebook-snapshots/' + data.id + '/';
+  return data.keys().hasAll(['schema','kind','id','revision','generation','deleted','payload','storagePath','previousStoragePath','updatedAt'])
+    && data.keys().hasOnly(['schema','kind','id','revision','generation','deleted','payload','storagePath','previousStoragePath','updatedAt'])
+    && data.schema == 1 && data.kind in ['folder','exercise']
+    && data.id is string && data.id.matches('[a-zA-Z0-9_-]{1,200}')
+    && entryId == data.kind + '~' + data.id
+    && data.revision is string && data.revision.matches('[a-zA-Z0-9-]{1,80}')
+    && data.generation is int && data.generation > 0
+    && data.deleted is bool && data.payload is string && data.payload.size() <= 2048
+    && data.storagePath is string && data.previousStoragePath is string
+    && (data.previousStoragePath == '' || data.previousStoragePath.matches(base + '[a-zA-Z0-9-]{1,80}[.]json'))
+    && (data.deleted ? data.storagePath == '' && data.payload == ''
+      : data.kind == 'folder' ? data.storagePath == '' && data.previousStoragePath == '' && data.payload.size() > 0
+      : data.payload == '' && data.storagePath == base + data.revision + '.json')
+    && data.updatedAt == request.time;
+}
+allow read: if owner();
+allow create: if owner() && valid() && request.resource.data.generation == 1
+  && request.resource.data.previousStoragePath == '';
+allow update: if owner() && valid()
+  && request.resource.data.kind == resource.data.kind && request.resource.data.id == resource.data.id
+  && request.resource.data.generation == resource.data.generation + 1
+  && request.resource.data.previousStoragePath == resource.data.storagePath
+  && request.resource.data.revision != resource.data.revision;
+// Keep deletion tombstones so an offline device cannot silently resurrect a deleted page.
+allow delete: if false;
+}
 match /{document=**} { allow read, write: if false; }
 }
 }

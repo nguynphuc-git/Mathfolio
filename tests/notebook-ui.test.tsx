@@ -5,8 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NotebookRequest } from '../src/ai';
 import type { Answer, Notebook } from '../src/notebook';
 
-const mocks = vi.hoisted(() => ({ values: new Map<string, unknown>(),signedIn:true, ai: vi.fn(), diagram:vi.fn(), drawingExport:vi.fn(), imageCloud: vi.fn(), imageLocal: vi.fn(), readAttachment: vi.fn(), write: vi.fn(), pdf: vi.fn(), pdfPreview: vi.fn(), prepareImage: vi.fn(), readImage: vi.fn(), insert: vi.fn() }));
-vi.mock('idb-keyval', () => ({ get: vi.fn(async (key: string) => structuredClone(mocks.values.get(key))), del: async (key: string) => { mocks.values.delete(key); }, set: async (key: string, value: unknown) => { mocks.write(key, value); mocks.values.set(key, structuredClone(value)); } }));
+const mocks = vi.hoisted(() => ({ values: new Map<string, unknown>(),signedIn:true, cloud: vi.fn(), cloudWatch: vi.fn(), ai: vi.fn(), diagram:vi.fn(), drawingExport:vi.fn(), imageCloud: vi.fn(), imageLocal: vi.fn(), readAttachment: vi.fn(), write: vi.fn(), pdf: vi.fn(), pdfPreview: vi.fn(), prepareImage: vi.fn(), readImage: vi.fn(), insert: vi.fn() }));
+vi.mock('idb-keyval', () => ({ get: vi.fn(async (key: string) => structuredClone(mocks.values.get(key))), del: async (key: string) => { mocks.values.delete(key); }, set: async (key: string, value: unknown) => { mocks.write(key, value); mocks.values.set(key, structuredClone(value)); }, setMany: async (entries:[string,unknown][]) => { for(const [key,value] of entries)mocks.write(key,value);for(const [key,value] of entries)mocks.values.set(key,structuredClone(value)); } }));
+vi.mock('../src/notebook-cloud', async original => ({ ...await original<typeof import('../src/notebook-cloud')>(), createNotebookCloud: mocks.cloud }));
 vi.mock('../src/notebook', async () => ({ ...(await vi.importActual<typeof import('../src/notebook')>('../src/notebook')), readAttachment: mocks.readAttachment }));
 vi.mock('../src/firebase', () => ({ getFirebaseApp: () => ({}) }));
 vi.mock('firebase/auth', () => ({
@@ -39,6 +40,7 @@ import {geometryExamples} from '../src/geometry';
 import {exampleProofScene} from '../src/geometry-proof-examples';
 import {workspaceDraftKey} from '../src/workspace-draft';
 import { emptyNotebook, newExercise, notebookKey } from '../src/notebook';
+import { updateNotebookState } from '../src/notebook-sync-store';
 
 let root: Root; let host: HTMLDivElement;
 const storageKey = notebookKey('test', 'alice');
@@ -75,6 +77,7 @@ beforeEach(async () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   localStorage.removeItem('mathfolio-appearance-v1');
   mocks.signedIn=true;
+  mocks.cloud.mockReset().mockReturnValue({ watch:mocks.cloudWatch, read:vi.fn(), write:vi.fn() });mocks.cloudWatch.mockReset().mockReturnValue(()=>{});
   mocks.diagram.mockReset().mockImplementation(async(statement:string)=>({statement,scene:exampleProofScene(geometryExamples[0].statement)!,source:'local_construction',showAuxiliary:false}));
   mocks.ai.mockReset(); mocks.imageCloud.mockReset(); mocks.imageLocal.mockReset(); mocks.readAttachment.mockReset(); mocks.insert.mockReset(); mocks.write.mockReset(); mocks.pdf.mockReset(); mocks.pdfPreview.mockReset(); mocks.values.clear();
   mocks.prepareImage.mockReset().mockResolvedValue({ data: 'data:image/jpeg;base64,AA==', name: 'problem.jpg' });
@@ -110,6 +113,51 @@ describe('workspace menus and login backdrop',()=>{
     await type('input[type="email"]','learner@example.test');await type('input[type="password"]','sample-password');await act(async()=>host.querySelector<HTMLElement>('.appearance-disclosure summary')!.click());await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Theme"]')!.click());
     await act(async()=>[...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(option=>option.textContent?.startsWith('Dark'))!.click());
     expect(host.querySelector<HTMLInputElement>('input[type="email"]')!.value).toBe('learner@example.test');expect(host.querySelector<HTMLInputElement>('input[type="password"]')!.value).toBe('sample-password');expect(mocks.ai).not.toHaveBeenCalled();
+  });
+});
+
+describe('cloud sync consent and account controls',()=>{
+  async function enable(){await click('Account');await click('Enable cloud sync');await click('Enable cloud sync',host.querySelector('[role="alertdialog"]')!);}
+  it('keeps sync off until consent and never enables Cloud AI with sync',async()=>{
+    expect(host.textContent).toContain('Cloud sync off');expect(mocks.cloud).not.toHaveBeenCalled();
+    await click('Account');await click('Enable cloud sync');
+    const dialog=host.querySelector('[role="alertdialog"]')!;expect(dialog.textContent).toContain('notes, chat and images');
+    await click('Not now',dialog);expect(mocks.cloud).not.toHaveBeenCalled();
+    await click('Enable cloud sync');await click('Enable cloud sync',host.querySelector('[role="alertdialog"]')!);
+    expect(mocks.cloud).toHaveBeenCalledWith('alice');expect(mocks.cloudWatch).toHaveBeenCalled();
+    expect(mocks.values.get(`${storageKey}:cloud-sync-v1`)).toMatchObject({enabled:true});
+    await click('Workspace');expect(host.querySelector('[aria-label="Cloud AI"]')!.getAttribute('aria-checked')).toBe('false');
+    expect(mocks.ai).not.toHaveBeenCalled();
+  });
+  it('shows paused sync and keeps saved pages when disabled',async()=>{
+    await click('Account');await click('Enable cloud sync');await click('Enable cloud sync',host.querySelector('[role="alertdialog"]')!);
+    const before=structuredClone(stored());await click('Pause cloud sync');
+    expect(stored()).toEqual(before);expect(mocks.values.get(`${storageKey}:cloud-sync-v1`)).toMatchObject({enabled:false});
+    expect(host.textContent).toContain('Cloud sync off');expect(button('Enable cloud sync')).toBeTruthy();
+  });
+  it('queues sync while offline and does not initialize a network client',async()=>{
+    const original=Object.getOwnPropertyDescriptor(navigator,'onLine');Object.defineProperty(navigator,'onLine',{configurable:true,value:false});
+    try{
+      await act(async()=>window.dispatchEvent(new Event('offline')));await click('Account');await click('Enable cloud sync');await click('Enable cloud sync',host.querySelector('[role="alertdialog"]')!);
+      expect(host.textContent).toContain('Cloud sync: offline');expect(button('Sync now').disabled).toBe(true);expect(mocks.cloud).not.toHaveBeenCalled();
+    }finally{if(original)Object.defineProperty(navigator,'onLine',original);else delete (navigator as unknown as {onLine?:boolean}).onLine;}
+  });
+  it('keeps an open draft and preserves both versions when saving after a cloud edit',async()=>{
+    await enable();await openWorkspace();await type('[aria-label="Notes"]','Unsaved local reasoning');
+    await act(async()=>{await updateNotebookState(storageKey,'remote',state=>({...state,book:{...state.book,exercises:state.book.exercises.map(page=>page.id==='first'?{...page,notes:'Newer cloud reasoning'}:page)}}));});
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe('Unsaved local reasoning');
+    await click('Save exercise');
+    expect(stored().exercises.find(page=>page.id==='first')?.notes).toBe('Newer cloud reasoning');
+    expect(stored().exercises.find(page=>page.title.includes('conflict copy'))?.notes).toBe('Unsaved local reasoning');
+  });
+  it('keeps preview edits saveable as a copy after a remote deletion',async()=>{
+    await enable();await library();await click('Open exercise');const dialog=host.querySelector('[role="dialog"]')!;
+    await type('[aria-label="Saved exercise notes"]','My staged notes',dialog);
+    await act(async()=>{await updateNotebookState(storageKey,'remote',state=>({...state,book:{...state.book,exercises:state.book.exercises.filter(page=>page.id!=='first')}}));});
+    expect(host.querySelector('[role="dialog"]')).not.toBeNull();await click('Save changes',host.querySelector('[role="dialog"]')!);
+    expect(stored().exercises.some(page=>page.id==='first')).toBe(false);
+    expect(stored().exercises.find(page=>page.title.includes('conflict copy'))?.notes).toBe('My staged notes');
+    await click('Close',host.querySelector('[role="dialog"]')!);expect(host.querySelector('[role="dialog"]')).toBeNull();
   });
 });
 

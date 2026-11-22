@@ -277,3 +277,8 @@ html[data-theme="dark"] .math-input-frame {
   border-color: #485e4e;
 }
 html[data-theme="dark"] .math-input-tools { border-color: #485e4e; }
+
+.cloud-sync-panel { margin: 24px 0; padding: 20px 0; border-top: 1px solid var(--menu-border, #d8ded4); border-bottom: 1px solid var(--menu-border, #d8ded4); }
+.cloud-sync-panel h2 { margin-top: 0; }
+.cloud-sync-panel > small { display: block; margin-bottom: 12px; }
+.cloud-sync-panel .row { margin-top: 16px; flex-wrap: wrap; }

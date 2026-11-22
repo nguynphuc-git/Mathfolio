@@ -1,3 +1,7 @@
+## Cloud notebook sync
+
+Account now offers opt-in Cloud sync for saved exercises, folders/colors, notes, completion, hints, chat and all images. Each browser/account keeps its local working copy and durable offline queue. Workspace drafts stay local. Cloud AI consent remains separate. Cloud generations and transactions prevent stale overwrites; conflicts preserve a copy, and tombstones prevent deleted pages returning from an unchanged offline device. Private Firestore/Storage rules and authenticated snapshot downloads are included. See [CLOUD_SYNC.md](CLOUD_SYNC.md) for Firebase, Storage, CORS, deployment and verification. This supersedes the initial local-only sync limitations recorded below.
+
 ## Drawing shapes, message images and notebook sketches
 
 - Parallelogram selects three consecutive vertices; the fourth uses A+C−B as a dependent point, so opposite sides remain parallel as defining vertices move. Perp. segment retains the drop-to-foot workflow for off-base points; when the source lies on the base, a third click selects signed length along its normal. A dashed preview shows the pending endpoint, and the endpoint remains perpendicular after base edits.
