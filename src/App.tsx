@@ -613,25 +613,22 @@ export default function App() {
           {!draft.confirmed&&<ProblemSourceInput disabled={blocked} onApply={statement=>edit({statement,statementFormat:'latex'})}/>}
           <MathInput ref={input} value={statementLatex(draft.statement, draft.statementFormat)} readOnly={draft.confirmed} disabled={blocked} onChange={value => edit({ statement: value, statementFormat: 'latex' })}
             toolbar={
-              <MenuDisclosure className="tool-disclosure problem-import">
-                <summary>Add content</summary>
-                <div className="tool-content import-actions">
-                  <label className="attachment-button pdf-upload-button">＋ Read PDF
-                    <input aria-label="Read PDF" type="file" accept="application/pdf,.pdf" disabled={blocked} onChange={event => {
-                      const file = event.target.files?.[0];
-                      event.target.value = '';
-                      void loadPdf(file);
-                    }}/>
-                  </label>
-                  <label className="attachment-button">＋ Read image
-                    <input aria-label="Read a problem image" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked} onChange={event => {
-                      const file = event.target.files?.[0];
-                      event.target.value = '';
-                      void loadImage(file);
-                    }}/>
-                  </label>
-                </div>
-              </MenuDisclosure>
+              <div className="problem-import" role="group" aria-label="Read a problem">
+                <label className="attachment-button pdf-upload-button">＋ Read PDF
+                  <input aria-label="Read PDF" type="file" accept="application/pdf,.pdf" disabled={blocked} onChange={event => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    void loadPdf(file);
+                  }}/>
+                </label>
+                <label className="attachment-button">＋ Read image
+                  <input aria-label="Read a problem image" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked} onChange={event => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    void loadImage(file);
+                  }}/>
+                </label>
+              </div>
             }
           />
           {!draft.confirmed && <><p className="subtle">Type your problem or paste LaTeX. Insert symbols directly below.</p><MathKeyboard disabled={blocked} onActivate={()=>input.current?.focus()} onInsert={symbol => insertMath(symbol.latex)}/></>}

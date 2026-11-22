@@ -817,7 +817,7 @@ describe('workspace recovery and library tools',()=>{
     expect(host.textContent).toContain('No matching exercises');
     expect(mocks.ai).not.toHaveBeenCalled();
   });
-  it('uses the Mathfolio wordmark, places discussion before notes, and keeps zoom and symbol search local',async()=>{
+  it('uses the Mathfolio wordmark, places discussion before notes, and keeps zoom and symbol categories local',async()=>{
     expect(host.querySelector('.brand-wordmark')?.textContent).toBe('Mathfolio');
     expect(host.querySelector('.brand')?.textContent).not.toContain('Σ');
     expect([...host.querySelector('.workbench')!.children].map(x=>x.className)).toEqual(['paper discussion','paper notes']);
@@ -825,8 +825,9 @@ describe('workspace recovery and library tools',()=>{
     await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Increase math size"]')!.click());
     expect(host.querySelector<HTMLElement>('main')!.style.getPropertyValue('--problem-font-size')).toBe('18px');
     const keyboard=host.querySelector('.problem .math-keyboard')!;await click('More symbols',keyboard);
-    await type('[aria-label="Search math symbols"]','integral',document);
-    expect(document.querySelector('[aria-label="Search results"]')?.textContent).toContain('∫');
+    expect(document.querySelector('[aria-label="Search math symbols"]')).toBeNull();
+    await click('Calculus & series',document);
+    expect(document.querySelector('.symbol-category-content[aria-label="Calculus & series"]')?.textContent).toContain('∫');
     await act(async()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
     expect(document.querySelector('.symbol-browser')).not.toBeNull();
     await act(async()=>document.querySelector<HTMLButtonElement>('[aria-label="Close symbol keyboard"]')!.click());
@@ -1116,11 +1117,11 @@ describe('new workspace rows and selected visual context',()=>{
     await click('Cloud AI',host.querySelector('.workspace-actions')!);expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain('selected problem illustrations');expect(mocks.ai).not.toHaveBeenCalled();
     await click('Allow Cloud AI');await click('Open level 1');expect(mocks.ai.mock.calls[0][0]).toMatchObject({purpose:'hint1',route:'local',cloudAllowed:true,images:[{name:'triangle.png'}]});
   });
-  it('does not run AI for an empty rich chat question or when searching symbols with Ctrl+Enter',async()=>{
+  it('does not run AI for an empty rich chat question or inside the symbol keyboard with Ctrl+Enter',async()=>{
     await openWorkspace();await type('[aria-label="Discussion question"]',String.raw`\text{   }`);expect(button('Send').disabled).toBe(true);
     await click('Workspace');await click('Show math keyboard');await click('More symbols',host.querySelector('.notes')!);
-    const search=document.querySelector<HTMLInputElement>('[aria-label="Search math symbols"]')!;
-    await act(async()=>search.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true,cancelable:true})));
+    const category=document.querySelector<HTMLButtonElement>('.symbol-categories button')!;
+    await act(async()=>category.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true,cancelable:true})));
     expect(mocks.ai).not.toHaveBeenCalled();
   });
 });
@@ -1158,11 +1159,12 @@ describe('workspace comfort and English guide',()=>{
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe('2x+3=7');
     expect(mocks.ai).not.toHaveBeenCalled();
   });
-  it('keeps PDF and image imports inside Problem in both workspace modes',async()=>{
+  it('shows PDF and image imports directly inside Problem in both workspace modes',async()=>{
     expect(host.querySelector('.workspace-toolbar .import-actions')).toBeNull();
     for(const focus of [false,true]){
       if(focus)await click('Solo mode');
       const menu=host.querySelector('.problem .problem-import')!;
+      expect(menu.closest('details')).toBeNull();expect(menu.querySelector('summary')).toBeNull();
       expect(menu.querySelector('[aria-label="Read PDF"]')).not.toBeNull();
       expect(menu.querySelector('[aria-label="Read a problem image"]')).not.toBeNull();
     }

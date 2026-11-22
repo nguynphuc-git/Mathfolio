@@ -8,7 +8,7 @@ export function UsageGuide({onStart}:{onStart:()=>void}) {
       <article className="paper">
         <h2>Bring your problem</h2>
         <p>Type in <strong>Problem</strong>, switch between <strong>Math</strong> and <strong>Text</strong>, or paste text and LaTeX. Use the symbol buttons to add formulas.</p>
-        <p>Inside the editor, open <strong>Add content</strong>. Choose <strong>Read PDF</strong> to select questions across pages, or <strong>Read image</strong> to extract a photographed problem. Review and correct the formulas before using the result.</p>
+        <p>Inside the Problem editor, choose <strong>Read PDF</strong> to select questions across pages, or <strong>Read image</strong> to extract a photographed problem. Review and correct the formulas before using the result.</p>
       </article>
       <article className="paper">
         <h2>Choose your help</h2>
