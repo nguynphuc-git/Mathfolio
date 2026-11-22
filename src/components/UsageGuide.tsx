@@ -7,25 +7,29 @@ export function UsageGuide({onStart}:{onStart:()=>void}) {
     <div className="guide-grid">
       <article className="paper">
         <h2>Bring your problem</h2>
-        <p>Type or paste a problem, or import one from a PDF or image. Check the formulas and add a sketch if it helps.</p>
+        <p>Type in <strong>Problem</strong>, switch between <strong>Math</strong> and <strong>Text</strong>, or paste text and LaTeX. Use the symbol buttons to add formulas.</p>
+        <p>Inside the editor, open <strong>Add content</strong>. Choose <strong>Read PDF</strong> to select questions across pages, or <strong>Read image</strong> to extract a photographed problem. Review and correct the formulas before using the result.</p>
       </article>
       <article className="paper">
-        <h2>Choose a hint</h2>
-        <p>Select <strong>Confirm &amp; analyze</strong> to see the concepts you need. You can open any hint. For a gradual start, try the starting point, then the method, then the full solution.</p>
+        <h2>Choose your help</h2>
+        <p>Select <strong>Confirm &amp; analyze</strong> to see the concepts needed for your problem. Choose Local AI or Cloud AI for the analysis.</p>
+        <p>Open any hint you need. We recommend trying level 1 for a starting point, level 2 for the method, then level 3 for the full solution. Use <strong>Reset hints</strong> to generate fresh hints.</p>
       </article>
       <article className="paper">
         <h2>Work through it</h2>
-        <p>Use chat to ask a question. Keep your reasoning and sketches in <strong>Your working notes</strong>, or turn on <strong>Focus mode</strong> to work on your own.</p>
+        <p>In <strong>Illustrations</strong>, draw a figure or add an image. Ask questions in chat and attach a sketch to your next message. Keep your reasoning and solution images in <strong>Your working notes</strong>.</p>
+        <p>Turn on <strong>Solo mode</strong> to work with your problem, illustrations and notes. Images added there stay outside AI context. Choose <strong>Exit solo</strong> to return to hints and chat.</p>
       </article>
       <article className="paper">
         <h2>Save and revisit</h2>
-        <p>Choose <strong>Save exercise</strong> to keep your work in the <strong>Exercise library</strong>. Return there to continue or mark it completed.</p>
+        <p>Choose <strong>Save exercise</strong> to name your work and place it in folders. Autosave keeps a workspace draft; save the exercise to update its library copy.</p>
+        <p>In <strong>Exercise library</strong>, search your saved work or mark it completed. Open a preview to read the page and edit notes, then choose <strong>Open in workspace</strong> to continue the exercise.</p>
       </article>
     </div>
     <section className="paper guide-details" aria-labelledby="guide-ai">
       <h2 id="guide-ai">AI and storage</h2>
-      <p>Local AI runs on supported devices. If you enable Cloud AI, your problem and selected images can be sent with your request. Your working notes stay private.</p>
-      <p>Your notebook is saved in this browser for your account. Clearing browser data can erase it.</p>
+      <p>Local AI needs a supported device and a downloaded model. Cloud AI needs internet access and your permission to send the problem and selected images. Check AI answers against your source and calculations.</p>
+      <p>Your notebook is saved in this browser for your account. Clearing browser data can erase it. Open Mathfolio while online first and let it finish loading to prepare for offline use.</p>
     </section>
     <details className="paper guide-details">
       <summary>Keyboard shortcuts</summary>

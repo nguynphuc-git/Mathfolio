@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState, type ReactNode } from 'react';
 import { MathfieldElement } from 'mathlive';
 import { clipboardMathText } from '../clipboard-math';
 import { useMathKeyboard,editableMathTarget, type MathTarget } from './MathKeyboardContext';
@@ -11,8 +11,8 @@ MathfieldElement.fontsDirectory = null;
 MathfieldElement.soundsDirectory = null;
 MathfieldElement.locale = 'en';
 export interface MathInputHandle { focus: () => void; insert: (latex: string) => void; replace: (latex: string) => void }
-interface Props { value:string; onChange?:(value:string)=>void; readOnly?:boolean; disabled?:boolean; label?:string; compact?:boolean; maxLength?:number; initialMode?:'math'|'text'; preserveLines?:boolean; placeholder?:string; mathOnly?:boolean }
-export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({value,onChange,readOnly,disabled,label='Problem statement',compact,maxLength=6000,initialMode='math',preserveLines=false,placeholder='Type your problem here',mathOnly=false}, ref) {
+interface Props { toolbar?:ReactNode; value:string; onChange?:(value:string)=>void; readOnly?:boolean; disabled?:boolean; label?:string; compact?:boolean; maxLength?:number; initialMode?:'math'|'text'; preserveLines?:boolean; placeholder?:string; mathOnly?:boolean }
+export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({toolbar,value,onChange,readOnly,disabled,label='Problem statement',compact,maxLength=6000,initialMode='math',preserveLines=false,placeholder='Type your problem here',mathOnly=false}, ref) {
   const keyboard=useMathKeyboard(),keyboardRef=useRef(keyboard);keyboardRef.current=keyboard;const editorId=useId();
   const host=useRef<HTMLDivElement>(null);const element=useRef<MathfieldElement|null>(null);
   const change=useRef(onChange);change.current=onChange;
@@ -107,7 +107,7 @@ export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({v
     field.addEventListener('paste',handlePaste,true);field.addEventListener('keydown',handleKey,true);field.addEventListener('keyup',handleUp,true);field.addEventListener('blur',resetTaps);field.addEventListener('pointerdown',resetTaps,true);window.addEventListener('blur',resetTaps);
     host.current?.appendChild(field);element.current=field;installStyle();if(initialMode==='text'&&!mathOnly)field.mode='text';syncMode();
     return()=>{keyboardRef.current?.release(editorId);field.removeEventListener('pointerup',touchFocus,true);field.removeEventListener('focusin',activate);field.removeEventListener('focus',activate,true);field.removeEventListener('pointerdown',activate,true);field.removeEventListener('mount',installStyle);field.removeEventListener('input',handleInput);field.removeEventListener('mode-change',syncMode);field.removeEventListener('selection-change',syncMode);field.removeEventListener('paste',handlePaste,true);field.removeEventListener('keydown',handleKey,true);field.removeEventListener('keyup',handleUp,true);field.removeEventListener('blur',resetTaps);field.removeEventListener('pointerdown',resetTaps,true);window.removeEventListener('blur',resetTaps);field.remove();element.current=null;notify.current=()=>{};toggleMode.current=()=>{};focus.current=()=>{};};
-  },[label,initialMode,placeholder,editorId,mathOnly]);
+  },[label,initialMode,placeholder,editorId,mathOnly,!!toolbar]);
   useEffect(()=>{const field=element.current;validValue.current=value;setInputError('');if(field&&field.value!==value){const previous=field.mode;field.value=value;field.mode=previous;}},[value]);
   useEffect(()=>{if(element.current){
     const field=element.current;
@@ -129,6 +129,10 @@ export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({v
   }),[]);
   return <div className={`math-editor${compact?' compact-editor':''}`}>
     {!readOnly&&!mathOnly&&<div className="editor-mode-bar"><button type="button" className="editor-mode-toggle" disabled={disabled} aria-label={`Input mode for ${label}`} aria-description={`Current mode: ${mode}. Press Alt once (Option on Mac) to switch.`} title="Switch Math / Text · Alt (Option ⌥ on Mac)" onPointerDown={event=>event.preventDefault()} onMouseDown={event=>event.preventDefault()} onClick={()=>toggleMode.current()}><span aria-hidden="true">{mode==='math'?'𝑥':'Aa'}</span> {mode==='math'?'Math':'Text'} ↔</button><small>Alt / ⌥ to switch</small></div>}
-    <div ref={host} className={`math-input${compact?' compact':''}`}/>{inputError&&<small className="error" role="alert">{inputError}</small>}
+    {toolbar ? <div className="math-input-frame">
+      <div className="math-input-tools">{toolbar}</div>
+      <div ref={host} className={`math-input${compact?' compact':''}`}/>
+    </div> : <div ref={host} className={`math-input${compact?' compact':''}`}/>}
+    {inputError&&<small className="error" role="alert">{inputError}</small>}
   </div>;
 });

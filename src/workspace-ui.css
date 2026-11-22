@@ -96,7 +96,7 @@ html[data-theme="dark"] .pdf-question-list button span,html[data-theme="dark"] .
 
 /* Import tools belong to the problem they change. */
 .problem > .panel-heading { margin-bottom: 0; }
-.problem-import { margin-left: auto; }
+.problem-import { margin: 0 0 0 auto; }
 .problem-import > summary { font-size: 13px; padding: 7px 10px; }
 .problem-import .tool-content {
   left: auto;
@@ -119,7 +119,7 @@ html[data-theme="dark"] .pdf-question-list button span,html[data-theme="dark"] .
   flex: 1;
   min-height: 0;
 }
-.problem > .math-editor > .math-input {
+.problem > .math-editor > .math-input-frame {
   flex: 1;
   height: 0;
   min-height: 300px;
@@ -144,7 +144,7 @@ html[data-theme="dark"] .preview-section .message small { color: var(--menu-mute
 @media (max-width: 800px) {
   .problem { min-height: 0; }
   .problem > .math-editor { flex: none; }
-  .problem > .math-editor > .math-input {
+  .problem > .math-editor > .math-input-frame {
     height: clamp(280px, 46dvh, 440px);
     min-height: 0;
     flex: none;
@@ -250,3 +250,30 @@ html[data-theme="dark"] .preview-section .message small { color: var(--menu-mute
 @media (min-width: 801px) {
   .problem-row > .problem-images { max-height: none; }
 }
+
+.math-input-frame {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid #d8ded4;
+  border-radius: 6px;
+  background: #fffefa;
+}
+.math-input-tools {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e3e8dc;
+}
+.math-input-frame > .math-input {
+  flex: 1;
+  height: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 0 0 6px 6px;
+}
+html[data-theme="dark"] .math-input-frame {
+  background: #29382f;
+  border-color: #485e4e;
+}
+html[data-theme="dark"] .math-input-tools { border-color: #485e4e; }

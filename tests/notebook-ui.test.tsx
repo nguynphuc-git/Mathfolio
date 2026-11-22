@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, forwardRef, useImperativeHandle } from 'react';
+import { act, forwardRef, useImperativeHandle, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NotebookRequest } from '../src/ai';
@@ -30,9 +30,9 @@ vi.mock('../src/components/PdfFormulaCropper', () => ({
     <>{!cloudOnly&&<button type="button" onClick={() => onInsert?.(String.raw`\frac{x^2}{2}`)}>Mock recognize formula</button>}<button type="button" onClick={() => void onCloudRead?.('data:image/png;base64,AA==')}>Mock read whole PDF page</button></>
 }));
 // MathLive caret/layout is tested manually in Chrome; these tests exercise page state and persistence.
-vi.mock('../src/components/MathInput', () => ({ MathInput: forwardRef(function Field(props: { value: string; onChange?: (value: string) => void; readOnly?: boolean; disabled?: boolean; label?: string }, ref) {
+vi.mock('../src/components/MathInput', () => ({ MathInput: forwardRef(function Field(props: { toolbar?: ReactNode; value: string; onChange?: (value: string) => void; readOnly?: boolean; disabled?: boolean; label?: string }, ref) {
   useImperativeHandle(ref, () => ({ focus() {}, replace(latex:string) {props.onChange?.(latex);}, insert(latex:string) {mocks.insert(latex);props.onChange?.(props.value+latex);} }));
-  return <textarea aria-label={props.label ?? 'Problem statement'} readOnly={props.readOnly} disabled={props.disabled} value={props.value} onChange={event => props.onChange?.(event.target.value)}/>;
+  return <><div className="mock-editor-tools">{props.toolbar}</div><textarea aria-label={props.label ?? 'Problem statement'} readOnly={props.readOnly} disabled={props.disabled} value={props.value} onChange={event => props.onChange?.(event.target.value)}/></>;
 }) }));
 import App from '../src/App';
 import {geometryExamples} from '../src/geometry';
@@ -64,7 +64,7 @@ async function chooseOption(label:string,text:string){
 }
 async function uploadPdf(questions:{page:number;text:string}[]){
   mocks.pdf.mockResolvedValue(questions);const file=new File(['pdf'],'worksheet.pdf',{type:'application/pdf'});
-  const upload=host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;Object.defineProperty(upload,'files',{configurable:true,value:[file]});
+  const upload=host.querySelector<HTMLInputElement>('[aria-label="Read PDF"]')!;Object.defineProperty(upload,'files',{configurable:true,value:[file]});
   await act(async()=>upload.dispatchEvent(new Event('change',{bubbles:true})));
   return file;
 }
@@ -101,7 +101,7 @@ describe('workspace menus and login backdrop',()=>{
   });
   it('keeps the four main actions in their own group with content tools separate',()=>{
     const actions=host.querySelector('[aria-label="Exercise actions"]')!;
-    expect(actions.contains(button('＋ New exercise'))).toBe(true);expect(actions.contains(button('Focus mode'))).toBe(true);expect(actions.contains(button('Save exercise'))).toBe(true);expect(actions.querySelector('[role="switch"]')).not.toBeNull();
+    expect(actions.contains(button('＋ New exercise'))).toBe(true);expect(actions.contains(button('Solo mode'))).toBe(true);expect(actions.contains(button('Save exercise'))).toBe(true);expect(actions.querySelector('[role="switch"]')).not.toBeNull();
     expect(actions.querySelector('.study-options')).toBeNull();expect(host.querySelector('.workspace-tools .study-options')).not.toBeNull();
   });
   it('shows decorative mathematics only on the signed-out page without changing login input',async()=>{
@@ -407,7 +407,7 @@ describe('saved page previews and workspace copies', () => {
   it('keeps PDF upload available and confirms replacement of an analyzed problem', async () => {
     await openWorkspace();
     mocks.pdf.mockResolvedValue([{ page: 1, text: '1. Integrate x dx' }]);
-    const upload = host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
+    const upload = host.querySelector<HTMLInputElement>('[aria-label="Read PDF"]')!;
     const file = new File(['mock pdf'], 'replacement.pdf', { type: 'application/pdf' });
     Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
     await act(async () => { upload.dispatchEvent(new Event('change', { bubbles: true })); });
@@ -427,7 +427,7 @@ describe('saved page previews and workspace copies', () => {
 
   it('reports PDF extraction errors without opening an empty question picker', async () => {
     mocks.pdf.mockRejectedValue(new Error('Could not recognize text in this PDF.'));
-    const upload = host.querySelector<HTMLInputElement>('[aria-label="Choose a PDF"]')!;
+    const upload = host.querySelector<HTMLInputElement>('[aria-label="Read PDF"]')!;
     Object.defineProperty(upload, 'files', { configurable: true, value: [new File(['mock'], 'scan.pdf', { type: 'application/pdf' })] });
     await act(async () => { upload.dispatchEvent(new Event('change', { bubbles: true })); });
     expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not recognize text');
@@ -929,7 +929,7 @@ describe('manual illustration drawing',()=>{
     await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Remove expression 2"]')!.click());expect(host.querySelector('.equation-error')?.textContent).toContain('Define b');
   });
   it('allows manual sketches in Focus and persists their exclusion from AI without clearing guidance',async()=>{
-    await openWorkspace();await click('Focus mode');
+    await openWorkspace();await click('Solo mode');
     const illustrations=host.querySelector('.problem-images')!;
     expect(illustrations.querySelector('[aria-label="Attach a problem illustration"]')).not.toBeNull();
     expect(illustrations.textContent).not.toMatch(/FOR AI|Cloud AI|Use this illustration for AI/);
@@ -937,7 +937,7 @@ describe('manual illustration drawing',()=>{
     expect(host.querySelector('[role="alertdialog"]')).toBeNull();
     expect(illustrations.querySelectorAll('img')).toHaveLength(1);
     expect(illustrations.querySelector('input[type="checkbox"]')).toBeNull();
-    await click('Exit focus mode');
+    await click('Exit solo mode');
     expect(illustrations.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false);
     expect(host.textContent).toContain('Original essentials');expect(host.textContent).toContain('Original hint');
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toContain('Original notes');
@@ -948,14 +948,14 @@ describe('manual illustration drawing',()=>{
     expect(mocks.ai).toHaveBeenLastCalledWith(expect.objectContaining({images:[]}),expect.any(Function),expect.any(AbortSignal));
   });
   it('uploads and views images in Focus without AI selection or clearing analyzed context',async()=>{
-    await openWorkspace();await click('Focus mode');const upload=host.querySelector<HTMLInputElement>('[aria-label="Attach a problem illustration"]')!;
+    await openWorkspace();await click('Solo mode');const upload=host.querySelector<HTMLInputElement>('[aria-label="Attach a problem illustration"]')!;
     Object.defineProperty(upload,'files',{configurable:true,value:[new File(['image'],'Focus photo.png',{type:'image/png'})]});
     await act(async()=>upload.dispatchEvent(new Event('change',{bubbles:true})));
     expect(host.querySelector('[role="alertdialog"]')).toBeNull();expect(host.textContent).toContain('Original essentials');
     expect(host.querySelector('.problem-images input[type="checkbox"]')).toBeNull();
     await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="View image: Focus photo.png"]')!.click());expect(host.querySelector('.image-viewer')).not.toBeNull();
     await act(async()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
-    await click('Exit focus mode');expect(host.querySelector<HTMLInputElement>('.problem-images input[type="checkbox"]')!.checked).toBe(false);
+    await click('Exit solo mode');expect(host.querySelector<HTMLInputElement>('.problem-images input[type="checkbox"]')!.checked).toBe(false);
     await click('Save exercise');expect(stored().exercises.find(item=>item.id==='first')!.attachments.find(image=>image.kind==='problem')).toMatchObject({useForAI:false,name:'Focus photo.png'});
     expect(mocks.ai).not.toHaveBeenCalled();expect(mocks.imageCloud).not.toHaveBeenCalled();expect(mocks.imageLocal).not.toHaveBeenCalled();
   });
@@ -1113,17 +1113,17 @@ describe('workspace comfort and English guide',()=>{
   it('keeps PDF and image imports inside Problem in both workspace modes',async()=>{
     expect(host.querySelector('.workspace-toolbar .import-actions')).toBeNull();
     for(const focus of [false,true]){
-      if(focus)await click('Focus mode');
+      if(focus)await click('Solo mode');
       const menu=host.querySelector('.problem .problem-import')!;
-      expect(menu.querySelector('[aria-label="Choose a PDF"]')).not.toBeNull();
+      expect(menu.querySelector('[aria-label="Read PDF"]')).not.toBeNull();
       expect(menu.querySelector('[aria-label="Read a problem image"]')).not.toBeNull();
     }
     expect(mocks.ai).not.toHaveBeenCalled();
   });
   it('toggles focus without discarding notes or requesting AI',async()=>{
-    await type('[aria-label="Notes"]','My approach');await click('Focus mode');
+    await type('[aria-label="Notes"]','My approach');await click('Solo mode');
     expect(host.querySelector('.workspace-content')?.classList.contains('focus-mode')).toBe(true);
-    await click('Exit focus mode');
+    await click('Exit solo mode');
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toBe('My approach');
     expect(mocks.ai).not.toHaveBeenCalled();
   });
