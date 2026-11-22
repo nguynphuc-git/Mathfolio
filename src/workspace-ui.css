@@ -93,3 +93,160 @@ html[data-theme="dark"] .pdf-question-list button span,html[data-theme="dark"] .
     outline-offset: -1px;
   }
 }
+
+/* Import tools belong to the problem they change. */
+.problem > .panel-heading { margin-bottom: 0; }
+.problem-import { margin-left: auto; }
+.problem-import > summary { font-size: 13px; padding: 7px 10px; }
+.problem-import .tool-content {
+  left: auto;
+  right: 0;
+  width: min(340px, calc(100vw - 76px));
+}
+.problem-import .import-actions { flex-direction: column; align-items: stretch; }
+.problem-import .attachment-button { min-width: 0; margin: 0; text-align: left; }
+.problem-import input { width: 100%; }
+.problem {
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: clamp(620px, 78dvh, 820px);
+}
+.problem > .math-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.problem > .math-editor > .math-input {
+  flex: 1;
+  height: 0;
+  min-height: 300px;
+}
+.problem > .problem-actions { gap: 10px; margin-top: 4px; }
+.problem > .subtle { margin: 0; }
+.problem > .math-keyboard { margin: 0; }
+.focus-label-short { display: none; }
+
+.exercise-preview-footer {
+  background: var(--menu-surface);
+  color: var(--menu-ink);
+  border-color: var(--menu-border);
+}
+html[data-theme="dark"] .exercise-preview-header,
+html[data-theme="dark"] .preview-section,
+html[data-theme="dark"] .preview-section details {
+  border-color: var(--menu-border);
+}
+html[data-theme="dark"] .preview-section .message small { color: var(--menu-muted); }
+
+@media (max-width: 800px) {
+  .problem { min-height: 0; }
+  .problem > .math-editor { flex: none; }
+  .problem > .math-editor > .math-input {
+    height: clamp(280px, 46dvh, 440px);
+    min-height: 0;
+    flex: none;
+  }
+}
+@media (max-width: 760px) {
+  .workspace-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto auto;
+    gap: 8px;
+  }
+  .workspace-tools { grid-row: 1; grid-column: 1; }
+  .workspace-actions .save-state {
+    grid-row: 1;
+    grid-column: 2;
+    max-width: 160px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 11px;
+  }
+  .workspace-actions > .row {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    width: 100%;
+  }
+  .workspace-actions > .row > button {
+    min-width: 0;
+    padding: 9px 5px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .workspace-actions .cloud-switch { grid-row: 3; grid-column: 2; }
+  .focus-label-full { display: none; }
+  .focus-label-short { display: inline; }
+}
+@media (max-width: 650px) {
+  .symbol-browser {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    width: min(380px, calc(100vw - 16px));
+    max-height: min(260px, calc(var(--symbol-viewport-height, 100dvh) * .48));
+    margin-top: 0;
+    padding: 9px;
+    overflow: hidden;
+  }
+  .symbol-browser .symbol-drawer-heading {
+    position: static;
+    flex-shrink: 0;
+    margin: 0;
+    padding: 0;
+  }
+  .symbol-browser .symbol-drag-handle { padding: 0; }
+  .symbol-browser .symbol-drag-handle strong { font-size: 17px; }
+  .symbol-browser .keyboard-target { margin: 0; font-size: 11px; flex-shrink: 0; }
+  .symbol-browser > input {
+    flex-shrink: 0;
+    min-height: 32px;
+    padding: 3px 8px;
+    margin: 0;
+    font-size: 16px;
+  }
+  .symbol-browser .recent-symbols { display: none; }
+  .symbol-browser .symbol-categories {
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: 0;
+    padding: 0 0 4px;
+  }
+  .symbol-browser .symbol-categories button {
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-size: 11px;
+    padding: 4px 7px;
+  }
+  .symbol-browser .symbol-category-content {
+    min-height: 35px;
+    flex: 1;
+    overflow-y: auto;
+    max-height: none;
+  }
+  .symbol-browser .math-keys {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+    margin: 0;
+  }
+  .symbol-browser .math-keys button {
+    min-width: 0;
+    min-height: 32px;
+    padding: 2px;
+    font-size: 18px;
+  }
+}
+@media (max-width: 360px) {
+  .workspace-actions > .row > button { font-size: 11px; padding-inline: 3px; }
+}
+@media (min-width: 801px) {
+  .problem-row > .problem-images { max-height: none; }
+}

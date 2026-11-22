@@ -9,7 +9,7 @@ vi.mock('mathlive', async original => {
     insert=vi.fn((latex:string)=>{this.value+=latex;return true;});
     executeCommand=vi.fn(()=>true);
     getValue(){return this.selected;}
-    constructor(){ super(); this.attachShadow({mode:'open'}); }
+    constructor(){ super(); this.attachShadow({mode:'open'}).innerHTML='<span part="keyboard-sink" contenteditable="true" tabindex="0" inputmode="none"></span>'; }
   }
   customElements.define('test-math-editor',Field);
   return {...converters,MathfieldElement:Field};
@@ -38,6 +38,27 @@ beforeEach(async()=>{
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreAllMocks();vi.unstubAllGlobals();});
 describe('math editor event integration',()=>{
+  it('opens native text input synchronously on a touch and keeps it through mode changes',async()=>{
+    const sink=field().shadowRoot!.querySelector<HTMLElement>('[part="keyboard-sink"]')!;
+    expect(sink.getAttribute('inputmode')).toBe('text');
+    expect(sink.getAttribute('enterkeyhint')).toBe('done');
+    await act(async()=>{
+      field().dispatchEvent(new PointerEvent('pointerup',{pointerType:'touch',bubbles:true}));
+      expect(field().shadowRoot!.activeElement).toBe(sink);
+    });
+    const toggle=host.querySelector<HTMLButtonElement>('.editor-mode-toggle')!;
+    const down=new PointerEvent('pointerdown',{pointerType:'touch',bubbles:true,cancelable:true});
+    await act(async()=>toggle.dispatchEvent(down));
+    expect(down.defaultPrevented).toBe(true);
+    await act(async()=>toggle.click());
+    expect(field().mode).toBe('text');
+    expect(field().shadowRoot!.activeElement).toBe(sink);
+    await act(async()=>root.render(<MathInput value="x" readOnly/>));
+    expect(sink.getAttribute('inputmode')).toBe('none');
+    sink.blur();
+    await act(async()=>field().dispatchEvent(new PointerEvent('pointerup',{pointerType:'touch',bubbles:true})));
+    expect(field().shadowRoot!.activeElement).not.toBe(sink);
+  });
   it('explicitly restores unsynchronized native content even when the controlled value has not changed',async()=>{
     const original=String.raw`\frac{x}{2}`;
     await act(async()=>root.render(<MathInput ref={handle} value={original} onChange={change}/>));
