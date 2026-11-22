@@ -4,7 +4,7 @@ import { getFirebaseApp } from './firebase';
 import { friendlyError, notebookAI, recognizeImageWithCloud, recommendsCloudForProblem, type NotebookRequest } from './ai';
 import { MarkdownView } from './components/MarkdownView';
 import { PdfQuestionPicker } from './components/PdfQuestionPicker';
-import { addFolder, recolorFolder, removeFolder, emptyNotebook, loadNotebook, newExercise, notebookKey, putExercise, putExerciseCompletion, putExercisePreview, exerciseFolderIds, inExerciseFolder, withExerciseFolders, sameAttachments, readAttachment, saveNotebook, type Exercise, type Notebook, type Attachment } from './notebook';
+import { hintLevels, openedHints, addFolder, recolorFolder, removeFolder, emptyNotebook, loadNotebook, newExercise, notebookKey, putExercise, putExerciseCompletion, putExercisePreview, exerciseFolderIds, inExerciseFolder, withExerciseFolders, sameAttachments, readAttachment, saveNotebook, type Exercise, type Notebook, type Attachment } from './notebook';
 import { ConfirmDialog, type Confirmation } from './components/ConfirmDialog';
 import { ImageViewer } from './components/ImageViewer';
 import { AttachmentGallery } from './components/AttachmentGallery';
@@ -44,7 +44,6 @@ import {IllustrationDrawing} from './components/IllustrationDrawing';
 import type {DrawingScene} from './drawing';
 
 type DrawingTarget='problem'|'chat'|'solution'|'preview-notes';
-const labels = ['A starting point', 'The method', 'Full solution'];
 export default function App() {
   const appearance=useAppearance();
   const [drawingTarget,setDrawingTarget]=useState<DrawingTarget|null>(null),drawingOpen=drawingTarget!==null;
@@ -54,6 +53,7 @@ export default function App() {
   const [authBusy, setAuthBusy] = useState(false); const [tab, setTab] = useState<'solve' | 'library' | 'guide' | 'account'>('solve');
   const [book, setBook] = useState<Notebook>(emptyNotebook); const [ready, setReady] = useState(false);
   const [draft, setDraft] = useState<Exercise>(newExercise); const [dirty, setDirty] = useState(false);
+  const hints = openedHints(draft.hints);
   const [folder, setFolder] = useState<string | null>(null); const [saveOpen, setSaveOpen] = useState(false);
   const [title, setTitle] = useState(''); const [folderIds, setFolderIds] = useState<string[]>([]); const [newFolder, setNewFolder] = useState('');
   const [folderDialog, setFolderDialog] = useState(false); const [folderName, setFolderName] = useState('');
@@ -292,7 +292,9 @@ export default function App() {
     const version = epoch.current; const id = draft.id; const askedQuestion = question.trim(),messageImages=purpose==='chat'?[...(draft.chatDraftImages??[])]:[];const requestQuestion=askedQuestion||(messageImages.length?'Help me understand the attached drawing.':'');
     if (purpose !== 'knowledge' && purpose !== 'chat' && !draft.confirmed) { setError('Confirm the problem before asking for help.'); return; }
     if (purpose === 'chat' && !hasEditorContent(askedQuestion)&&!messageImages.length) return;
-    if (purpose === 'hint2' && draft.hints.length < 1 || purpose === 'hint3' && draft.hints.length < 2) return;
+    const requestedHint = hintLevels.find(hint => hint.purpose === purpose);
+    if (requestedHint && hints.some(hint => hint.level === requestedHint.level)) return;
+    const contextHints = requestedHint ? hints.filter(hint => hint.level < requestedHint.level) : hints;
     const selectedRoute=purpose==='knowledge'?knowledgeRoute:purpose==='hint1'?firstHintRoute:purpose==='chat'?chatRoute:cloudAllowed&&online?'cloud':'local';
     const requestsCloud=selectedRoute==='cloud'||requestCloud;
     const permitted=requestsCloud?await allowCloud():cloudAllowed&&online;
@@ -303,7 +305,7 @@ export default function App() {
     runStarted.current=performance.now();setElapsed(0);setBusy(purpose); setPartial(''); setError(''); setStatus('Waiting for AI…');
     try {
       const route=requestsCloud&&permitted?'cloud':'local';
-      const answer = await notebookAI({ purpose, statement: draft.statement, knowledge: draft.knowledge?.text ?? '', hints: draft.hints.map(h => h.text), messages: draft.messages, messageImages,question: requestQuestion, cloudAllowed: permitted, route,responseStyle,images:illustrations }, text => {
+      const answer = await notebookAI({ purpose, statement: draft.statement, knowledge: draft.knowledge?.text ?? '', hints: contextHints.map(hint => hint.text), messages: draft.messages, messageImages,question: requestQuestion, cloudAllowed: permitted, route,responseStyle,images:illustrations }, text => {
         if (currentOperation()) { setPartial(text); setStatus('AI is answering…'); }
       }, operation.controller.signal);
       if (!currentOperation()) return;
@@ -311,9 +313,10 @@ export default function App() {
         if (current.id !== id) return current;
         if (purpose === 'knowledge') return { ...current, confirmed: true, knowledge: answer };
         if (purpose === 'chat') return { ...current, chatDraftImages:[],messages: [...current.messages, { role: 'user', text: askedQuestion,format:'latex',...(messageImages.length?{images:messageImages}:{}) }, { role: 'assistant', text: answer.text, source: answer.source }] };
-        return { ...current, hints: [...current.hints, answer] };
+        if (requestedHint) return { ...current, hints: [...current.hints, {...answer, level: requestedHint.level}] };
+        return current;
       });
-      if (purpose.startsWith('hint')) setCollapsedHints(current => current.filter(level => level !== Number(purpose.slice(-1)) - 1));
+      if (requestedHint) setCollapsedHints(current => current.filter(level => level !== requestedHint.level));
       setDirty(true);setDraftSave('idle'); if (purpose === 'chat') setQuestion(''); setStatus('Response ready. You can save this page.');
     } catch (e) { if (currentOperation()) { setError(friendlyError(e)); setStatus(operation.status); } }
     finally { if (currentOperation()) { activeAI.current = null; setPartial(''); setBusy(null); } }
@@ -544,7 +547,7 @@ export default function App() {
   });
   return <MathKeyboardProvider><main className={`notebook-app${!user&&tab!=='guide'?' login-page':''}`} style={{'--problem-font-size':`${mathSize}px`} as React.CSSProperties} inert={drawingOpen || !!confirmation || !!preview || pdfQuestions !== null || !!imageProblem || !!viewingImage}>
     {!user&&tab!=='guide'&&<LoginBackdrop/>}
-    <header className="notebook-header"><a className="brand" href="#" onClick={e => { e.preventDefault(); setTab('solve'); }}><span className="brand-mark" aria-hidden="true">Σ</span><span>Mathfolio<small>YOUR DIGITAL EXERCISE BOOK</small></span></a>
+    <header className="notebook-header"><a className="brand" href="#" onClick={e => { e.preventDefault(); setTab('solve'); }}><span className="brand-wordmark">Mathfolio</span><small>YOUR DIGITAL EXERCISE BOOK</small></a>
       <nav aria-label="Navigation"><button aria-current={tab === 'solve' ? 'page' : undefined} className={tab === 'solve' ? 'active' : ''} onClick={() => setTab('solve')}>Workspace</button><button aria-current={tab === 'library' ? 'page' : undefined} className={tab === 'library' ? 'active' : ''} onClick={() => setTab('library')}>Exercise library <span>{book.exercises.length}</span></button><button aria-current={tab === 'guide' ? 'page' : undefined} className={tab === 'guide' ? 'active' : ''} onClick={() => setTab('guide')}>How to use</button><button aria-current={tab === 'account' ? 'page' : undefined} className={tab === 'account' ? 'active' : ''} onClick={() => setTab('account')}>{user ? 'Account' : 'Sign in'}</button></nav>
       <MenuDisclosure className="appearance-disclosure"><summary>◐ <span>Appearance</span></summary><AppearanceSettings appearance={appearance}/></MenuDisclosure>
     </header>
@@ -604,17 +607,25 @@ export default function App() {
         <section className="paper knowledge"><div className="panel-heading"><span className="step">02</span><h2>What you need</h2></div><div className="study-ai-choice"><SelectMenu label="Knowledge AI" value={knowledgeRoute} disabled={blocked} options={[{value:'local',label:'Local AI'},{value:'cloud',label:'Cloud AI'}]} onChange={route=>void selectStudyRoute('knowledge',route)}/><small>Choose how to run the next analysis.</small></div><p className="subtle">Only the concepts needed for this exact problem.</p><div className="knowledge-scroll" role="region" aria-label="Knowledge for this problem" tabIndex={0}><span className="source-label">{draft.knowledge ? sourceLabel(draft.knowledge.source) : knowledgeRoute==='cloud'?'Cloud AI':'Local AI'}</span>{streaming('knowledge')}{draft.knowledge && busy !== 'knowledge' ? <><MarkdownView value={draft.knowledge.text}/><small className="subtle">Processed by: {sourceLabel(draft.knowledge.source)}</small></> : busy !== 'knowledge' && <div className="empty-panel"><span>∑</span><p>Confirm your problem to see<br/>the essentials here.</p></div>}</div></section>
         <section className="paper hints">
           <div className="panel-heading"><span className="step">03</span><h2>A little help, your way</h2>{draft.hints.length>0&&<button className="reset-hints" disabled={blocked} onClick={()=>void resetHints()}>Reset hints</button>}</div>
-          <p className="subtle">Open the next level only when you need it.</p>
+          <p className="subtle">Choose any level. We recommend starting with 1 and working up to 3.</p>
           <div className="hints-scroll" role="region" aria-label="Exercise hints" tabIndex={0}>
-          {labels.map((label, i) => <div className="hint-tier" key={label}>
-            <div className="hint-title"><span className="hint-number">{i + 1}</span><strong>{label}</strong>{i===0&&<div className="first-hint-ai"><SelectMenu label="Hint 1 AI" value={firstHintRoute} disabled={blocked} options={[{value:'local',label:'Local AI'},{value:'cloud',label:'Cloud AI'}]} onChange={route=>void selectStudyRoute('hint1',route)}/></div>}<span className="source-label">{draft.hints[i]?sourceLabel(draft.hints[i].source):(i===0?firstHintRoute==='cloud':cloudAllowed&&online)?'Cloud':'Local'}</span></div>
-            {i===0&&draft.hints[0]&&<small className="hint-route-note">Use Reset hints to generate again with your chosen AI.</small>}
-            {i>0&&online&&!cloudAllowed&&!draft.hints[i]&&<aside className="hint-cloud-suggestion"><p>Cloud AI is available for deeper reasoning on this level.</p><button type="button" disabled={blocked||!draft.confirmed||draft.hints.length!==i} onClick={()=>void ask(`hint${i+1}` as NotebookRequest['purpose'],true)}>Use Cloud AI</button></aside>}
-            {draft.hints[i] ? <>
-              <button className="hint-toggle" aria-expanded={!collapsedHints.includes(i)} aria-controls={`hint-content-${i}`} onClick={() => setCollapsedHints(current => current.includes(i) ? current.filter(level => level !== i) : [...current,i])}>{collapsedHints.includes(i) ? 'Show hint ▾' : 'Hide hint ▴'}</button>
-              <div id={`hint-content-${i}`} hidden={collapsedHints.includes(i)}><MarkdownView value={draft.hints[i].text}/><small className="subtle">{sourceLabel(draft.hints[i].source)}</small></div>
-            </> : busy === `hint${i + 1}` ? streaming(`hint${i + 1}` as NotebookRequest['purpose']) : <button disabled={blocked || !draft.confirmed || draft.hints.length !== i} onClick={() => void ask(`hint${i + 1}` as NotebookRequest['purpose'])}>Open level {i + 1}</button>}
-          </div>)}
+          {hintLevels.map(({level, label, purpose}) => {
+            const hint = hints.find(item => item.level === level);
+            const collapsed = collapsedHints.includes(level);
+            const usesCloud = level === 1 ? firstHintRoute === 'cloud' : cloudAllowed && online;
+            return <div className="hint-tier" key={level}>
+              <div className="hint-title"><span className="hint-number">{level}</span><strong>{label}</strong>
+                {level === 1 && <div className="first-hint-ai"><SelectMenu label="Hint 1 AI" value={firstHintRoute} disabled={blocked} options={[{value:'local',label:'Local AI'},{value:'cloud',label:'Cloud AI'}]} onChange={route=>void selectStudyRoute('hint1',route)}/></div>}
+                <span className="source-label">{hint ? sourceLabel(hint.source) : usesCloud ? 'Cloud' : 'Local'}</span>
+              </div>
+              {level === 1 && hint && <small className="hint-route-note">Use Reset hints to generate again with your chosen AI.</small>}
+              {level > 1 && online && !cloudAllowed && !hint && <aside className="hint-cloud-suggestion"><p>Cloud AI is available for deeper reasoning on this level.</p><button type="button" disabled={blocked || !draft.confirmed} onClick={() => void ask(purpose, true)}>Use Cloud AI</button></aside>}
+              {hint ? <>
+                <button className="hint-toggle" aria-expanded={!collapsed} aria-controls={`hint-content-${level}`} onClick={() => setCollapsedHints(current => current.includes(level) ? current.filter(item => item !== level) : [...current, level])}>{collapsed ? 'Show hint ▾' : 'Hide hint ▴'}</button>
+                <div id={`hint-content-${level}`} hidden={collapsed}><MarkdownView value={hint.text}/><small className="subtle">{sourceLabel(hint.source)}</small></div>
+              </> : busy === purpose ? streaming(purpose) : <button disabled={blocked || !draft.confirmed} onClick={() => void ask(purpose)}>Open level {level}</button>}
+            </div>;
+          })}
           </div>
 
           {!online && <p className="subtle">Offline: on-device AI can work if the device model is ready.</p>}

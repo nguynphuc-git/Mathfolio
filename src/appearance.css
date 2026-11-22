@@ -42,7 +42,7 @@ html[data-theme=dark]{color-scheme:dark;background:#171d1a;color:#e5ebe4;--diagr
 html[data-theme=dark] body{background:#171d1a;color:#e5ebe4}
 html[data-theme=dark] .notebook-header{border-color:#344139}
 html[data-theme=dark] .brand,html[data-theme=dark] .notebook-header nav button,html[data-theme=dark] .panel-heading h2,html[data-theme=dark] .page-heading h1,html[data-theme=dark] .account-panel h1{color:#e2eadf}
-html[data-theme=dark] .brand-mark,html[data-theme=dark] .notebook-header nav button.active,html[data-theme=dark] .notebook-header nav span{background:#2c3c31;border-color:#435448;color:#e2eadf}
+html[data-theme=dark] .notebook-header nav button.active,html[data-theme=dark] .notebook-header nav span{background:#2c3c31;border-color:#435448;color:#e2eadf}
 html[data-theme=dark] .connection,html[data-theme=dark] .subtle,html[data-theme=dark] .page-heading p,html[data-theme=dark] .account-panel p,html[data-theme=dark] .markdown,html[data-theme=dark] .usage-guide p,html[data-theme=dark] .usage-guide li,html[data-theme=dark] .usage-guide dd,html[data-theme=dark] .library-results p,html[data-theme=dark] .exercise-card p{color:#b4c1b6}
 html[data-theme=dark] label,html[data-theme=dark] .geometry-workbench label,html[data-theme=dark] .guide-details dt{color:#c7d2c8}
 html[data-theme=dark] .paper,html[data-theme=dark] .appearance-settings,html[data-theme=dark] .appearance-disclosure>summary,html[data-theme=dark] .math-zoom,html[data-theme=dark] .symbol-drawer-heading{background:#202923;border-color:#3a483e;color:#e2eadf;box-shadow:0 3px 0 #11181366}

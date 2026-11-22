@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { lockBodyScroll } from '../scroll-lock';
 import { AttachmentGallery } from './AttachmentGallery';
-import {sameAttachments,exerciseFolderIds,type Attachment,type Exercise,type Notebook} from '../notebook';
+import {hintLevels,openedHints,sameAttachments,exerciseFolderIds,type Attachment,type Exercise,type Notebook} from '../notebook';
 import {FolderPicker} from './FolderPicker';
 import { statementLatex } from '../math-input';
 import { MathInput } from './MathInput';
@@ -43,7 +43,7 @@ export function ExercisePreview({ exercise, folderName, attachments,folders,fold
         <div className="preview-columns">
           <section className="preview-section"><h3>Problem</h3><MathInput value={statementLatex(exercise.statement, exercise.statementFormat)} readOnly label="Saved problem"/><AttachmentGallery images={attachments.filter(image=>image.kind==='problem')} onOpen={onImage} onRename={rename} disabled={saving}/></section>
           <section className="preview-section"><h3>What you need</h3>{exercise.knowledge ? <><MarkdownView value={exercise.knowledge.text}/><small className="subtle">{sourceLabel(exercise.knowledge.source)}</small></> : <p className="subtle">No knowledge saved yet.</p>}</section>
-          <section className="preview-section"><h3>Opened hints</h3>{exercise.hints.length ? exercise.hints.map((hint, index) => <details key={index} open><summary>Level {index + 1} · {['A starting point', 'The method', 'Full solution'][index]}</summary><MarkdownView value={hint.text}/><small className="subtle">{sourceLabel(hint.source)}</small></details>) : <p className="subtle">No hints opened yet.</p>}</section>
+          <section className="preview-section"><h3>Opened hints</h3>{exercise.hints.length ? openedHints(exercise.hints).map(hint => <details key={hint.level} open><summary>Level {hint.level} · {hintLevels[hint.level - 1]?.label}</summary><MarkdownView value={hint.text}/><small className="subtle">{sourceLabel(hint.source)}</small></details>) : <p className="subtle">No hints opened yet.</p>}</section>
         </div>
         <section className="preview-section preview-notes"><div className="row"><h3>Your working notes</h3><span className="source-label">Editable here</span></div><NotesEditor label="Saved exercise notes" value={notes} format={notesFormat} disabled={saving} onChange={onNotes}/>
           <button type="button" disabled={saving||attachments.length>=4} onClick={onDraw}>Draw in notes</button><label className="attachment-button">＋ Attach my solution<input aria-label="Attach a solution in preview" type="file" accept="image/png,image/jpeg,image/webp" disabled={saving||attachments.length>=4} onChange={event=>{const file=event.target.files?.[0];event.target.value='';if(file)onAttach(file);}}/></label>

@@ -3,13 +3,26 @@ import {defaultFolderColor,isFolderColor,type FolderColor} from './folder-colors
 import type { GeometryDiagram } from './geometry-diagram';
 import type { ProofDiagram } from './geometry-proof';
 export interface Answer { text: string; source: string }
+export const hintLevels = [
+  {level: 1, purpose: 'hint1', label: 'A starting point'},
+  {level: 2, purpose: 'hint2', label: 'The method'},
+  {level: 3, purpose: 'hint3', label: 'Full solution'},
+] as const;
+
+interface SavedHint extends Answer { level?: (typeof hintLevels)[number]['level'] }
+export function openedHints(hints: SavedHint[]) {
+  // Older notebooks stored hints in the only order they could be opened.
+  return hints.map((hint, index) => ({...hint, level: hint.level ?? index + 1}))
+    .sort((a, b) => a.level - b.level);
+}
+
 export interface MessageImage {id:string;name:string;data:string}
 export interface Message { images?:MessageImage[]; role: 'user' | 'assistant'; text: string; source?: string; format?:'latex' }
 export interface Attachment extends MessageImage { kind: 'problem' | 'solution'; useForAI?:boolean }
 export interface Exercise {
   proofDiagram?: ProofDiagram;
   id: string; title: string; folderId: string; folderIds?:string[]; subject?: 'calculus' | 'discrete' | 'algorithms';
-  statement: string; statementFormat?: 'latex'; confirmed: boolean; knowledge?: Answer; hints: Answer[];
+  statement: string; statementFormat?: 'latex'; confirmed: boolean; knowledge?: Answer; hints: SavedHint[];
   notes: string; notesFormat?: 'latex'; chatDraftImages?:MessageImage[]; messages: Message[]; attachments: Attachment[]; geometryDiagram?: GeometryDiagram; completed: boolean; updatedAt: string;
 }
 export interface Notebook { folders: { id: string; name: string; color?:FolderColor }[]; exercises: Exercise[] }
