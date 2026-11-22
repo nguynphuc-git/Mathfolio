@@ -87,3 +87,6 @@ html[data-theme=light][data-paper=rose]{background:#f5ecec}
   .notebook-header nav{order:3;width:100%}
   .notebook-header nav button{flex:1}
 }
+
+html[data-theme=dark] .image-viewer-tools button[aria-pressed=true]{background:var(--menu-selected,#304237);border-color:var(--menu-border,#5a705e);color:var(--menu-selected-ink,#e2eadf)}
+html[data-theme=dark] .image-viewer-tools button:hover:not(:disabled),html[data-theme=dark] .image-viewer-tools button:focus-visible{background:#304237;color:#e2eadf;border-color:#5a705e}

@@ -3,13 +3,14 @@ import {defaultFolderColor,isFolderColor,type FolderColor} from './folder-colors
 import type { GeometryDiagram } from './geometry-diagram';
 import type { ProofDiagram } from './geometry-proof';
 export interface Answer { text: string; source: string }
-export interface Message { role: 'user' | 'assistant'; text: string; source?: string; format?:'latex' }
-export interface Attachment { id: string; name: string; data: string; kind: 'problem' | 'solution'; useForAI?:boolean }
+export interface MessageImage {id:string;name:string;data:string}
+export interface Message { images?:MessageImage[]; role: 'user' | 'assistant'; text: string; source?: string; format?:'latex' }
+export interface Attachment extends MessageImage { kind: 'problem' | 'solution'; useForAI?:boolean }
 export interface Exercise {
   proofDiagram?: ProofDiagram;
   id: string; title: string; folderId: string; folderIds?:string[]; subject?: 'calculus' | 'discrete' | 'algorithms';
   statement: string; statementFormat?: 'latex'; confirmed: boolean; knowledge?: Answer; hints: Answer[];
-  notes: string; notesFormat?: 'latex'; messages: Message[]; attachments: Attachment[]; geometryDiagram?: GeometryDiagram; completed: boolean; updatedAt: string;
+  notes: string; notesFormat?: 'latex'; chatDraftImages?:MessageImage[]; messages: Message[]; attachments: Attachment[]; geometryDiagram?: GeometryDiagram; completed: boolean; updatedAt: string;
 }
 export interface Notebook { folders: { id: string; name: string; color?:FolderColor }[]; exercises: Exercise[] }
 export function sameAttachments(a:Attachment[],b:Attachment[]):boolean{return a.length===b.length&&a.every((image,index)=>{const other=b[index];return image.id===other.id&&image.name===other.name&&image.data===other.data&&image.kind===other.kind&&image.useForAI===other.useForAI;});}

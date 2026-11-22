@@ -7,7 +7,7 @@ export interface DrawingView {cx:number;cy:number;scale:number;width?:number;hei
 export const drawingSize=(view:DrawingView)=>({width:view.width??BOARD_WIDTH,height:view.height??BOARD_HEIGHT});
 export interface DrawingStyle {color:string;width:number;dashed:boolean}
 interface Base {id:string;style:DrawingStyle}
-export interface DrawingPoint extends Base {type:'point';label:string;x:number;y:number;derived?:{kind:'midpoint';a:string;b:string}|{kind:'intersection';a:string;b:string;branch:number;view?:DrawingView}|{kind:'on-object';object:string;parameter:number;part?:number;view?:DrawingView}|{kind:'projection';line:string;point:string}}
+export interface DrawingPoint extends Base {type:'point';label:string;x:number;y:number;derived?:{kind:'midpoint';a:string;b:string}|{kind:'intersection';a:string;b:string;branch:number;view?:DrawingView}|{kind:'on-object';object:string;parameter:number;part?:number;view?:DrawingView}|{kind:'projection';line:string;point:string}|{kind:'parallelogram';a:string;b:string;c:string}|{kind:'perpendicular-end';line:string;point:string;length:number}}
 export interface DrawingLine extends Base {type:'segment'|'line'|'ray'|'vector';a:string;b:string}
 export interface DrawingParallel extends Base {type:'parallel'|'perpendicular';line:string;point:string}
 export interface DrawingCircle extends Base {type:'circle';center:string;through:string}
@@ -29,6 +29,8 @@ export function pointPosition(scene:DrawingScene,id:string,seen=new Set<string>(
   if(seen.has(id))return null;const point=scene.objects.find(object=>object.id===id);if(point?.type!=='point')return null;
   const visited=new Set(seen).add(id);if(!point.derived)return {x:point.x,y:point.y};
   if(point.derived.kind==='midpoint'){const a=pointPosition(scene,point.derived.a,visited),b=pointPosition(scene,point.derived.b,visited);return a&&b?{x:(a.x+b.x)/2,y:(a.y+b.y)/2}:null;}
+  if(point.derived.kind==='parallelogram'){const a=pointPosition(scene,point.derived.a,visited),b=pointPosition(scene,point.derived.b,visited),c=pointPosition(scene,point.derived.c,visited);return a&&b&&c?{x:a.x+c.x-b.x,y:a.y+c.y-b.y}:null;}
+  if(point.derived.kind==='perpendicular-end'){const base=lineGeometry(scene,point.derived.line,visited),from=pointPosition(scene,point.derived.point,visited);if(!base||!from)return null;const norm=Math.hypot(base.d.x,base.d.y),length=point.derived.length;return {x:from.x-base.d.y/norm*length,y:from.y+base.d.x/norm*length};}
   if(point.derived.kind==='on-object')return drawingPointOnObject(scene,point.derived.object,point.derived.parameter,point.derived.part,visited,point.derived.view);
   if(point.derived.kind==='projection'){const line=lineGeometry(scene,point.derived.line,visited),from=pointPosition(scene,point.derived.point,visited);return line&&from?projectToLine(from,line,false).position:null;}
   return intersections(scene,point.derived.a,point.derived.b,visited,point.derived.view)[point.derived.branch]??null;
@@ -81,7 +83,7 @@ export function clippedLine(scene:DrawingScene,id:string):[Vec,Vec]|null{
   return low<=high?[{x:p.x+d.x*low,y:p.y+d.y*low},{x:p.x+d.x*high,y:p.y+d.y*high}]:null;
 }
 export function drawingDependencies(object:DrawingObject):string[]{
-  switch(object.type){case 'point':{const d=object.derived;return !d?[]:d.kind==='on-object'?[d.object]:d.kind==='projection'?[d.line,d.point]:[d.a,d.b];}case 'segment':case 'line':case 'ray':case 'vector':return [object.a,object.b];case 'parallel':case 'perpendicular':return [object.line,object.point];case 'freehand':return [object.start,object.end].filter((id):id is string=>!!id);case 'circle':return [object.center,object.through];case 'polygon':return object.points;case 'angle':return [object.a,object.vertex,object.b];default:return [];}
+  switch(object.type){case 'point':{const d=object.derived;return !d?[]:d.kind==='on-object'?[d.object]:d.kind==='projection'||d.kind==='perpendicular-end'?[d.line,d.point]:d.kind==='parallelogram'?[d.a,d.b,d.c]:[d.a,d.b];}case 'segment':case 'line':case 'ray':case 'vector':return [object.a,object.b];case 'parallel':case 'perpendicular':return [object.line,object.point];case 'freehand':return [object.start,object.end].filter((id):id is string=>!!id);case 'circle':return [object.center,object.through];case 'polygon':return object.points;case 'angle':return [object.a,object.vertex,object.b];default:return [];}
 }
 export function deleteDrawingObject(scene:DrawingScene,id:string):DrawingScene{
   return deleteDrawingObjects(scene,[id]);

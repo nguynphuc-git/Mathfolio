@@ -12,9 +12,9 @@ import {ProofDiagramView} from './ProofDiagramView';
 
 interface Props {
   exercise: Exercise; folderName: string; attachments:Attachment[]; folders:Notebook['folders']; folderIds:string[]; onAttachments:(images:Attachment[])=>void; onAttach:(file:File)=>void; onFolders:(ids:string[])=>void; notes: string; notesFormat?:'latex'; saving: boolean; suspended: boolean; error: string;
-  onImage:(image:Attachment)=>void; onNotes: (notes: string) => void; onSaveNotes: () => void; onClose: () => void; onOpenWorkspace: () => void;
+  onDraw?:()=>void;onImage:(image:Attachment&{viewerLabel?:string})=>void; onNotes: (notes: string) => void; onSaveNotes: () => void; onClose: () => void; onOpenWorkspace: () => void;
 }
-export function ExercisePreview({ exercise, folderName, attachments,folders,folderIds,onAttachments,onAttach,onFolders,notes, notesFormat, saving, suspended, error, onImage,onNotes, onSaveNotes, onClose, onOpenWorkspace }: Props) {
+export function ExercisePreview({ exercise, folderName, attachments,folders,folderIds,onAttachments,onAttach,onFolders,notes, notesFormat, saving, suspended, error, onImage,onDraw,onNotes, onSaveNotes, onClose, onOpenWorkspace }: Props) {
   const dialog = useRef<HTMLElement>(null); const closeButton = useRef<HTMLButtonElement>(null);
   const callbacks = useRef({ onClose, saving, suspended }); callbacks.current = { onClose, saving, suspended };
   useEffect(() => {
@@ -46,12 +46,12 @@ export function ExercisePreview({ exercise, folderName, attachments,folders,fold
           <section className="preview-section"><h3>Opened hints</h3>{exercise.hints.length ? exercise.hints.map((hint, index) => <details key={index} open><summary>Level {index + 1} · {['A starting point', 'The method', 'Full solution'][index]}</summary><MarkdownView value={hint.text}/><small className="subtle">{sourceLabel(hint.source)}</small></details>) : <p className="subtle">No hints opened yet.</p>}</section>
         </div>
         <section className="preview-section preview-notes"><div className="row"><h3>Your working notes</h3><span className="source-label">Editable here</span></div><NotesEditor label="Saved exercise notes" value={notes} format={notesFormat} disabled={saving} onChange={onNotes}/>
-          <label className="attachment-button">＋ Attach my solution<input aria-label="Attach a solution in preview" type="file" accept="image/png,image/jpeg,image/webp" disabled={saving||attachments.length>=4} onChange={event=>{const file=event.target.files?.[0];event.target.value='';if(file)onAttach(file);}}/></label>
+          <button type="button" disabled={saving||attachments.length>=4} onClick={onDraw}>Draw in notes</button><label className="attachment-button">＋ Attach my solution<input aria-label="Attach a solution in preview" type="file" accept="image/png,image/jpeg,image/webp" disabled={saving||attachments.length>=4} onChange={event=>{const file=event.target.files?.[0];event.target.value='';if(file)onAttach(file);}}/></label>
           <AttachmentGallery images={attachments.filter(image=>image.kind==='solution')} onOpen={onImage} onRename={rename} onRemove={id=>onAttachments(attachments.filter(image=>image.id!==id))} disabled={saving}/>
           <small className="subtle" role="status">{noteDirty ? 'Unsaved changes' : 'Changes saved on this device'}</small>
         </section>
         <section className="preview-section"><h3>Folders</h3><FolderPicker folders={folders} selected={folderIds} disabled={saving} onChange={onFolders}/></section>
-        <section className="preview-section"><h3>Conversation</h3>{exercise.messages.map((message, index) => <div className={`message ${message.role}`} key={index}><small>{message.role === 'user' ? 'You' : `Mathfolio · ${sourceLabel(message.source)}`}</small>{message.role==='user'&&message.format==='latex'?<MathInput value={message.text} readOnly compact label="Saved question"/>:<MarkdownView value={message.text}/>}</div>)}{!exercise.messages.length && <p className="subtle">No conversation saved yet.</p>}</section>
+        <section className="preview-section"><h3>Conversation</h3>{exercise.messages.map((message, index) => <div className={`message ${message.role}`} key={index}><small>{message.role === 'user' ? 'You' : `Mathfolio · ${sourceLabel(message.source)}`}</small>{message.text&&(message.role==='user'&&message.format==='latex'?<MathInput value={message.text} readOnly compact label="Saved question"/>:<MarkdownView value={message.text}/>)}{!!message.images?.length&&<AttachmentGallery images={message.images} onOpen={image=>onImage({...image,kind:'solution',viewerLabel:'CHAT IMAGE'})}/>}</div>)}{!exercise.messages.length && <p className="subtle">No conversation saved yet.</p>}</section>
         {error && <p className="notice error" role="alert">{error}</p>}
       </div>
       <footer className="exercise-preview-footer"><p className="subtle">Edit notes, solution images, image names and folders here. Save changes before closing. Open in workspace to change the problem or AI content.</p><div className="row"><button disabled={saving || !noteDirty} className="primary" onClick={onSaveNotes}>{saving ? 'Saving…' : 'Save changes'}</button><button disabled={saving} onClick={onClose}>Close</button><button className="primary" disabled={saving} onClick={onOpenWorkspace}>Open in workspace ↗</button></div></footer>

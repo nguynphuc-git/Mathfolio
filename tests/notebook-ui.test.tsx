@@ -921,6 +921,25 @@ describe('manual illustration drawing',()=>{
     await click('Save exercise');expect(stored().exercises.find(item=>item.id==='first')!.attachments.find(image=>image.kind==='problem')).toMatchObject({useForAI:false,name:'Focus photo.png'});
     expect(mocks.ai).not.toHaveBeenCalled();expect(mocks.imageCloud).not.toHaveBeenCalled();expect(mocks.imageLocal).not.toHaveBeenCalled();
   });
+  async function sketchFrom(trigger:string,action:string,scope:ParentNode=host){await click(trigger,scope);await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Start with coordinate plane"]')!.click());await type('[aria-label="Point x"]','2');await click('Add point');await click(action);}
+  it('attaches drawings to notes and saved-note previews without changing AI context',async()=>{
+    await openWorkspace();await sketchFrom('Draw in notes','Attach to notes');
+    expect(host.querySelector('[role="alertdialog"]')).toBeNull();expect(host.textContent).toContain('Original essentials');expect(host.querySelectorAll('.notes img')).toHaveLength(2);expect(host.querySelectorAll('.problem-images img')).toHaveLength(0);
+    await click('Save exercise');expect(stored().exercises[0].attachments.at(-1)).toMatchObject({kind:'solution',name:'My illustration.png'});
+    await click('Exercise library');await click('All exercises');await click('Open exercise');await sketchFrom('Draw in notes','Attach to notes',host.querySelector('.exercise-preview')!);
+    expect(host.querySelector('.exercise-preview')?.hasAttribute('inert')).toBe(false);await click('Save changes');expect(stored().exercises[0].attachments.filter(a=>a.kind==='solution')).toHaveLength(3);
+    expect(mocks.ai).not.toHaveBeenCalled();
+  });
+  it('keeps chat drawings in the composer on stop/error, then saves them with exactly the sent message',async()=>{
+    await openWorkspace();await sketchFrom('Draw for chat','Add to message');expect(mocks.ai).not.toHaveBeenCalled();expect(host.querySelectorAll('.problem-images img')).toHaveLength(0);expect(host.querySelectorAll('.notes img')).toHaveLength(1);
+    let finish!:(answer:Answer)=>void;mocks.ai.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));await click('Send');await click('■ Stop AI');
+    await act(async()=>finish({text:'LATE DRAWING ANSWER',source:'on_device'}));expect(host.querySelector('.messages')?.textContent).not.toContain('LATE DRAWING ANSWER');expect(host.querySelectorAll('.discussion>.attachments img')).toHaveLength(1);
+    mocks.ai.mockRejectedValueOnce(new Error('Try again'));await click('Send');expect(host.querySelectorAll('.discussion>.attachments img')).toHaveLength(1);
+    mocks.ai.mockResolvedValueOnce({text:'Check the added line',source:'on_device'});await type('[aria-label="Discussion question"]','Does this work?');await click('Send');
+    expect(mocks.ai.mock.calls.at(-1)![0]).toMatchObject({purpose:'chat',images:[],messageImages:[{name:'My illustration.png'}]});expect(host.querySelectorAll('.messages .attachments img')).toHaveLength(1);expect(host.querySelectorAll('.discussion>.attachments img')).toHaveLength(0);
+    await click('Save exercise');const messages=stored().exercises.find(e=>e.id==='first')!.messages;expect(messages.at(-2)).toMatchObject({role:'user',text:'Does this work?',images:[{name:'My illustration.png'}]});expect(messages.at(-1)).toMatchObject({role:'assistant',text:'Check the added line'});
+    await click('Exercise library');await click('All exercises');await click('Open exercise');expect(host.querySelectorAll('.exercise-preview .message img')).toHaveLength(1);
+  });
   it('attaches an exported drawing as a problem illustration and keeps notes',async()=>{
     await type('[aria-label="Notes"]',String.raw`\text{Keep my notes}`);await drawPoint();await type('[aria-label="Drawing image name"]','My construction');
     await click('Add to illustrations');expect(host.querySelector('.drawing-dialog')).toBeNull();

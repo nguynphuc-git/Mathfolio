@@ -24,3 +24,19 @@ export async function localVisionParts(parts:InlineDataPart[],signal?:AbortSigna
   }
   return result;
 }
+
+export interface VisionMessage {role:'user'|'assistant';text:string;images?:ProblemIllustration[]}
+/** Bound history separately and retain image-to-message association without serializing pixels in the prompt. */
+export function notebookVision(request:{purpose:string;route:'local'|'cloud';images?:ProblemIllustration[];messages:VisionMessage[];messageImages?:ProblemIllustration[]}):{parts:InlineDataPart[];references:object[]}{
+  const groups:{images:ProblemIllustration[];context:object}[]=[];
+  if(request.images?.length)groups.push({images:request.images,context:{kind:'problem-illustration'}});
+  if(request.purpose==='chat'){
+    const recent=request.messages.slice(request.route==='local'?-2:-6),history:typeof groups=[];let remaining=4;
+    for(let i=recent.length-1;i>=0&&remaining;i--){const message=recent[i];if(message.role!=='user'||!message.images?.length)continue;const images=message.images.slice(-remaining);history.unshift({images,context:{kind:'earlier-user-message',message:i+1,text:message.text.slice(0,300)}});remaining-=images.length;}
+    groups.push(...history);
+    if(request.messageImages?.length)groups.push({images:request.messageImages,context:{kind:'current-user-message'}});
+  }
+  const parts:InlineDataPart[]=[],references:object[]=[];
+  for(const group of groups){const validated=validateIllustrations(group.images);for(let i=0;i<validated.length;i++){references.push({image:parts.length+1,...group.context,name:group.images[i].name.slice(0,120)});parts.push(validated[i]);}}
+  return {parts,references};
+}

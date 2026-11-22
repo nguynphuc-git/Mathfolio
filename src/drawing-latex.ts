@@ -6,7 +6,7 @@ export function drawingLatexToPlain(source:string):string{
   const skip=()=>{while(/\s/.test(text[i]??'')&&i<text.length)i++;};
   const functions=new Set(['sin','cos','tan','asin','acos','atan','sqrt','abs','exp','ln','log','floor','ceil']);
   function sequence(end?:string):string{let value='';while(i<text.length){skip();if(i>=text.length)break;if(end&&text[i]===end){i++;return value;}if('})]'.includes(text[i]))throw new Error('Check the equation brackets.');value+=operand();}if(end)throw new Error('Close each equation bracket.');return value;}
-  function argument():string{skip();if(text[i]==='{'){i++;return sequence('}');}if(text[i]==='('){i++;return sequence(')');}return operand();}
+  function argument(singleToken=false):string{skip();if(text[i]==='{'){i++;return sequence('}');}if(text[i]==='('){i++;return sequence(')');}if(singleToken&&/[A-Za-z0-9]/.test(text[i]??''))return text[i++];return operand();}
   function applyFunction(name:string):string{
     skip();let power:string|undefined,base:string|undefined;if(text[i]==='^'){i++;power=argument();skip();}if(text[i]==='_'){i++;base=argument();}
     const arg=argument();if(!arg)throw new Error(`Complete ${name}'s argument.`);
@@ -20,8 +20,8 @@ export function drawingLatexToPlain(source:string):string{
     else if(char==='|')value=`abs(${sequence('|')})`;
     else if(char==='\\'){
       const match=/^[A-Za-z]+/.exec(text.slice(i));if(!match)throw new Error('Complete the mathematical expression.');const command=match[0];i+=command.length;
-      if(command==='frac'||command==='dfrac'||command==='tfrac'){const a=argument(),b=argument();value=`((${a})/(${b}))`;}
-      else if(command==='sqrt'){skip();let root='2';if(text[i]==='['){i++;root=sequence(']');}const arg=argument();value=root==='2'?`sqrt(${arg})`:`((${arg})^(1/(${root})))`;}
+      if(command==='frac'||command==='dfrac'||command==='tfrac'){const a=argument(true),b=argument(true);value=`((${a})/(${b}))`;}
+      else if(command==='sqrt'){skip();let root='2';if(text[i]==='['){i++;root=sequence(']');}const arg=argument(true);value=root==='2'?`sqrt(${arg})`:`((${arg})^(1/(${root})))`;}
       else if(command==='pi')value='pi';
       else if(['ldots','dots','cdots'].includes(command))value='...';
       else if(['le','leq'].includes(command))value='<=';

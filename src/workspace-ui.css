@@ -79,3 +79,5 @@ html[data-theme="dark"] .pdf-question-list button:hover:not(:disabled){backgroun
 html[data-theme="dark"] .pdf-question-list button span,html[data-theme="dark"] .pdf-question-list button strong small,html[data-theme="dark"] .pdf-question-browser-heading>div span,html[data-theme="dark"] .pdf-format-actions>span,html[data-theme="dark"] .pdf-typeset-details>summary,html[data-theme="dark"] .pdf-replace-confirm p{color:#c1d4c5}
 
 .focus-mode .problem-images{display:flex}.focus-mode .problem-row{grid-template-columns:minmax(0,2fr) minmax(250px,1fr)}.workspace-content.focus-mode{max-width:1400px}@media(max-width:800px){.focus-mode .problem-row{grid-template-columns:minmax(0,1fr)}}
+
+.chat-drawing-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0 6px}.chat-drawing-actions button{font-size:13px;padding:8px 12px}.chat-drawing-actions p{margin:0}.discussion>.attachments{max-height:270px;overflow:auto}.message .attachments{margin-top:10px}.message .attachments figure{max-width:320px}.notes>button{margin-right:10px}
