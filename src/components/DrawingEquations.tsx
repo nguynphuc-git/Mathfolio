@@ -27,7 +27,7 @@ export function DrawingEquations({rows,prepared,selected,disabled,onUpdate,onDel
       {row.offset&&(row.offset.x||row.offset.y)?<small>Translation: ({Number(row.offset.x.toFixed(4))}, {Number(row.offset.y.toFixed(4))})</small>:null}
     </div>;})}</div>
     <button type="button" className="equation-keyboard-toggle" aria-expanded={keyboard} disabled={disabled} onClick={()=>setKeyboard(value=>!value)}>{keyboard?'Hide equation keyboard':'Equation keyboard'}</button>
-    {keyboard&&<div className="equation-keyboard" role="group" aria-label="Equation math keyboard">{symbolKeys.map(([label,latex,name])=><button type="button" key={name} aria-label={`Equation key: ${name}`} title={name} disabled={disabled} onMouseDown={event=>event.preventDefault()} onClick={()=>{const input=inputs.current.get(activeId);input?.focus();input?.insert(latex);}}>{label}</button>)}</div>}
+    {keyboard&&<div className="equation-keyboard" role="group" aria-label="Equation math keyboard">{symbolKeys.map(([label,latex,name])=><button type="button" key={name} aria-label={`Equation key: ${name}`} title={name} disabled={disabled} onPointerDown={event=>event.preventDefault()} onMouseDown={event=>event.preventDefault()} onClick={()=>{const input=inputs.current.get(activeId);input?.focus();input?.insert(latex);}}>{label}</button>)}</div>}
     <p className="equation-help">Try x − y = 2, x² + y² = 9, or b = 1 on its own line. Ranges such as [−5, …, 5] draw a family of curves. Angles use radians.</p>
   </section>;
 }

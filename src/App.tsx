@@ -568,15 +568,16 @@ export default function App() {
       <div className="page-heading workspace-heading"><div><p className="eyebrow">WORKSPACE / {draft.title || 'NEW EXERCISE'}</p><h1>{draft.title || 'One problem. One discovery.'}</h1><p>Read it. Try it. Open a hint when you need one.</p></div></div>
       <div className="workspace-toolbar">
         <div className="workspace-tools">
-            <MenuDisclosure className="tool-disclosure"><summary>Add content</summary><div className="tool-content import-actions"><label className="attachment-button pdf-upload-button">＋ Choose PDF<input aria-label="Choose a PDF" type="file" accept="application/pdf,.pdf" disabled={blocked} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void loadPdf(file);}}/></label><label className="attachment-button">＋ Read image<input aria-label="Read a problem image" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void loadImage(file);}}/></label>
-</div></MenuDisclosure>
             <MenuDisclosure className="tool-disclosure study-options"><summary>Study options</summary><div className="tool-content"><div className="study-style-field"><span>Local answer style</span><SelectMenu<ResponseStyle> label="Local answer style" disabled={blocked} value={responseStyle} options={[{value:'auto',label:'Auto',description:'Match the problem'},{value:'brief',label:'Brief',description:'Essential steps'},{value:'explained',label:'Explained',description:'Why each step works'}]} onChange={setResponseStyle}/><small>Applies to new local solutions and chat. Hints stay gradual.</small></div><div className="problem-size-control"><span>Problem text size</span><div className="math-zoom" role="group" aria-label="Math size"><button type="button" aria-label="Decrease math size" disabled={mathSize<=14} onClick={()=>setMathSize(size=>Math.max(14,size-1))}>A−</button><span>{mathSize}</span><button type="button" aria-label="Increase math size" disabled={mathSize>=23} onClick={()=>setMathSize(size=>Math.min(23,size+1))}>A+</button></div></div>{savedDraft&&<button disabled={blocked} onClick={()=>beginSave(true)}>Name / folders</button>}<p className="subtle">Focus mode keeps only your problem and working notes. Keyboard shortcuts are in How to use.</p></div></MenuDisclosure>
         </div>
         <div className="workspace-actions" role="group" aria-label="Exercise actions">
           <span className={`save-state ${dirty?'draft':'saved'}`} role="status">{dirty ? draftSave==='saved'?`Draft saved · ${new Date(draftSavedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`:draftSave==='saving'?'Saving draft…':'Unsaved changes' : savedDraft?'Saved on this device':'New exercise'}</span>
           <div className="row">
           <button disabled={blocked} onClick={()=>changeExercise(newExercise())}>＋ New exercise</button>
-          <button type="button" className="focus-button" aria-pressed={focusMode} onClick={()=>setFocusMode(value=>!value)}>{focusMode?'Exit focus mode':'Focus mode'}</button>
+          <button type="button" className="focus-button" aria-label={focusMode?'Exit focus mode':'Focus mode'} aria-pressed={focusMode} onClick={()=>setFocusMode(value=>!value)}>
+            <span className="focus-label-full">{focusMode?'Exit focus mode':'Focus mode'}</span>
+            <span className="focus-label-short" aria-hidden="true">{focusMode?'Exit focus':'Focus'}</span>
+          </button>
           <button title="Save exercise (Ctrl+S)" className="primary" disabled={blocked||!hasEditorContent(draft.statement)} onClick={()=>beginSave()}>Save exercise {dirty?'•':''}</button>
           </div>
             <button className="cloud-switch" role="switch" aria-checked={cloudAllowed} aria-label="Cloud AI" disabled={blocked} onClick={()=>void toggleCloud()}><span className="switch-track" aria-hidden="true"><span/></span>Cloud AI <strong>{cloudAllowed?'On':'Off'}</strong></button>
@@ -585,13 +586,35 @@ export default function App() {
       {focusMode&&<p className="focus-notice" role="status">Focus mode · Problem, sketches and notes. New images stay out of AI context.</p>}
       <div className={focusMode?'workspace-content focus-mode':'workspace-content'}>
       <div className="problem-row">
-        <section className="paper problem"><div className="panel-heading"><span className="step">01</span><h2>Problem</h2><span className="tag">YOUR PROBLEM</span></div>
+        <section className="paper problem">
+          <div className="panel-heading">
+            <span className="step">01</span><h2>Problem</h2>
+            <MenuDisclosure className="tool-disclosure problem-import">
+              <summary>Add content</summary>
+              <div className="tool-content import-actions">
+                <label className="attachment-button pdf-upload-button">＋ Choose PDF
+                  <input aria-label="Choose a PDF" type="file" accept="application/pdf,.pdf" disabled={blocked} onChange={event => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    void loadPdf(file);
+                  }}/>
+                </label>
+                <label className="attachment-button">＋ Read image
+                  <input aria-label="Read a problem image" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked} onChange={event => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    void loadImage(file);
+                  }}/>
+                </label>
+              </div>
+            </MenuDisclosure>
+          </div>
           {!draft.confirmed&&<ProblemSourceInput disabled={blocked} onApply={statement=>edit({statement,statementFormat:'latex'})}/>}
           <MathInput ref={input} value={statementLatex(draft.statement, draft.statementFormat)} readOnly={draft.confirmed} disabled={blocked} onChange={value => edit({ statement: value, statementFormat: 'latex' })}/>
           {!draft.confirmed && <><p className="subtle">Type your problem or paste LaTeX. Insert symbols directly below.</p><MathKeyboard disabled={blocked} onActivate={()=>input.current?.focus()} onInsert={symbol => insertMath(symbol.latex)}/></>}
           {!cloudAllowed && online && draft.statement.trim() && recommendsCloudForProblem(draft.statement) && <aside className="cloud-recommendation" aria-label="Cloud AI recommendation"><p>This may need several reasoning steps. Cloud AI can provide deeper analysis; your problem is sent only after you enable it and run analysis.</p><button type="button" disabled={blocked} onClick={() => void allowCloud('Cloud AI may provide deeper reasoning for this problem. Your problem and related tutoring context are sent only when you choose to run an AI action with Cloud AI enabled. Allow Cloud AI for this session?')}>Consider Cloud AI</button></aside>}
 
-          <div className="row">{draft.confirmed && <button disabled={blocked} onClick={editStatement}>Edit problem</button>}<button className="primary" title="Analyze problem (Ctrl+Enter)" disabled={blocked || !hasEditorContent(draft.statement)} onClick={() => void ask('knowledge')}>{draft.confirmed ? 'Refresh knowledge' : 'Confirm & analyze'}</button></div>
+          <div className="row problem-actions">{draft.confirmed && <button disabled={blocked} onClick={editStatement}>Edit problem</button>}<button className="primary" title="Analyze problem (Ctrl+Enter)" disabled={blocked || !hasEditorContent(draft.statement)} onClick={() => void ask('knowledge')}>{draft.confirmed ? 'Refresh knowledge' : 'Confirm & analyze'}</button></div>
         </section>
         <aside className="paper problem-images" aria-label="Problem illustrations"><div className="panel-heading"><h2>Illustrations</h2>{!focusMode&&<span className="tag">{illustrations.length} FOR AI</span>}</div>
           <div className="illustration-actions"><button type="button" className="primary" disabled={blocked||draft.attachments.length>=4} onClick={()=>openDrawing('problem')}>Draw illustration</button><label className="attachment-button">＋ Add illustration<input aria-label="Attach a problem illustration" type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked||draft.attachments.length>=4} onChange={event=>{const file=event.target.files?.[0];event.target.value='';void attach(file,'problem');}}/></label></div>

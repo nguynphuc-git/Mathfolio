@@ -1110,6 +1110,16 @@ describe('workspace comfort and English guide',()=>{
     expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe('2x+3=7');
     expect(mocks.ai).not.toHaveBeenCalled();
   });
+  it('keeps PDF and image imports inside Problem in both workspace modes',async()=>{
+    expect(host.querySelector('.workspace-toolbar .import-actions')).toBeNull();
+    for(const focus of [false,true]){
+      if(focus)await click('Focus mode');
+      const menu=host.querySelector('.problem .problem-import')!;
+      expect(menu.querySelector('[aria-label="Choose a PDF"]')).not.toBeNull();
+      expect(menu.querySelector('[aria-label="Read a problem image"]')).not.toBeNull();
+    }
+    expect(mocks.ai).not.toHaveBeenCalled();
+  });
   it('toggles focus without discarding notes or requesting AI',async()=>{
     await type('[aria-label="Notes"]','My approach');await click('Focus mode');
     expect(host.querySelector('.workspace-content')?.classList.contains('focus-mode')).toBe(true);

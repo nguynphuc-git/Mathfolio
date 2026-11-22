@@ -34,6 +34,21 @@ describe('movable persistent symbol panel',()=>{
     vi.spyOn(window,'innerWidth','get').mockReturnValue(500);await act(async()=>window.dispatchEvent(new Event('resize')));
     expect(panel.style.left).toBe('92px');expect(insert).not.toHaveBeenCalled();
   });
+  it('fits above a mobile keyboard and preserves input focus on category taps',async()=>{
+    const viewport=Object.assign(new EventTarget(),{width:390,height:340,offsetLeft:0,offsetTop:70});
+    vi.stubGlobal('visualViewport',viewport);
+    await open();
+    const panel=host.querySelector<HTMLElement>('.symbol-browser')!;
+    expect(panel.style.getPropertyValue('--symbol-viewport-height')).toBe('340px');
+    expect(Number.parseFloat(panel.style.top)).toBeGreaterThanOrEqual(78);
+    const category=panel.querySelector<HTMLButtonElement>('.symbol-categories button')!;
+    const event=new PointerEvent('pointerdown',{pointerType:'touch',bubbles:true,cancelable:true});
+    await act(async()=>category.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(true);
+    viewport.height=280;
+    await act(async()=>viewport.dispatchEvent(new Event('resize')));
+    expect(panel.style.getPropertyValue('--symbol-viewport-height')).toBe('280px');
+  });
   it('keeps the panel reachable at viewport edges',()=>{
     expect(keyboardPosition({x:-100,y:900},{width:400,height:300},{width:1000,height:800})).toEqual({x:8,y:492});
     expect(keyboardPosition({x:900,y:900},{width:400,height:300},{width:300,height:200})).toEqual({x:8,y:8});
