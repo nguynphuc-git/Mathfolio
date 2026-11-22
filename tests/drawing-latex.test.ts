@@ -11,3 +11,7 @@ describe('equation editor to function plot',()=>{
   ])('plots %s using math notation',(latex,x,result)=>{expect(compileDrawingFunction(drawingLatexExpression(latex))(x)).toBeCloseTo(result);});
   it.each([String.raw`\text{hello}`,String.raw`\operatorname{constructor}(x)`,String.raw`\frac{x}{}`,String.raw`\sqrt{`,String.raw`x_{1}`,String.raw`\int x`,String.raw`x^#?`])('rejects unsupported or incomplete notation %s',latex=>expect(()=>drawingLatexExpression(latex)).toThrow());
 });
+
+describe('compact MathLive fraction arguments',()=>{
+  it.each([[String.raw`\frac13`,1/3],[String.raw`y=\frac12`,.5],[String.raw`\frac1{12}`,1/12],[String.raw`\frac{12}3`,4],[String.raw`\frac\frac12{3}`,1/6]])('reads one TeX atom per unbraced fraction argument: %s',(latex,value)=>{expect(compileDrawingFunction(drawingLatexExpression(latex))(0)).toBeCloseTo(value);});
+});
