@@ -1,6 +1,6 @@
 [
 {
-"origin": ["http://localhost:5173", "http://localhost:4173", "https://YOUR_PROJECT.web.app", "https://YOUR_PROJECT.firebaseapp.com"],
+"origin": ["http://localhost:5173", "http://localhost:4173", "https://mathfolio-mp.web.app", "https://mathfolio-mp.firebaseapp.com"],
 "method": ["GET"],
 "responseHeader": ["Content-Type"],
 "maxAgeSeconds": 3600

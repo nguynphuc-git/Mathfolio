@@ -42,6 +42,8 @@ import type { ResponseStyle } from './local-tutor';
 import {ProblemSourceInput} from './components/ProblemSourceInput';
 import {IllustrationDrawing} from './components/IllustrationDrawing';
 import type {DrawingScene} from './drawing';
+import { useNotebookSync } from './use-notebook-sync';
+import { CloudSyncPanel } from './components/CloudSyncPanel';
 
 type DrawingTarget='problem'|'chat'|'solution'|'preview-notes';
 export default function App() {
@@ -72,7 +74,7 @@ export default function App() {
   const [pdfFile,setPdfFile]=useState<File|null>(null);
   const [pdfPageCount,setPdfPageCount]=useState(0);
   const [collapsedHints, setCollapsedHints] = useState<number[]>([]);
-  const [preview, setPreview] = useState<{ id: string; notes: string; notesFormat?:'latex'; attachments:Attachment[]; folderIds:string[] } | null>(null);
+  const [preview, setPreview] = useState<{ id: string; base: Exercise; notes: string; notesFormat?:'latex'; attachments:Attachment[]; folderIds:string[] } | null>(null);
   const [viewingImage,setViewingImage]=useState<(Attachment&{viewerLabel?:string})|null>(null);
   const [previewError, setPreviewError] = useState('');
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
@@ -86,6 +88,8 @@ export default function App() {
   const [cloudAllowed, setCloudAllowed] = useState(false); const [chatRoute, setChatRoute] = useState<'local' | 'cloud'>('local');
   const [online, setOnline] = useState(navigator.onLine); const [error, setError] = useState(''); const [status, setStatus] = useState('');
   const epoch = useRef(0); const key = useRef(''); const input = useRef<MathInputHandle>(null);const chatInput=useRef<MathInputHandle>(null);
+  const sync = useNotebookSync(user && ready ? key.current : '', user?.uid, online, setBook);
+  const workspaceBase = useRef<Exercise | null>(null);
   const illustrations=selectedIllustrations(draft.attachments);
 
   const activeAI = useRef<{ controller: AbortController; status: string; error: string } | null>(null);
@@ -132,7 +136,7 @@ export default function App() {
         importOperation.current?.abort();importOperation.current=null;
         const version = ++epoch.current;
         confirmationResult.current?.(false); confirmationResult.current = null; setConfirmation(null);
-        key.current = ''; setUser(next); setReady(false); setBook(emptyNotebook()); setDraft(newExercise()); setDirty(false);setRecovery(null);setDraftSave('idle');setDraftSavedAt('');setImageProblem(null);setImagePreparing(false);setPdfBusy(false);closePdfPicker();setImportError('');setLibraryQuery('');
+        key.current = ''; workspaceBase.current=null; setUser(next); setReady(false); setBook(emptyNotebook()); setDraft(newExercise()); setDirty(false);setRecovery(null);setDraftSave('idle');setDraftSavedAt('');setImageProblem(null);setImagePreparing(false);setPdfBusy(false);closePdfPicker();setImportError('');setLibraryQuery('');
         setPartial(''); setBusy(null);setDrawingTarget(null);drawingDraft.current={}; setSaving(false); setSaveOpen(false); setFolderDialog(false); setPreview(null);setViewingImage(null); setPreviewError(''); setCollapsedHints([]); setError(''); setStatus(''); setQuestion(''); setFolder(null); setCloudAllowed(false); setChatRoute('local');setKnowledgeRoute('local');setFirstHintRoute('local');
         if (!next) return;
         const nextKey = notebookKey(auth.app.options.projectId!, next.uid); key.current = nextKey;
@@ -163,7 +167,7 @@ export default function App() {
   function documentActiveElement() { return window.document.activeElement instanceof HTMLElement ? window.document.activeElement : undefined; }
 
   function edit(update: Partial<Exercise>) { setDraft(value => ({ ...value, ...(update.statement!==undefined&&update.statement!==value.statement?{proofDiagram:undefined,geometryDiagram:undefined}:{}), ...update })); setDirty(true);setDraftSave('idle'); }
-  function resumeDraft(){if(!recovery)return;setDraft(structuredClone(recovery.exercise));setDirty(true);setDraftSave('saved');setDraftSavedAt(recovery.savedAt);setRecovery(null);setTab('solve');setStatus('Draft restored. Save exercise when you want to update your library.');}
+  function resumeDraft(){if(!recovery)return;const saved=book.exercises.find(page=>page.id===recovery.exercise.id);workspaceBase.current=structuredClone(saved?.updatedAt===recovery.exercise.updatedAt?saved:recovery.exercise);setDraft(structuredClone(recovery.exercise));setDirty(true);setDraftSave('saved');setDraftSavedAt(recovery.savedAt);setRecovery(null);setTab('solve');setStatus('Draft restored. Save exercise when you want to update your library.');}
   async function discardRecovery(){const version=epoch.current;setSaving(true);try{await clearWorkspaceDraft(key.current);if(version===epoch.current){setRecovery(null);setDraftSave('idle');}}catch{setError('Could not remove the draft. Try again.');}finally{if(version===epoch.current)setSaving(false);}}
   function cancelImport(){importOperation.current?.abort();importOperation.current=null;setPdfBusy(false);setPdfProgress(null);setImagePreparing(false);}
   async function loadImage(file?:File){
@@ -243,7 +247,7 @@ export default function App() {
     if(version!==epoch.current)return false;
     cancelImport();
     activeAI.current?.controller.abort(); activeAI.current = null;
-    epoch.current++; setCollapsedHints([]); setDraft(structuredClone(value)); setDirty(false);setDraftSave('idle'); setPartial(''); setBusy(null);setDrawingTarget(null);drawingDraft.current={}; setError(''); setStatus(''); setQuestion(''); setTab('solve');
+    epoch.current++; workspaceBase.current=structuredClone(value); setCollapsedHints([]); setDraft(structuredClone(value)); setDirty(false);setDraftSave('idle'); setPartial(''); setBusy(null);setDrawingTarget(null);drawingDraft.current={}; setError(''); setStatus(''); setQuestion(''); setTab('solve');
     return true;
   }
   async function authenticate(register: boolean) {
@@ -263,6 +267,13 @@ export default function App() {
     setAuthBusy(true); setError('');
     try { if(draftTimer.current)clearTimeout(draftTimer.current);await clearWorkspaceDraft(key.current);await signOut(getAuth(getFirebaseApp())); } catch (e) { setError(friendlyError(e)); }
     finally { setAuthBusy(false); }
+  }
+  async function toggleNotebookSync() {
+    if (blocked || !ready) return;
+    if (sync.enabled) { await sync.setEnabled(false); return; }
+    const version = epoch.current;
+    if (!await confirmChange({title:'Enable cloud sync?',description:'Your saved exercises, notes, chat and images will be backed up to your account and synced with your other enabled devices. Saved changes and deletions sync too. Cloud AI stays under its separate switch. Workspace drafts remain on this device.',action:'Enable cloud sync',cancel:'Not now'})) return;
+    if (version === epoch.current) await sync.setEnabled(true);
   }
   async function allowCloud(description = 'Cloud AI can send the current problem, selected problem illustrations, essentials, opened hints and recent conversation including images attached to chat messages to the AI service. Notes and solution images are not sent; reading an image asks for separate consent each time. Allow Cloud AI for this session?'): Promise<boolean> {
     if (!online) { setError('Cloud AI needs an internet connection. Local AI is still available.'); return false; }
@@ -393,7 +404,7 @@ export default function App() {
     if (!storageKey || !ready || blocked) return;
     setSaving(true); setError('');
     try {
-      let next = book; let selected = existing ? exerciseFolderIds(existing) : [...folderIds];
+      let next = book; let selected = (existing ? exerciseFolderIds(existing) : [...folderIds]).filter(id=>book.folders.some(folder=>folder.id===id));
       if (!existing && newFolder.trim()) {
         if (newFolder.trim().length > 80) throw new Error('Folder names can contain up to 80 characters.');
         const existing = book.folders.find(f => f.name.toLocaleLowerCase() === newFolder.trim().toLocaleLowerCase());
@@ -402,8 +413,10 @@ export default function App() {
         if (!existing) next = { ...book, folders: [...book.folders, { id: createdId, name: newFolder.trim(),color:saveFolderColor }] };
       }
       next = putExercise(next, withExerciseFolders(next,{ ...(existing ?? draft), title: existing?.title ?? title.slice(0, 120) },selected));
-      await saveNotebook(storageKey, next);
+      const before = sync.enabled && workspaceBase.current ? {...book, exercises:[...book.exercises.filter(page=>page.id!==workspaceBase.current!.id),workspaceBase.current]} : book;
+      next = await saveNotebook(storageKey, next, before);
       if (version !== epoch.current) return;
+      workspaceBase.current=structuredClone(next.exercises[0]);
       if(draftTimer.current)clearTimeout(draftTimer.current);draftTimer.current=null;
       await clearWorkspaceDraft(storageKey).catch(()=>{if(version===epoch.current)setError('Exercise saved. The previous draft could not be cleared; you can discard it next time.');});
       if(version!==epoch.current)return;
@@ -411,7 +424,7 @@ export default function App() {
     } catch (e) { if (version === epoch.current) setError(friendlyError(e)); }
     finally { if (version === epoch.current) setSaving(false); }
   }
-  function openPreview(exercise: Exercise) {delete drawingDraft.current['preview-notes']; setPreview({ id: exercise.id, notes: exercise.notes,notesFormat:exercise.notesFormat,attachments:structuredClone(exercise.attachments),folderIds:exerciseFolderIds(exercise) }); setPreviewError(''); }
+  function openPreview(exercise: Exercise) {delete drawingDraft.current['preview-notes']; setPreview({ id: exercise.id, base: structuredClone(exercise), notes: exercise.notes,notesFormat:exercise.notesFormat,attachments:structuredClone(exercise.attachments),folderIds:exerciseFolderIds(exercise) }); setPreviewError(''); }
   function previewDirty(value:NonNullable<typeof preview>,exercise:Exercise){
     return value.notes!==exercise.notes||value.notesFormat!==exercise.notesFormat||!sameAttachments(value.attachments,exercise.attachments)||value.folderIds.slice().sort().join('|')!==exerciseFolderIds(exercise).sort().join('|');
   }
@@ -428,7 +441,7 @@ export default function App() {
   async function leavePreview(openWorkspace = false) {
     if (!preview || saving) return;
     const version = epoch.current;
-    const exercise = book.exercises.find(value => value.id === preview.id); if (!exercise) return;
+    const exercise = book.exercises.find(value => value.id === preview.id) ?? preview.base;
     if (previewDirty(preview,exercise) && !await confirmChange({ title:'Leave these changes?', description:'Your preview changes have not been saved. Keep working to save them, or discard these changes and continue.', action:'Discard changes & continue' })) return;
     if (version !== epoch.current) return;
     if (openWorkspace && !await changeExercise(exercise)) return;
@@ -437,15 +450,20 @@ export default function App() {
   async function savePreviewNotes() {
     if (!preview || blocked || !ready) return;
     const version = epoch.current; const storageKey = key.current;
-    const original = book.exercises.find(value => value.id === preview.id); if (!original) return;
+    const original = sync.enabled ? preview.base : book.exercises.find(value => value.id === preview.id) ?? preview.base;
     setSaving(true); setPreviewError('');
     try {
-      const next = putExercisePreview(book, preview.id, {notes:preview.notes,notesFormat:preview.notesFormat,...(!sameAttachments(preview.attachments,original.attachments)?{attachments:preview.attachments}:{}),...(preview.folderIds.slice().sort().join('|')!==exerciseFolderIds(original).sort().join('|')?{folderIds:preview.folderIds}:{})});
-      await saveNotebook(storageKey, next);
+      const source = {...book,exercises:[original,...book.exercises.filter(page=>page.id!==preview.id)]};
+      const selected = preview.folderIds.filter(id=>book.folders.some(folder=>folder.id===id));
+      let next = putExercisePreview(source, preview.id, {notes:preview.notes,notesFormat:preview.notesFormat,...(!sameAttachments(preview.attachments,original.attachments)?{attachments:preview.attachments}:{}),...(selected.slice().sort().join('|')!==exerciseFolderIds(original).sort().join('|')?{folderIds:selected}:{})});
+      const before = sync.enabled ? {...book, exercises:[...book.exercises.filter(page=>page.id!==preview.id),preview.base]} : book;
+      next = await saveNotebook(storageKey, next, before);
       if (version !== epoch.current) return;
       setBook(next);
-      const saved=next.exercises.find(exercise=>exercise.id===preview.id)!;
-      setDraft(current=>current.id!==preview.id?current:{...current,
+      const saved=next.exercises[0];
+      setPreview(current=>current?{...current,id:saved.id,base:structuredClone(saved),notes:saved.notes,notesFormat:saved.notesFormat,attachments:structuredClone(saved.attachments),folderIds:exerciseFolderIds(saved)}:current);
+      if(saved.id===preview.id&&workspaceBase.current?.id===preview.id)workspaceBase.current={...workspaceBase.current,notes:saved.notes,notesFormat:saved.notesFormat,attachments:structuredClone(saved.attachments),folderId:saved.folderId,folderIds:saved.folderIds,updatedAt:saved.updatedAt};
+      setDraft(current=>saved.id!==preview.id||current.id!==preview.id?current:{...current,
         ...(current.notes===original.notes&&current.notesFormat===original.notesFormat?{notes:saved.notes,notesFormat:saved.notesFormat}:{}),
         ...(sameAttachments(current.attachments,original.attachments)?{attachments:structuredClone(saved.attachments)}:{}),
         ...(exerciseFolderIds(current).sort().join('|')===exerciseFolderIds(original).sort().join('|')?{folderIds:exerciseFolderIds(saved),folderId:saved.folderId}:{})});
@@ -457,11 +475,12 @@ export default function App() {
     const version=epoch.current,storageKey=key.current;
     setSaving(true);setError('');
     try{
-      const next=putExerciseCompletion(book,id,completed);
-      await saveNotebook(storageKey,next);
+      let next=putExerciseCompletion(book,id,completed);
+      next = await saveNotebook(storageKey,next,book);
       if(version!==epoch.current)return;
       setBook(next);
       setDraft(current=>current.id===id?{...current,completed}:current);
+      if(workspaceBase.current?.id===id)workspaceBase.current={...workspaceBase.current,completed,updatedAt:next.exercises.find(page=>page.id===id)!.updatedAt};
       setStatus(completed?'Exercise marked completed.':'Exercise marked in progress.');
     }catch(reason){if(version===epoch.current)setError(friendlyError(reason));}
     finally{if(version===epoch.current)setSaving(false);}
@@ -472,9 +491,9 @@ export default function App() {
     if (version !== epoch.current) return;
     setSaving(true);
     try {
-      const next = { ...book, exercises: book.exercises.filter(e => e.id !== id) };
+      let next = { ...book, exercises: book.exercises.filter(e => e.id !== id) };
       if(draft.id===id){if(draftTimer.current)clearTimeout(draftTimer.current);draftTimer.current=null;await clearWorkspaceDraft(key.current);if(version!==epoch.current)return;}
-      await saveNotebook(key.current, next);
+      next = await saveNotebook(key.current, next, book);
       if (version !== epoch.current) return;
       if(draft.id===id){setDraft(newExercise());setDirty(false);setDraftSave('idle');}
       setBook(next);
@@ -486,7 +505,7 @@ export default function App() {
     const version=epoch.current,storageKey=key.current;
     setSaving(true);setError('');
     try{
-      const next=recolorFolder(book,id,color);await saveNotebook(storageKey,next);
+      let next=recolorFolder(book,id,color);next=await saveNotebook(storageKey,next,book);
       if(version===epoch.current){setBook(next);setStatus('Folder color saved on this device.');}
     }catch(reason){if(version===epoch.current)setError(friendlyError(reason));}
     finally{if(version===epoch.current)setSaving(false);}
@@ -495,8 +514,8 @@ export default function App() {
     if (blocked || !ready) return;
     const version=epoch.current; setSaving(true); setError('');
     try {
-      const next=addFolder(book, folderName,creationColor);
-      await saveNotebook(key.current,next);
+      let next=addFolder(book, folderName,creationColor);
+      next = await saveNotebook(key.current,next,book);
       if (version !== epoch.current) return;
       setBook(next); setFolder(null); setFolderDialog(false); setFolderName(''); setStatus('Folder created on this device.');
     } catch (e) { if (version === epoch.current) setError(friendlyError(e)); }
@@ -511,8 +530,8 @@ export default function App() {
     if (version !== epoch.current) return;
     setSaving(true); setError('');
     try {
-      const next=removeFolder(book,id);
-      await saveNotebook(key.current,next);
+      let next=removeFolder(book,id);
+      next = await saveNotebook(key.current,next,book);
       if (version !== epoch.current) return;
       setBook(next); if (folder === id) setFolder(null);
       setDraft(current => exerciseFolderIds(current).includes(id) ? withExerciseFolders(next,current,exerciseFolderIds(current).filter(folder=>folder!==id)) : current);
@@ -524,7 +543,7 @@ export default function App() {
   function streaming(purpose: NotebookRequest['purpose']) { return busy === purpose ? <div className="ai-progress"><button className="stop-ai" onClick={stopAI}>■ Stop AI</button><div className="live-answer" aria-busy="true">{partial || 'Preparing an answer…'}</div></div> : null; }
   const shown = findExercises(book.exercises,{folder,query:libraryQuery,sort:librarySort,completion:libraryCompletion});
   const showPages=libraryView==='exercises'||!!folder||!!libraryQuery.trim()||libraryCompletion!=='all';
-  const previewExercise = preview ? book.exercises.find(exercise => exercise.id === preview.id) : undefined;
+  const previewExercise = preview ? book.exercises.find(exercise => exercise.id === preview.id) ?? preview.base : undefined;
   const savedDraft = book.exercises.some(exercise => exercise.id === draft.id);
   useEffect(()=>{
     if(!user||!ready)return;
@@ -551,16 +570,17 @@ export default function App() {
       <nav aria-label="Navigation"><button aria-current={tab === 'solve' ? 'page' : undefined} className={tab === 'solve' ? 'active' : ''} onClick={() => setTab('solve')}>Workspace</button><button aria-current={tab === 'library' ? 'page' : undefined} className={tab === 'library' ? 'active' : ''} onClick={() => setTab('library')}>Exercise library <span>{book.exercises.length}</span></button><button aria-current={tab === 'guide' ? 'page' : undefined} className={tab === 'guide' ? 'active' : ''} onClick={() => setTab('guide')}>How to use</button><button aria-current={tab === 'account' ? 'page' : undefined} className={tab === 'account' ? 'active' : ''} onClick={() => setTab('account')}>{user ? 'Account' : 'Sign in'}</button></nav>
       <MenuDisclosure className="appearance-disclosure"><summary>◐ <span>Appearance</span></summary><AppearanceSettings appearance={appearance}/></MenuDisclosure>
     </header>
-    <div className="connection"><span className={online ? 'dot online' : 'dot'} />{online ? 'Online' : 'Offline'}<span>·</span><span>Notebook storage: this device · Cloud sync unavailable</span></div>
+    <div className="connection"><span className={online ? 'dot online' : 'dot'} />{online ? 'Online' : 'Offline'}<span>·</span><span role="status">{sync.label}</span></div>
     {error && <p role="alert" className="notice error">{error}</p>}
     {status && <p role="status" className="notice success">{status}</p>}
+    {user&&sync.enabled&&sync.error&&tab!=='account'&&<p role="alert" className="notice error">{sync.error} <button onClick={()=>setTab('account')}>Open sync settings</button></p>}
     {recovery&&<section className="draft-recovery paper" aria-label="Recover workspace draft"><div><strong>Continue where you left off?</strong><p>A draft of {recovery.exercise.title || 'Untitled exercise'} was saved {new Date(recovery.savedAt).toLocaleString('en-GB')}. Your library copy has not been changed.</p></div><div className="row"><button className="primary" disabled={saving} onClick={resumeDraft}>Resume draft</button><button disabled={saving} onClick={()=>void discardRecovery()}>Start fresh</button></div></section>}
     {draftSave==='error'&&<p className="notice error" role="alert">Could not autosave this draft. Keep this page open and try Save exercise.</p>}
     {(pdfBusy||imagePreparing)&&<div className="ai-toolbar" role="status"><span>{imagePreparing?'Preparing image…':pdfProgress?.stage==='ocr'?`Reading PDF locally · ${pdfProgress.page}/${pdfProgress.total}`:'Opening PDF…'}</span><button className="stop-ai" onClick={cancelImport}>Stop import</button></div>}
     {busy && <div className="ai-toolbar" role="status"><span>AI is working on {busy === 'knowledge' ? 'your essentials' : busy === 'chat' ? 'your conversation' : `hint ${busy.slice(-1)}`} · {elapsed}s</span><button className="stop-ai" onClick={stopAI}>■ Stop AI</button></div>}
     {((!user && tab !== 'guide') || tab === 'account') && <section className="account-panel paper">
       <div><p className="eyebrow">ONE PERSON. ONE NOTEBOOK.</p><h1>{user ? 'Your exercise notebook' : 'Start a new page.'}</h1><p>Keep your thinking, not just the answer.</p></div>
-      {user ? <div><p>Signed in: <strong>{user.email}</strong></p><p className="subtle">Your notebook is private to this account and Firebase environment on this browser.</p><button disabled={authBusy || blocked} onClick={() => void logout()}>Sign out</button></div> : <form onSubmit={e => { e.preventDefault(); void authenticate(false); }}><label>Email<input type="email" required autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} disabled={authBusy}/></label><label>Password<input type="password" required minLength={6} autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} disabled={authBusy}/></label><div className="row"><button className="primary" disabled={authBusy} type="submit">Sign in</button><button type="button" disabled={authBusy || password.length < 6 || !email.includes('@')} onClick={() => void authenticate(true)}>Create account</button></div><p className="subtle">Signing in requires Authentication or a running emulator.</p></form>}
+      {user ? <div><p>Signed in: <strong>{user.email}</strong></p><p className="subtle">Your notebook belongs to this account. Enable cloud sync below to use your saved pages on other devices.</p><CloudSyncPanel sync={sync} online={online} disabled={authBusy||blocked} onToggle={()=>void toggleNotebookSync()}/><button disabled={authBusy || blocked} onClick={() => void logout()}>Sign out</button></div> : <form onSubmit={e => { e.preventDefault(); void authenticate(false); }}><label>Email<input type="email" required autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} disabled={authBusy}/></label><label>Password<input type="password" required minLength={6} autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} disabled={authBusy}/></label><div className="row"><button className="primary" disabled={authBusy} type="submit">Sign in</button><button type="button" disabled={authBusy || password.length < 6 || !email.includes('@')} onClick={() => void authenticate(true)}>Create account</button></div><p className="subtle">Signing in requires Authentication or a running emulator.</p></form>}
     </section>}
     {tab === 'guide' && <UsageGuide onStart={()=>setTab('solve')}/>}
     {user && !ready && <p role="status">Opening your notebook…</p>}
@@ -626,7 +646,7 @@ export default function App() {
             <AttachmentGallery images={draft.attachments.filter(image=>image.kind==='problem')} onOpen={setViewingImage} disabled={blocked} onRename={(id,name)=>edit({attachments:draft.attachments.map(image=>image.id===id?{...image,name}:image)})} onRemove={id=>void reviseIllustrations(draft.attachments.filter(image=>image.id!==id))} onAISelection={focusMode?undefined:(id,included)=>void reviseIllustrations(draft.attachments.map(image=>image.id===id?{...image,useForAI:included}:image))}/>
 
           </div>
-          {!focusMode&&<p className="subtle">{cloudAllowed&&online?'Cloud actions send selected illustrations. Local chat stays on your device.':'Local AI needs a compatible device to understand illustrations. Images are not sent to cloud while Cloud AI is off.'}</p>}
+          {!focusMode&&<p className="subtle">{cloudAllowed&&online?'Cloud actions send selected illustrations. Local AI processes chat on your device.':'Local AI needs a compatible device to understand illustrations. Images are not sent to cloud while Cloud AI is off.'}</p>}
         </aside>
       </div>
       <div className="guidance-row">
@@ -664,6 +684,6 @@ export default function App() {
     </>}
     {user && ready && tab === 'library' && <section><div className="page-heading"><div><p className="eyebrow">PAGES OF PROGRESS</p><h1>{folder ? book.folders.find(f => f.id === folder)?.name : 'Exercise library'}</h1><p>Revisit your thinking. Continue where you left off.</p></div><div className="row"><button disabled={blocked} onClick={() => { setFolderName('');setCreationColor(defaultFolderColor); setError(''); setFolderDialog(true); }}>＋ New folder</button>{folder && folder !== 'general' && <button disabled={blocked} onClick={() => void deleteFolder(folder)}>Delete folder</button>}<button disabled={blocked} onClick={() => changeExercise(newExercise())}>＋ New exercise</button></div></div><div className="library-view row" role="group" aria-label="Library view"><button aria-pressed={!showPages} onClick={()=>{setLibraryView('folders');setFolder(null);setLibraryQuery('');setLibraryCompletion('all');}}>Folders</button><button aria-pressed={showPages&&!folder} onClick={()=>{setLibraryView('exercises');setFolder(null);}}>All exercises</button></div><div className="library-tools"><input type="search" aria-label="Search exercises" placeholder="Search names, problems or notes…" value={libraryQuery} onChange={e=>setLibraryQuery(e.target.value)}/><select aria-label="Exercise status" value={libraryCompletion} onChange={e=>setLibraryCompletion(e.target.value as typeof libraryCompletion)}><option value="all">All exercises</option><option value="progress">In progress</option><option value="completed">Completed</option></select><select aria-label="Sort exercises" value={librarySort} onChange={e=>{setLibrarySort(e.target.value as ExerciseSort);setLibraryView('exercises');}}><option value="recent">Recently updated</option><option value="oldest">Oldest first</option><option value="name">Name A–Z</option></select></div><div className="library-results"><p role="status">{showPages ? `${shown.length} of ${book.exercises.filter(e=>!folder||inExerciseFolder(e,folder)).length} exercises` : `${book.folders.length} folders · ${book.exercises.length} exercises`}{folder?' in this folder':''}</p>{(libraryQuery||libraryCompletion!=='all')&&<button onClick={()=>{setLibraryQuery('');setLibraryCompletion('all');}}>Clear filters</button>}</div>{showPages ? <>{folder&&<button onClick={()=>{setFolder(null);setLibraryView('folders');setLibraryQuery('');setLibraryCompletion('all');}}>← All folders</button>}<div className="exercise-list">{!shown.length && <div className="paper empty-panel"><strong>{libraryQuery.trim()||libraryCompletion!=='all'?'No matching exercises.':'No exercises yet.'}</strong><p>{libraryQuery.trim()||libraryCompletion!=='all'?'Try another search or clear the filters above.':'Create an exercise in the workspace, then save it to your library.'}</p></div>}{shown.map(e => <article className="paper exercise-card" key={e.id}><div><span className={`tag ${e.completed ? 'done' : ''}`}>{e.completed ? 'Completed' : 'In progress'}</span><h2>{e.title}</h2><MathInput value={statementLatex(e.statement, e.statementFormat)} readOnly compact label={`Problem: ${e.title}`}/><small>{new Date(e.updatedAt).toLocaleString('en-GB')} · {e.hints.length}/3 hints opened</small></div><div className="row exercise-actions"><button type="button" disabled={blocked} aria-label={`${e.completed?'Mark in progress':'Mark completed'}: ${e.title}`} onClick={()=>void changeCompletion(e.id,!e.completed)}>{e.completed?'Mark in progress':'Mark completed'}</button><button className="primary" disabled={blocked} onClick={() => openPreview(e)}>Open exercise</button><button disabled={blocked} onClick={() => void deleteExercise(e.id)}>Delete</button></div></article>)}</div></> : <div className="folder-grid">{book.folders.map(f => <article className="paper folder-card" key={f.id} data-folder-color={folderColor(f.color).id}><button className="folder-open" disabled={blocked} onClick={() => setFolder(f.id)}><span aria-hidden="true">▱</span><h2>{f.name}</h2><small>{book.exercises.filter(e => inExerciseFolder(e,f.id)).length} exercises →</small></button><details className="folder-color-menu"><summary aria-label={`Choose color for ${f.name}`}><span className="folder-color-dot" aria-hidden="true"/>Color · {folderColor(f.color).name}<Chevron/></summary><FolderColorPicker value={folderColor(f.color).id} disabled={blocked} onChange={color=>void changeFolderColor(f.id,color)}/></details>{f.id !== 'general' && <button className="folder-delete" disabled={blocked} aria-label={`Delete folder ${f.name}`} onClick={() => void deleteFolder(f.id)}>Delete folder</button>}</article>)}</div>}</section>}
     {folderDialog && <div className="modal-backdrop"><section className="paper save-dialog" role="dialog" aria-modal="true" aria-labelledby="folder-title"><p className="eyebrow">ORGANIZE YOUR THINKING</p><h2 id="folder-title">New folder</h2><form onSubmit={e => { e.preventDefault(); void createFolder(); }}><label>Folder name<input autoFocus required maxLength={80} value={folderName} disabled={saving} onChange={e => setFolderName(e.target.value)} placeholder="e.g. Algebra — week 1"/></label><p className="folder-color-label">Folder color</p><FolderColorPicker value={creationColor} disabled={saving} onChange={setCreationColor}/>{error && <p role="alert" className="error">{error}</p>}<div className="row"><button type="button" disabled={saving} onClick={() => setFolderDialog(false)}>Cancel</button><button className="primary" type="submit" disabled={saving || !folderName.trim()}>{saving ? 'Creating…' : 'Create folder'}</button></div></form></section></div>}
-    {saveOpen && <div className="modal-backdrop"><section className="paper save-dialog" role="dialog" aria-modal="true" aria-labelledby="save-title"><p className="eyebrow">KEEP THIS PAGE</p><h2 id="save-title">Save to your notebook</h2><label>Exercise name<input autoFocus required maxLength={120} value={title} disabled={saving} onChange={e => setTitle(e.target.value)}/></label><FolderPicker folders={book.folders} selected={folderIds} disabled={saving} onChange={setFolderIds}/><label>Or create a new folder<input maxLength={80} aria-label="New folder name" value={newFolder} disabled={saving} onChange={e => setNewFolder(e.target.value)} placeholder="e.g. Algebra — week 1"/></label>{!!newFolder.trim()&&!book.folders.some(folder=>folder.name.toLocaleLowerCase()===newFolder.trim().toLocaleLowerCase())&&<><p className="folder-color-label">New folder color</p><FolderColorPicker value={saveFolderColor} disabled={saving} onChange={setSaveFolderColor}/></>}<p className="subtle">The problem, essentials, opened hints, notes, images and chat stay on this browser. Cloud sync is not available yet.</p>{error && <p role="alert" className="error">{error}</p>}<div className="row"><button disabled={saving} onClick={() => setSaveOpen(false)}>Not now</button><button className="primary" disabled={saving || !title.trim()} onClick={() => void save()}>{saving ? 'Saving…' : 'Save on this device'}</button></div></section></div>}
+    {saveOpen && <div className="modal-backdrop"><section className="paper save-dialog" role="dialog" aria-modal="true" aria-labelledby="save-title"><p className="eyebrow">KEEP THIS PAGE</p><h2 id="save-title">Save to your notebook</h2><label>Exercise name<input autoFocus required maxLength={120} value={title} disabled={saving} onChange={e => setTitle(e.target.value)}/></label><FolderPicker folders={book.folders} selected={folderIds} disabled={saving} onChange={setFolderIds}/><label>Or create a new folder<input maxLength={80} aria-label="New folder name" value={newFolder} disabled={saving} onChange={e => setNewFolder(e.target.value)} placeholder="e.g. Algebra — week 1"/></label>{!!newFolder.trim()&&!book.folders.some(folder=>folder.name.toLocaleLowerCase()===newFolder.trim().toLocaleLowerCase())&&<><p className="folder-color-label">New folder color</p><FolderColorPicker value={saveFolderColor} disabled={saving} onChange={setSaveFolderColor}/></>}<p className="subtle">Your complete exercise is saved on this device. If cloud sync is enabled in Account, it will also sync with your other devices when online.</p>{error && <p role="alert" className="error">{error}</p>}<div className="row"><button disabled={saving} onClick={() => setSaveOpen(false)}>Not now</button><button className="primary" disabled={saving || !title.trim()} onClick={() => void save()}>{saving ? 'Saving…' : 'Save on this device'}</button></div></section></div>}
   </main>{drawingTarget&&<IllustrationDrawing key={drawingTarget} destination={drawingTarget} initialScene={drawingDraft.current[drawingTarget]} onScene={scene=>{drawingDraft.current[drawingTarget]=scene;}} onClose={()=>setDrawingTarget(null)} onUse={addDrawing} suspended={!!confirmation||!!viewingImage}/>} {pdfQuestions!==null&&pdfFile&&<PdfQuestionPicker file={pdfFile} questions={pdfQuestions} pageCount={pdfPageCount} suspended={!!confirmation||!!viewingImage} onClose={closePdfPicker} onUse={usePdfQuestions} onReadPage={readPdfPageWithCloud} onImage={setViewingImage}/>} {imageProblem&&<ImageProblemReview image={imageProblem} onClose={()=>{setImageProblem(null);setImportError('');}} onApply={applyImageText} onCloudRead={readImageWithCloud} onImage={()=>setViewingImage({id:'image-import-source',name:imageProblem.name,data:imageProblem.data,kind:'problem'})} suspended={!!confirmation||!!viewingImage} error={importError} canKeepImage={draft.attachments.length<4}/>} {preview && previewExercise && <ExercisePreview key={preview.id} exercise={previewExercise} folderName={['My exercises',...book.folders.filter(value=>exerciseFolderIds(previewExercise).includes(value.id)).map(value=>value.name)].join(' · ')} attachments={preview.attachments} folders={book.folders} folderIds={preview.folderIds} onAttachments={attachments=>setPreview(current=>current?{...current,attachments}:current)} onAttach={file=>void attachPreview(file)} onDraw={()=>openDrawing('preview-notes')} onFolders={folderIds=>setPreview(current=>current?{...current,folderIds}:current)} notes={preview.notes} notesFormat={preview.notesFormat} saving={saving} onImage={setViewingImage} suspended={!!confirmation || !!viewingImage||drawingOpen} error={previewError} onNotes={notes => setPreview(current => current ? { ...current, notes,notesFormat:'latex' } : current)} onSaveNotes={() => void savePreviewNotes()} onClose={() => void leavePreview()} onOpenWorkspace={() => void leavePreview(true)}/>} {viewingImage&&<ImageViewer key={viewingImage.id} image={viewingImage} kindLabel={viewingImage.viewerLabel??(pdfQuestions!==null?'PDF SOURCE PAGE':imageProblem?'IMAGE SOURCE':undefined)} onClose={()=>setViewingImage(null)}/>} {confirmation && <ConfirmDialog {...confirmation} onClose={closeConfirmation}/>}</MathKeyboardProvider>;
 }

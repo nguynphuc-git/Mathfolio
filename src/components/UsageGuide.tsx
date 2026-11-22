@@ -29,7 +29,8 @@ export function UsageGuide({onStart}:{onStart:()=>void}) {
     <section className="paper guide-details" aria-labelledby="guide-ai">
       <h2 id="guide-ai">AI and storage</h2>
       <p>Local AI needs a supported device and a downloaded model. Cloud AI needs internet access and your permission to send the problem and selected images. Check AI answers against your source and calculations.</p>
-      <p>Your notebook is saved in this browser for your account. Clearing browser data can erase it. Open Mathfolio while online first and let it finish loading to prepare for offline use.</p>
+      <p>Your notebook is saved in this browser. In <strong>Account</strong>, enable <strong>Cloud sync</strong> on each device to sync saved exercises, folders, notes, chat and images. Offline saves wait for a connection; conflicting edits are kept as a copy. Workspace drafts stay on their device. Cloud sync is separate from Cloud AI.</p>
+      <p>Open Mathfolio online first and let it finish loading to prepare for offline use. Check that cloud sync is up to date before relying on another device; clearing browser data can erase work that has not synced.</p>
     </section>
     <details className="paper guide-details">
       <summary>Keyboard shortcuts</summary>
