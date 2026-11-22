@@ -81,3 +81,15 @@ html[data-theme="dark"] .pdf-question-list button span,html[data-theme="dark"] .
 .focus-mode .problem-images{display:flex}.focus-mode .problem-row{grid-template-columns:minmax(0,2fr) minmax(250px,1fr)}.workspace-content.focus-mode{max-width:1400px}@media(max-width:800px){.focus-mode .problem-row{grid-template-columns:minmax(0,1fr)}}
 
 .chat-drawing-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0 6px}.chat-drawing-actions button{font-size:13px;padding:8px 12px}.chat-drawing-actions p{margin:0}.discussion>.attachments{max-height:270px;overflow:auto}.message .attachments{margin-top:10px}.message .attachments figure{max-width:320px}.notes>button{margin-right:10px}
+
+/* The outline follows the active numbered section without changing its size. */
+.workspace-content .paper:has(> .panel-heading > .step):has(:focus-visible) {
+  outline: 1px solid currentColor;
+  outline-offset: -1px;
+}
+@media (hover: hover) {
+  .workspace-content .paper:has(> .panel-heading > .step):hover {
+    outline: 1px solid currentColor;
+    outline-offset: -1px;
+  }
+}

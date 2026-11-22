@@ -270,6 +270,43 @@ describe('multi-question PDF review',()=>{
   });
 });
 
+describe('independent hint levels', () => {
+  it('opens the full solution first, saves its level and keeps it out of earlier hints', async () => {
+    await type('[aria-label="Problem statement"]', 'Solve 3x = 12');
+    mocks.ai.mockResolvedValueOnce({text:'Linear equations', source:'on_device'});
+    await click('Confirm & analyze');
+    for (const level of [1, 2, 3]) expect(button(`Open level ${level}`).disabled).toBe(false);
+
+    mocks.ai.mockResolvedValueOnce({text:'The answer is four.', source:'on_device'});
+    await click('Open level 3');
+    const tiers = host.querySelectorAll('.hint-tier');
+    expect(tiers[2].textContent).toContain('The answer is four.');
+    expect(button('Open level 1').disabled).toBe(false);
+    expect(button('Open level 2').disabled).toBe(false);
+    expect(mocks.ai.mock.calls.map(([request]) => request.purpose)).toEqual(['knowledge', 'hint3']);
+
+    await click('Save exercise');
+    await type('.save-dialog label input', 'Independent hints');
+    await click('Save on this device');
+    await click('Exercise library');
+    await click('All exercises');
+    const card = [...host.querySelectorAll('.exercise-card')].find(el => el.textContent?.includes('Independent hints'))!;
+    expect(card.textContent).toContain('1/3 hints opened');
+    await click('Open exercise', card);
+    const previewHints = host.querySelectorAll('.exercise-preview .preview-section details summary');
+    expect([...previewHints].map(el => el.textContent)).toEqual(['Level 3 · Full solution']);
+    await click('Open in workspace');
+
+    mocks.ai.mockResolvedValueOnce({text:'Look at the coefficient.', source:'on_device'});
+    await click('Open level 1');
+    expect(mocks.ai.mock.calls.at(-1)![0]).toMatchObject({purpose:'hint1', hints:[]});
+    mocks.ai.mockResolvedValueOnce({text:'Divide both sides.', source:'on_device'});
+    await click('Open level 2');
+    expect(mocks.ai.mock.calls.at(-1)![0]).toMatchObject({purpose:'hint2', hints:['Look at the coefficient.']});
+    expect(host.querySelectorAll('.hint-toggle')).toHaveLength(3);
+  });
+});
+
 describe('online suggestions for later hint levels',()=>{
   it('offers cloud on levels 2 and 3 and generates only after permission with the correct route',async()=>{
     await openWorkspace();const tiers=host.querySelectorAll('.hint-tier');
@@ -732,8 +769,9 @@ describe('workspace recovery and library tools',()=>{
     expect(host.textContent).toContain('No matching exercises');
     expect(mocks.ai).not.toHaveBeenCalled();
   });
-  it('uses sigma branding, places discussion before notes, and keeps zoom and symbol search local',async()=>{
-    expect(host.querySelector('.brand-mark')?.textContent).toBe('Σ');
+  it('uses the Mathfolio wordmark, places discussion before notes, and keeps zoom and symbol search local',async()=>{
+    expect(host.querySelector('.brand-wordmark')?.textContent).toBe('Mathfolio');
+    expect(host.querySelector('.brand')?.textContent).not.toContain('Σ');
     expect([...host.querySelector('.workbench')!.children].map(x=>x.className)).toEqual(['paper discussion','paper notes']);
     await act(async()=>{host.querySelector<HTMLDetailsElement>('.study-options')!.open=true;});
     await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Increase math size"]')!.click());
