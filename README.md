@@ -1,8 +1,12 @@
 # Mathfolio
 
-Sổ bài tập toán cá nhân. Nhập công thức, viết lời giải, đính kèm ảnh và lưu bài trên máy; bật Cloud sync để đồng bộ thư viện theo tài khoản sang các thiết bị khác.
+Sổ bài tập toán cá nhân. Nhập công thức, viết lời giải, đính kèm ảnh và đồng bộ bài riêng tư theo tài khoản bằng Firestore + Cloud Storage; IndexedDB giữ cache offline trên thiết bị.
 
-Repo chính: [nguynphuc-git/Mathfolio](https://github.com/nguynphuc-git/Mathfolio), nhánh **main**. Dự án được tách từ nhánh `feat/digital-exercise-notebook` của StudyLens, giữ nguyên toàn bộ lịch sử commit đến `76006fc`.
+Bản demo công khai: [fbailogic26vrt-3019.web.app](https://fbailogic26vrt-3019.web.app/). Bản online chỉ dùng Firebase project quota `fbailogic26vrt-3019`; người dùng có thể đăng nhập bằng Google hoặc tạo tài khoản bằng email bất kỳ. Cloud AI định tuyến OCR/chat/hint đầu sang Gemini Flash Lite để tiết kiệm quota, còn lời giải đầy đủ và suy luận hình học dùng Gemini 4 Hydrogen. Ảnh Illustration nhận file đến 10 MB và tự thu nhỏ/nén trên thiết bị trước khi lưu hoặc gửi AI.
+
+Repo chính: [nguynphuc-git/Mathfolio](https://github.com/nguynphuc-git/Mathfolio), nhánh **main**.
+
+[Kế hoạch quay demo 3 phút (HTML tương tác)](https://mathfolio-pm.web.app/) mở trực tiếp trong trình duyệt; các link test case trong từng bước dẫn tới file mẫu để tải hoặc sao chép. Bản nguồn ở [scripts/demo-plan.html](scripts/demo-plan.html).
 
 Khung vẽ Illustration có chế độ nền trắng hoặc tọa độ. Ở chế độ tọa độ, nhập nhiều phương trình tự do, bất phương trình, biến có thanh trượt và dãy giá trị; kéo nền để dịch khung nhìn, giữ Shift để chọn nhiều hình. Solo mode cho tự vẽ hoặc tải ảnh lên; ảnh thêm tại đây mặc định không dùng cho AI. Công cụ Perp. segment hạ đoạn vuông góc từ một điểm xuống đường gốc; nếu điểm ở trên đường, chọn thêm đầu còn lại để định chiều và độ dài. Parallelogram nhận ba đỉnh liên tiếp và dựng đỉnh thứ tư theo chúng. Khi vẽ, đưa con trỏ gần điểm hoặc đường để bắt điểm dùng chung; Intersection dùng được với cả nét vẽ tay.
 
@@ -13,26 +17,14 @@ Khung vẽ Illustration có chế độ nền trắng hoặc tọa độ. Ở ch
 3. Mở **Start-Mathfolio.cmd** trên Windows hoặc **Start-Mathfolio.command** trên macOS. Trên Linux, từ thư mục dự án chạy `npm run local`. Nếu macOS yêu cầu xác nhận cho tệp đã tải về, mở từ Finder theo hướng dẫn của hệ thống. Có thể chạy `npm run local` trên cả ba hệ điều hành.
 4. Trình duyệt sẽ mở [Mathfolio trên máy này](http://localhost:5173). Nhập email thử và mật khẩu từ 6 ký tự, chọn **Create account**. Lần sau dùng **Sign in** trong cùng trình duyệt. Mỗi máy có tài khoản emulator riêng.
 
-Trình khởi động cài dependency từ lockfile, khởi động Auth Emulator cho project demo và mở Vite. Sổ bài tập lưu bằng IndexedDB nên chế độ này chỉ cần Auth Emulator. Không cần Java, tài khoản Firebase, file môi trường hay quota để chạy luồng cơ bản. Khi dừng, nhấn **Ctrl+C một lần** và chờ xuất dữ liệu trước khi đóng cửa sổ. Dữ liệu Auth ở `.mathfolio-auth/`. Lần đầu, nếu có bản xuất của cách chạy cũ ở `.emulator-data/` hoặc `../studylens-emulator-data/`, trình khởi động sẽ nhập lại tài khoản. Giữ cùng origin, trình duyệt và UID để đọc lại sổ.
-
-## Tiếp tục dùng thư mục StudyLens hiện có
-
-Trong thư mục đang chạy Mathfolio, chuyển kết nối Git sang repo mới rồi tạo nhánh làm việc theo dõi `origin/main`:
-
-```sh
-git remote set-url origin https://github.com/nguynphuc-git/Mathfolio.git
-git fetch origin
-git switch -c mathfolio-main --track origin/main
-```
-
-Các lần sau dùng `git pull --ff-only`. Nhánh cũ vẫn nằm trong repo StudyLens để đối chiếu. Việc đổi remote không thay đổi cấu hình Firebase, dữ liệu emulator hay dữ liệu trong trình duyệt; tiếp tục chạy ở cùng địa chỉ như trước.
+Trình khởi động cài dependency từ lockfile, khởi động Auth Emulator cho project demo và mở Vite. Sổ bài tập lưu bằng IndexedDB nên chế độ này chỉ cần Auth Emulator. Không cần Java, tài khoản Firebase, file môi trường hay quota để chạy luồng cơ bản. Khi dừng, nhấn **Ctrl+C một lần** và chờ xuất dữ liệu trước khi đóng cửa sổ. Dữ liệu Auth ở `.mathfolio-auth/`. Lần đầu, nếu có bản xuất emulator ở `.emulator-data/`, trình khởi động sẽ nhập lại tài khoản. Giữ cùng origin, trình duyệt và UID để đọc lại sổ.
 
 ## Thử một bài trong hai phút
 
-- Nhập đề và viết vào **Your working notes**. Chọn **Save exercise**, đặt tên, chọn các thư mục tùy ý rồi chọn **Save on this device**. Mọi bài đã lưu đều có trong **My exercises**; các thư mục cùng tham chiếu một bài. Bạn có thể lưu cả bài đang làm dở.
+- Nhập đề và viết vào **Your working notes**. Chọn **Save exercise**, đặt tên, chọn các thư mục tùy ý rồi chọn **Save & sync**. Mọi bài đã lưu đều có trong **My exercises** và đồng bộ riêng theo tài khoản qua Firestore; ảnh nằm trong Cloud Storage. Các thư mục cùng tham chiếu một bài. Cache trên thiết bị giữ luồng dùng offline.
 - Mở **Exercise library → My exercises → Open exercise** để xem bài, sửa ghi chú, thêm/xóa ảnh bài giải, đổi tên ảnh và chọn thêm thư mục. Nhấn **Save changes** để lưu các thay đổi. **Open in workspace** mở bản nháp để tiếp tục làm. Tải lại trang rồi mở thư viện để kiểm tra dữ liệu.
 - Thử `2x+3=7` và chọn **Confirm & analyze** để xem thẻ công thức cục bộ. Các bài ngoài phạm vi công thức, hint và chat dùng Firebase AI Logic. Gemini cần project thật, App Check và thiết bị tương thích cho chế độ on-device.
-- Chọn **Read image**: **Read printed text** là nút chính màu xanh, dùng OCR chữ in ngay trên thiết bị. **Read with AI** ở bên phải cho chọn **Local AI / Cloud AI**; Cloud hỏi đồng ý riêng cho ảnh nguồn và có thể bật quyền cho phiên này ngay trong cửa sổ. Bấm ảnh để zoom, sửa chữ/công thức trực tiếp trong **Review your problem**, dùng bàn phím toán hoặc **Restore extracted text** để khôi phục bản nhận diện gần nhất. Kiểm tra công thức trước khi dùng đề.
+- Chọn **Add content → Read image**: **Read printed text** là nút chính màu xanh, dùng OCR chữ in ngay trên thiết bị. **Read with AI** ở bên phải cho chọn **Local AI / Cloud AI**; Cloud hỏi đồng ý riêng cho ảnh nguồn và có thể bật quyền cho phiên này ngay trong cửa sổ. Bấm ảnh để zoom, sửa chữ/công thức trực tiếp trong **Review your problem**, dùng bàn phím toán hoặc **Restore extracted text** để khôi phục bản nhận diện gần nhất. Kiểm tra công thức trước khi dùng đề.
 - Bản đang làm được tự lưu riêng; tải lại trang rồi chọn **Resume draft** để tiếp tục. **Save exercise** mới cập nhật bài gốc trong thư viện.
 - **Chat** và **Your working notes** dùng ngay từ đầu, không cần chạy kiến thức hoặc hint. Có thể hỏi trong chat khi chưa nhập đề; Cloud AI vẫn cần sự đồng ý của bạn.
 - Trong thư viện, chọn **Mark completed / Mark in progress** ngay trên thẻ bài. Trạng thái được lưu cho cùng bài ở mọi thư mục và đồng bộ với ô đánh dấu trong Workspace; ghi chú đang viết dở được giữ nguyên.
@@ -47,25 +39,25 @@ Các lần sau dùng `git pull --ff-only`. Nhánh cũ vẫn nằm trong repo Stu
 - **Draw illustration** trong Illustrations mở bảng vẽ 2D trên thiết bị: điểm, trung điểm, đoạn/đường/tia/vectơ, đường tròn, song song/vuông góc, giao điểm, đa giác/chữ nhật, đo góc, chữ và bút vẽ. Ban đầu chọn **Blank canvas** hoặc **Coordinate plane**. Chế độ tọa độ có nhập điểm bằng số, lưới và ô phương trình dùng bàn phím chỉ nhập toán. Kéo điểm/hình để chỉnh, giữ **Shift** và nhấp hoặc kéo vùng để chọn nhiều hình; xóa, di chuyển và đổi nét đồng loạt. Các nút **Solid / Dashed / Delete** nằm ở trên phải. Mặt vẽ nằm trọn trong cửa sổ; **Add to illustrations** chèn chính khung đang thấy thành PNG, sau đó Save exercise. Nút Create diagram đã được bỏ.
 - **Draw for chat** vẽ ảnh cho tin nhắn kế tiếp; ảnh chỉ gửi khi nhấn Send, được lưu cùng tin nhắn và xem lại trong thư viện. **Draw in notes** lưu ảnh như ảnh bài làm, kể cả trong phần sửa ghi chú ở thư viện; ảnh ghi chú không gửi cho AI. AI được yêu cầu giải thích cách dựng và mục đích của hình phụ khi lời giải cần thêm hình.
 - Chat có sẵn hàng ký hiệu thông dụng. **More symbols / Math symbols** bật hoặc tắt bảng mở rộng; vẫn có thể đóng bằng nút X.
-- **Illustrations** chỉ giữ ảnh minh họa để xem và đưa vào ngữ cảnh AI; không còn nút đọc chữ dưới mỗi ảnh. Để đọc đề từ ảnh, dùng **Read image**. Trong PDF, chọn trang ở **PDF page**, chọn nhiều câu qua các trang rồi sửa công thức trực tiếp trong từng ô **Extracted question**. Ảnh **Source page** bấm để zoom; phần nguồn và các ô sửa dùng chung thanh cuộn ngoài. **Use N questions** nhập các câu đã chọn thành một đề nhiều bài (tối đa 6.000 ký tự).
-- Xem [các tính năng Mathfolio](NOTEBOOK.md) và [checklist sprint gốc ở StudyLens](https://github.com/nguynphuc-git/StudyLens/issues/2).
+- **Illustrations** chỉ giữ ảnh minh họa để xem và đưa vào ngữ cảnh AI; không còn nút đọc chữ dưới mỗi ảnh. Để đọc đề từ ảnh, dùng **Add content → Read image**. Trong PDF, chọn trang ở **PDF page**, chọn nhiều câu qua các trang rồi sửa công thức trực tiếp trong từng ô **Extracted question**. Ảnh **Source page** bấm để zoom; phần nguồn và các ô sửa dùng chung thanh cuộn ngoài. **Use N questions** nhập các câu đã chọn thành một đề nhiều bài (tối đa 6.000 ký tự).
+- Xem [các tính năng Mathfolio](NOTEBOOK.md).
 
 ## Môi trường Firebase khi được cấp quota
 
 | Nhu cầu | Cấu hình |
 | --- | --- |
-| Sổ bài tập trên máy | Trình khởi động bật `VITE_USE_EMULATORS=true` cho lần chạy. |
+| Sổ bài tập local | Trình khởi động bật `VITE_USE_EMULATORS=true` và dùng Firestore/Storage Emulator cho lần chạy. |
 | Thử AI khi vẫn dùng tài khoản emulator | Sao chép `.env.example` thành `.env.local`. Điền cấu hình Web, khóa site reCAPTCHA Enterprise và model được cấp. Bật AI Logic và đăng ký App Check cho web app trong cùng project. Chỉ dùng debug token trong development. |
 | Thử Auth của project thật | Bật Email/Password trong Authentication. Dùng cấu hình Web của project, `VITE_USE_EMULATORS=false` và chạy `npm run dev` để dùng các giá trị trong file. |
-| Build cho bản online sau sprint hoặc khi được cấp quyền | Cấu hình biến `VITE_FIREBASE_*`, `VITE_RECAPTCHA_SITE_KEY`, `VITE_CLOUD_MODEL` ở môi trường build theo `.env.example`. Đặt `VITE_USE_EMULATORS=false` và `VITE_APPCHECK_DEBUG=false`. Đăng ký domain thật cho Auth và reCAPTCHA. Chạy test và build lại sau mỗi lần đổi cấu hình. Firebase Hosting dùng thư mục `dist/` theo `firebase.json`. |
+| Build cho bản online sau sprint hoặc khi được cấp quyền | Cấu hình biến `VITE_FIREBASE_*`, `VITE_RECAPTCHA_SITE_KEY`, `VITE_CLOUD_FAST_MODEL` và `VITE_CLOUD_DEEP_MODEL` ở môi trường build theo `.env.example`. Đặt `VITE_USE_EMULATORS=false` và `VITE_APPCHECK_DEBUG=false`. Đăng ký domain thật cho Auth và reCAPTCHA. Chạy test và build lại sau mỗi lần đổi cấu hình. Firebase Hosting dùng thư mục `dist/` theo `firebase.json`. |
 
 Các biến `VITE_*` xuất hiện trong trình duyệt. Chỉ điền cấu hình Firebase Web và khóa site công khai. Service account, khóa riêng, Gemini server key và App Check debug token phải nằm ngoài mã nguồn và ngoài `VITE_*`. Xem [cấu hình Web Firebase](https://firebase.google.com/docs/projects/api-keys) và [App Check cho Web](https://firebase.google.com/docs/app-check/web/recaptcha-enterprise-provider).
 
 Auth Emulator và Firebase thật có bộ tài khoản riêng. Sổ phân vùng theo project và UID trên thiết bị, nên đổi sang project của ban tổ chức sẽ mở một sổ riêng. Khi hết sprint, xác nhận thời điểm thu hồi quota và quyền với ban tổ chức trước khi tiếp tục dùng AI.
 
-## Kiểm tra kỹ thuật
+Project quota duy nhất của bản demo là `fbailogic26vrt-3019`. Không commit `.env.local`, service account, App Check debug token hoặc mã đăng nhập Firebase CLI. Khi quota hết hạn, thay cấu hình môi trường build bằng project tiếp theo rồi build/deploy lại; không nhúng khóa máy chủ vào mã trình duyệt.
 
-Cloud sync gồm đề, lời giải AI đã mở, ghi chú, chat, ảnh và thư mục. Bật tại **Account → Enable cloud sync** trên từng thiết bị. Khi offline, bài vẫn lưu trên máy và chờ đồng bộ; bản nháp Workspace không đồng bộ. Xem [cấu hình Firebase và kiểm tra Cloud sync](CLOUD_SYNC.md) trước khi triển khai.
+## Kiểm tra kỹ thuật
 
 ```sh
 npm ci
