@@ -1088,6 +1088,34 @@ async function withDiagram(){
   await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));await openWorkspace();
 }
 describe('new workspace rows and selected visual context',()=>{
+  it('keeps Text prose and mixed math readable in sent chat and the saved Library preview',async()=>{
+    await openWorkspace();mocks.ai.mockResolvedValue({text:'Check the logarithm domain.',source:'on_device'});
+    const prose=String.raw`\text{why is a positive discriminant not sufficient? Check the logarithm domain.}`;
+    const mixed=String.raw`\text{Why is }\frac{x}{2}\text{ positive?}`;
+    for(const question of [prose,mixed]){await type('[aria-label="Discussion question"]',question);await click('Send');}
+    const messages=host.querySelectorAll('.message.user');
+    expect(messages[1].querySelector('.latex-message-text')?.textContent).toBe('why is a positive discriminant not sufficient? Check the logarithm domain.');
+    expect(messages[1].querySelector('.katex')).toBeNull();
+    expect(messages[2].querySelectorAll('.katex')).toHaveLength(1);
+    expect(messages[2].querySelector('.latex-message-text')?.textContent).toBe('Why is ');
+    expect(mocks.ai.mock.calls[1][0].question).toBe(mixed);
+    await click('Save exercise');
+    expect(stored().exercises.find(value=>value.id==='first')?.messages.slice(-4).filter(message=>message.role==='user').map(message=>message.text)).toEqual([prose,mixed]);
+    await click('Exercise library');await click('All exercises',host.querySelector('.library-view')!);await click('Open exercise');
+    const saved=host.querySelectorAll('[aria-label="Saved question"]');
+    expect(saved).toHaveLength(2);expect(saved[0].querySelector('.katex')).toBeNull();
+    expect(saved[0].textContent).toContain('why is a positive discriminant');expect(saved[1].querySelectorAll('.katex')).toHaveLength(1);
+  });
+  it('displays existing text-root chat correctly without changing stored messages just by opening them',async()=>{
+    const text='why is a positive discriminant not sufficient? Check the logarithm domain.';
+    stored().exercises[0].messages=[{role:'user',text,format:'latex'}];
+    await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));
+    await library();await click('Open exercise');
+    const message=host.querySelector('[aria-label="Saved question"]')!;
+    expect(message.textContent).toBe(text);expect(message.querySelector('.katex')).toBeNull();
+    expect(mocks.write).not.toHaveBeenCalled();expect(stored().exercises[0].messages[0].text).toBe(text);
+    await click('Open in workspace');expect(host.querySelector('[aria-label="Your question"]')?.textContent).toBe(text);
+  });
   it('places problem/images, knowledge/hints and discussion/notes in three separate rows',()=>{
     expect([...host.querySelector('.problem-row')!.children].map(node=>node.className)).toEqual(['paper problem','paper problem-images']);
     expect([...host.querySelector('.guidance-row')!.children].map(node=>node.className)).toEqual(['paper knowledge','paper hints']);

@@ -58,9 +58,39 @@ function normalizeInline(value: string): string {
 
 export interface ChatPart { kind: 'text' | 'math' | 'break'; value: string }
 
+/** Older chat editors used a text root: prose was bare and math was $-delimited. */
+function legacyTextParts(value:string):ChatPart[]|undefined {
+  // Canonical TeX begins with commands or variables, never a bare multi-word sentence.
+  // Restrict recovery to recognizable text documents; do not guess the mode of "abc".
+  if(!/^\s*\$/.test(value)&&!/^\s*[^\\${}]*\p{L}{2,}[\t ]+\p{L}{2,}/u.test(value))return;
+  const parts:ChatPart[]=[];
+  const text=(value:string)=>value.split('\n').forEach((line,index)=>{
+    if(index)parts.push({kind:'break',value:''});
+    if(line)parts.push({kind:'text',value:decodeEditorText(line)??line});
+  });
+  let start=0;
+  for(let index=0;index<value.length;index++){
+    if(value[index]==='\\'){index++;continue;}
+    if(value[index]!=='$')continue;
+    const marker=value[index+1]==='$'?'$$':'$';
+    let end=index+marker.length;
+    for(;end<value.length;end++){
+      if(value[end]==='\\'){end++;continue;}
+      if(value.startsWith(marker,end))break;
+    }
+    if(end>=value.length)continue;
+    text(value.slice(start,index));
+    parts.push({kind:'math',value:value.slice(index+marker.length,end).trim()});
+    index=end+marker.length-1;start=index+1;
+  }
+  text(value.slice(start));return parts;
+}
+
 /** Pull only top-level editor prose out of TeX so it wraps and inherits reading preferences. */
 export function latexMessageParts(value: string): ChatPart[] {
-  const latex = stripProblemLayout(value), parts: ChatPart[] = [];
+  const latex = stripProblemLayout(value), legacy=legacyTextParts(latex);
+  if(legacy)return legacy;
+  const parts: ChatPart[] = [];
   let formula = '', depth = 0, environments = 0;
   const flush = () => { if (formula.trim()) parts.push({ kind: 'math', value: formula }); formula = ''; };
   for (let index = 0; index < latex.length;) {

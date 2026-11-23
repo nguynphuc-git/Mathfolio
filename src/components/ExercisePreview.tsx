@@ -6,6 +6,7 @@ import {FolderPicker} from './FolderPicker';
 import { statementLatex } from '../math-input';
 import { MathInput } from './MathInput';
 import { MarkdownView } from './MarkdownView';
+import { LatexMessage } from './LatexMessage';
 import { NotesEditor } from './NotesEditor';
 import { sourceLabel } from '../ui-labels';
 import {ProofDiagramView} from './ProofDiagramView';
@@ -51,7 +52,7 @@ export function ExercisePreview({ exercise, folderName, attachments,folders,fold
           <small className="subtle" role="status">{noteDirty ? 'Unsaved changes' : 'Changes saved on this device'}</small>
         </section>
         <section className="preview-section"><h3>Folders</h3><FolderPicker folders={folders} selected={folderIds} disabled={saving} onChange={onFolders}/></section>
-        <section className="preview-section"><h3>Conversation</h3>{exercise.messages.map((message, index) => <div className={`message ${message.role}`} key={index}><small>{message.role === 'user' ? 'You' : `Mathfolio · ${sourceLabel(message.source)}`}</small>{message.text&&(message.role==='user'&&message.format==='latex'?<MathInput value={message.text} readOnly compact label="Saved question"/>:<MarkdownView value={message.text}/>)}{!!message.images?.length&&<AttachmentGallery images={message.images} onOpen={image=>onImage({...image,kind:'solution',viewerLabel:'CHAT IMAGE'})}/>}</div>)}{!exercise.messages.length && <p className="subtle">No conversation saved yet.</p>}</section>
+        <section className="preview-section"><h3>Conversation</h3>{exercise.messages.map((message, index) => <div className={`message ${message.role}`} key={index}><small>{message.role === 'user' ? 'You' : `Mathfolio · ${sourceLabel(message.source)}`}</small>{message.text&&(message.role==='user'&&message.format==='latex'?<LatexMessage value={message.text} label="Saved question"/>:<MarkdownView value={message.text}/>)}{!!message.images?.length&&<AttachmentGallery images={message.images} onOpen={image=>onImage({...image,kind:'solution',viewerLabel:'CHAT IMAGE'})}/>}</div>)}{!exercise.messages.length && <p className="subtle">No conversation saved yet.</p>}</section>
         {error && <p className="notice error" role="alert">{error}</p>}
       </div>
       <footer className="exercise-preview-footer"><p className="subtle">Edit notes, solution images, image names and folders here. Save changes before closing. Open in workspace to change the problem or AI content.</p><div className="row"><button disabled={saving || !noteDirty} className="primary" onClick={onSaveNotes}>{saving ? 'Saving…' : 'Save changes'}</button><button disabled={saving} onClick={onClose}>Close</button><button className="primary" disabled={saving} onClick={onOpenWorkspace}>Open in workspace ↗</button></div></footer>
