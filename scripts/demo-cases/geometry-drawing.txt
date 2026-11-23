@@ -1,0 +1,2 @@
+Separate geometry exercise for the drawing demo:
+On a coordinate plane, let A=(0,0), B=(0,1), C=(2,1), and D=(1,0). Join A-B-C-D-A to form a right trapezoid. Let M be the midpoint of CD, and let I be the intersection of AC and BM. Construct the diagram, then find the exact value of AD^2 / IM^2. Show how the intersection coordinates are obtained; do not estimate lengths from the drawing.

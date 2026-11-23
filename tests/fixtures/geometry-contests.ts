@@ -13,7 +13,7 @@ foot H of the perpendicular from D to the plane ABC is the intersection of
 the altitudes of ∆ABC. Prove that
 (AB + BC + CA)2 ≤ 6(AD2 + BD2 + CD2).
 For what tetrahedra does equality hold?`;
-// Paraphrased inputs. Sources and evaluation boundaries: docs/geometry-proof-validation.md.
+// Paraphrased inputs. Sources and evaluation boundaries are listed in the source URLs and checks below.
 export const contestProofs=[
   {id:'IMO-1968-P4',dimension:'3D',source:'https://www.imo-official.org/assets/documents/problems/1968/1968_eng.pdf',statement:'For an arbitrary tetrahedron ABCD, prove the existence of a vertex whose three incident edge lengths satisfy all strict triangle inequalities.',checks:['arbitrary tetrahedron','existence of a vertex','strict inequalities','no regularity assumption']},
   {id:'IMO-1970-P5',dimension:'3D',source:'https://www.imo-official.org/assets/documents/problems/1970/1970_eng.pdf',statement:'In tetrahedron ABCD, DB is perpendicular to DC. The perpendicular projection H of D onto plane ABC is also the orthocenter of triangle ABC. Prove (AB+BC+CA)^2 <= 6(AD^2+BD^2+CD^2), and characterize equality.',checks:['right angle BDC','H is a plane foot and orthocenter','inequality','equality case']},

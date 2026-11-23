@@ -141,7 +141,7 @@ Regression tests cover three-exercise hint batches, scoped previous hints, cance
 - Selected **problem** images are actual typed inline-image parts on knowledge, hint and chat requests. Solution/notes images are excluded. The **Use this illustration for AI** checkbox defaults on for problem illustrations, including existing attachments; unchecked images remain available to view. Updating the selected visual context of an analyzed problem asks to clear its old knowledge/hints/chat while preserving notes and the saved library copy. Refresh knowledge to update analysis saved before visual support.
 - No model is called on attach/view/select alone. Local requests use ONLY_ON_DEVICE and never retry in cloud or silently omit selected images. Unsupported local vision reports a clear failure. PNG/JPEG inputs retain their bytes; a WebP inference copy is converted locally because Firebase's native path supports PNG/JPEG. Originals stay intact for viewing/storage. Text-only verified-formula shortcuts are bypassed when images are included.
 - Cloud consent now explicitly covers selected problem illustrations plus text/tutoring context. Cloud remains off by default. With permission enabled, analysis/hints can use cloud; first hints always stay local. Text-only first hints retain their local route, and chat follows its own Local/Cloud selection. Import transcription remains local-only, distinct from later image-based solving.
-- Existing image-viewer controls, cancellation rollback, notebooks and recovery keys remain in use. Socratic tutoring stays deferred; the [proposal](docs/SOCRATIC_TUTOR_PROPOSAL.md) is preserved.
+- Existing image-viewer controls, cancellation rollback, notebooks and recovery keys remain in use. Socratic tutoring stays deferred.
 
 [Firebase's hybrid Web guide](https://firebase.google.com/docs/ai-logic/hybrid/web/get-started) documents text-and-image on-device inference on compatible desktop Chrome. [Chrome's Prompt API](https://developer.chrome.com/docs/ai/prompt-api) describes its device/model availability requirements. API support does not guarantee correct geometry or proof reasoning. Prompts require reading marked labels and asking about missing/unreadable details, without inferring measurements from drawing appearance.
 
@@ -155,7 +155,7 @@ The library preview stays underneath with its unsaved notes intact. Its Escape/f
 
 Tests cover thumbnail entry points, nested closing and unsaved notes, background shortcut isolation, zoom/fit/pan/error behavior, original image data preservation and nested scroll-lock cleanup. Browser geometry and trackpad/touch feel still require visual acceptance testing.
 
-A researched [Socratic Tutor integration proposal](docs/SOCRATIC_TUTOR_PROPOSAL.md) is included for discussion. Tutoring behavior has not changed in this update.
+Tutoring behavior has not changed in this update.
 
 ## Typeset notes, manual input modes and a movable keyboard
 

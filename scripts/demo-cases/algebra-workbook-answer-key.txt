@@ -1,0 +1,21 @@
+Mathfolio algebra workbook — exact answer key (not part of the imported PDF)
+
+01. a>1, 1<x<a. For a<1+2sqrt(2): no roots; equality: x=1+sqrt(2);
+    above: x=(a+1 +/- sqrt((a-1)^2-8))/2. Roots differ by 1 iff a=4 (x=2,3).
+02. a<-1: none. a=-1: all x>=-1. a>-1: x=(a-1)/2.
+03. x=a-2,a+2. Both positive iff a>2; exactly one positive iff -2<a<=2.
+04. x=6. Original domain x>=-3, x!=2; squaring also gives x=1, which fails.
+05. x=0,5; both satisfy the original equation.
+06. x=2+sqrt(6); x>=1 is necessary, so 2-sqrt(6) is extraneous.
+07. x=-2, 8/3.
+08. x=2,3,(5-sqrt(17))/2,(5+sqrt(17))/2.
+09. (-infinity,-3) union [1,2) union [4,infinity).
+10. x=5; x>1 is required.
+11. x=1,4.
+12. x=-5,4; x!=-2,1.
+13. x=-2,-1,1,2.
+14. (x,y)=(2,3),(3,2).
+15. x=+/-sqrt((7+3sqrt(5))/2), +/-sqrt((7-3sqrt(5))/2).
+16. Every real x except x=1.
+17. x=1,2,3 because (x-1)(x-2)(x-3)=0.
+18. Maximum xy=9 at x=y=3 because xy<=((x+y)/2)^2=9.

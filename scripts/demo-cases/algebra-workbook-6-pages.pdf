@@ -1,0 +1,193 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R 11 0 R 13 0 R 15 0 R] /Count 6 >>
+endobj
+4 0 obj
+<< /Length 1178 >>
+stream
+0.08 0.24 0.48 rg 0.08 0.24 0.48 RG 1 w 52 771 m 543 771 l S
+BT /F2 12 Tf 52 793 Td (Page 1 of 6  |  Mathfolio algebra workbook  |  Parameters and domains) Tj ET
+0.94 0.97 0.99 rg 45 537 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 669 Td (Question 01: Parameterized logarithms) Tj ET
+BT /F1 10.5 Tf 58 637 Td (For real a, classify solutions of log_2\(x - 1\) + log_2\(a - x\) = 1.) Tj ET
+BT /F1 10.5 Tf 58 611 Td (Give exact roots. Find a when the two roots differ by 1.) Tj ET
+BT /F2 9 Tf 58 559 Td (Work / check:) Tj ET
+0.94 0.97 0.99 rg 45 340 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 472 Td (Question 02: Absolute value parameter) Tj ET
+BT /F1 10.5 Tf 58 440 Td (For real a, solve |x - a| = x + 1.) Tj ET
+BT /F1 10.5 Tf 58 414 Td (Classify zero, one, or infinitely many real solutions.) Tj ET
+BT /F2 9 Tf 58 362 Td (Work / check:) Tj ET
+0.94 0.97 0.99 rg 45 143 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 275 Td (Question 03: Positive roots) Tj ET
+BT /F1 10.5 Tf 58 243 Td (For real a, solve x^2 - 2ax + a^2 - 4 = 0.) Tj ET
+BT /F1 10.5 Tf 58 217 Td (When are both roots positive? When is exactly one positive?) Tj ET
+BT /F2 9 Tf 58 165 Td (Work / check:) Tj ET
+
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 1163 >>
+stream
+0.08 0.24 0.48 rg 0.08 0.24 0.48 RG 1 w 52 771 m 543 771 l S
+BT /F2 12 Tf 52 793 Td (Page 2 of 6  |  Mathfolio algebra workbook  |  Radicals and extraneous roots) Tj ET
+0.94 0.97 0.99 rg 45 537 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 669 Td (Question 04: Rational equation with radical) Tj ET
+BT /F1 10.5 Tf 58 637 Td (Solve \(x^2 - 5x + 6\)/\(x - 2\) = sqrt\(x + 3\).) Tj ET
+BT /F1 10.5 Tf 58 611 Td (State the domain and reject candidates introduced by squaring.) Tj ET
+BT /F2 9 Tf 58 559 Td (Work / check:) Tj ET
+0.94 0.97 0.99 rg 45 340 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 472 Td (Question 05: Two radicals) Tj ET
+BT /F1 10.5 Tf 58 440 Td (Solve sqrt\(x + 4\) + sqrt\(9 - x\) = 5.) Tj ET
+BT /F1 10.5 Tf 58 414 Td (Check every candidate in the original equation.) Tj ET
+BT /F2 9 Tf 58 362 Td (Work / check:) Tj ET
+0.94 0.97 0.99 rg 45 143 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 275 Td (Question 06: Radical sign restriction) Tj ET
+BT /F1 10.5 Tf 58 243 Td (Solve sqrt\(2x + 3\) = x - 1.) Tj ET
+BT /F1 10.5 Tf 58 217 Td (Find the stricter domain implied by the nonnegative left side.) Tj ET
+BT /F2 9 Tf 58 165 Td (Work / check:) Tj ET
+
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<< /Length 1131 >>
+stream
+0.08 0.24 0.48 rg 0.08 0.24 0.48 RG 1 w 52 771 m 543 771 l S
+BT /F2 12 Tf 52 793 Td (Page 3 of 6  |  Mathfolio algebra workbook  |  Absolute values and inequalities) Tj ET
+0.94 0.97 0.99 rg 45 537 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 669 Td (Question 07: Two breakpoints) Tj ET
+BT /F1 10.5 Tf 58 637 Td (Solve |x - 2| + |2x + 1| = 7.) Tj ET
+BT /F1 10.5 Tf 58 611 Td (Show the intervals defined by both absolute-value breakpoints.) Tj ET
+BT /F2 9 Tf 58 559 Td (Work / check:) Tj ET
+0.94 0.97 0.99 rg 45 340 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 472 Td (Question 08: Quadratic in absolute value) Tj ET
+BT /F1 10.5 Tf 58 440 Td (Solve |x^2 - 5x + 4| = 2.) Tj ET
+BT /F1 10.5 Tf 58 414 Td (Give all exact real roots.) Tj ET
+BT /F2 9 Tf 58 362 Td (Work / check:) Tj ET
+0.94 0.97 0.99 rg 45 143 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 275 Td (Question 09: Rational sign chart) Tj ET
+BT /F1 10.5 Tf 58 243 Td (Solve \(\(x - 1\)\(x - 4\)\)/\(\(x - 2\)\(x + 3\)\) >= 0.) Tj ET
+BT /F1 10.5 Tf 58 217 Td (Mark zeros and poles; use correct open and closed endpoints.) Tj ET
+BT /F2 9 Tf 58 165 Td (Work / check:) Tj ET
+
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 8 0 R >>
+endobj
+10 0 obj
+<< /Length 1148 >>
+stream
+0.08 0.24 0.48 rg 0.08 0.24 0.48 RG 1 w 52 771 m 543 771 l S
+BT /F2 12 Tf 52 793 Td (Page 4 of 6  |  Mathfolio algebra workbook  |  Logarithms and rational structure) Tj ET
+0.94 0.97 0.99 rg 45 537 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 669 Td (Question 10: Different logarithm bases) Tj ET
+BT /F1 10.5 Tf 58 637 Td (Solve log_2\(x - 1\) = log_4\(3x + 1\).) Tj ET
+BT /F1 10.5 Tf 58 611 Td (Convert to one base and test the domain.) Tj ET
+BT /F2 9 Tf 58 559 Td (Work / check:) Tj ET
+0.94 0.97 0.99 rg 45 340 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 472 Td (Question 11: Logarithm of a quadratic) Tj ET
+BT /F1 10.5 Tf 58 440 Td (Solve log_2\(x^2 - 5x + 6\) = 1.) Tj ET
+BT /F1 10.5 Tf 58 414 Td (Test both values in the original logarithm.) Tj ET
+BT /F2 9 Tf 58 362 Td (Work / check:) Tj ET
+0.94 0.97 0.99 rg 45 143 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 275 Td (Question 12: Reciprocal substitution) Tj ET
+BT /F1 10.5 Tf 58 243 Td (Solve \(x - 1\)/\(x + 2\) + \(x + 2\)/\(x - 1\) = 5/2.) Tj ET
+BT /F1 10.5 Tf 58 217 Td (State exclusions before setting t = \(x - 1\)/\(x + 2\).) Tj ET
+BT /F2 9 Tf 58 165 Td (Work / check:) Tj ET
+
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 10 0 R >>
+endobj
+12 0 obj
+<< /Length 1084 >>
+stream
+0.08 0.24 0.48 rg 0.08 0.24 0.48 RG 1 w 52 771 m 543 771 l S
+BT /F2 12 Tf 52 793 Td (Page 5 of 6  |  Mathfolio algebra workbook  |  Polynomials and systems) Tj ET
+0.94 0.97 0.99 rg 45 537 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 669 Td (Question 13: Even quartic) Tj ET
+BT /F1 10.5 Tf 58 637 Td (Solve x^4 - 5x^2 + 4 = 0 over the reals.) Tj ET
+BT /F1 10.5 Tf 58 611 Td (Use y = x^2 and check y >= 0.) Tj ET
+BT /F2 9 Tf 58 559 Td (Work / check:) Tj ET
+0.94 0.97 0.99 rg 45 340 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 472 Td (Question 14: Symmetric system) Tj ET
+BT /F1 10.5 Tf 58 440 Td (Solve x + y = 5 and x^2 + y^2 = 13 over the reals.) Tj ET
+BT /F1 10.5 Tf 58 414 Td (Give ordered pairs, not an unordered set.) Tj ET
+BT /F2 9 Tf 58 362 Td (Work / check:) Tj ET
+0.94 0.97 0.99 rg 45 143 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 275 Td (Question 15: Reciprocal fourth-degree equation) Tj ET
+BT /F1 10.5 Tf 58 243 Td (For x != 0, solve x^2 + 1/x^2 = 7.) Tj ET
+BT /F1 10.5 Tf 58 217 Td (Give all exact real values.) Tj ET
+BT /F2 9 Tf 58 165 Td (Work / check:) Tj ET
+
+endstream
+endobj
+13 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 12 0 R >>
+endobj
+14 0 obj
+<< /Length 1132 >>
+stream
+0.08 0.24 0.48 rg 0.08 0.24 0.48 RG 1 w 52 771 m 543 771 l S
+BT /F2 12 Tf 52 793 Td (Page 6 of 6  |  Mathfolio algebra workbook  |  Proof and verification) Tj ET
+0.94 0.97 0.99 rg 45 537 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 669 Td (Question 16: Removable factor) Tj ET
+BT /F1 10.5 Tf 58 637 Td (Find all real x satisfying \(x^2 - 1\)/\(x - 1\) = x + 1.) Tj ET
+BT /F1 10.5 Tf 58 611 Td (Explain why cancellation does not restore an excluded input.) Tj ET
+BT /F2 9 Tf 58 559 Td (Work / check:) Tj ET
+0.94 0.97 0.99 rg 45 340 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 472 Td (Question 17: Cubic factorization) Tj ET
+BT /F1 10.5 Tf 58 440 Td (Solve x^3 - 6x^2 + 11x - 6 = 0.) Tj ET
+BT /F1 10.5 Tf 58 414 Td (Factor and verify all roots.) Tj ET
+BT /F2 9 Tf 58 362 Td (Work / check:) Tj ET
+0.94 0.97 0.99 rg 45 143 505 160 re f 0.08 0.24 0.48 rg
+BT /F2 13 Tf 58 275 Td (Question 18: Constrained optimization) Tj ET
+BT /F1 10.5 Tf 58 243 Td (Let x,y >= 0 and x + y = 6. Find the maximum of xy.) Tj ET
+BT /F1 10.5 Tf 58 217 Td (State equality and justify global optimality.) Tj ET
+BT /F2 9 Tf 58 165 Td (Work / check:) Tj ET
+
+endstream
+endobj
+15 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 14 0 R >>
+endobj
+16 0 obj
+<< /Type /Catalog /Pages 3 0 R >>
+endobj
+xref
+0 17
+0000000000 65535 f 
+0000000009 00000 n 
+0000000079 00000 n 
+0000000154 00000 n 
+0000000244 00000 n 
+0000001474 00000 n 
+0000001610 00000 n 
+0000002825 00000 n 
+0000002961 00000 n 
+0000004144 00000 n 
+0000004280 00000 n 
+0000005481 00000 n 
+0000005619 00000 n 
+0000006756 00000 n 
+0000006894 00000 n 
+0000008079 00000 n 
+0000008217 00000 n 
+trailer
+<< /Size 17 /Root 16 0 R >>
+startxref
+8267
+%%EOF

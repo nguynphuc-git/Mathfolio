@@ -1,0 +1,3 @@
+For a real parameter a, classify the number of real solutions of
+log_2(x - 1) + log_2(a - x) = 1.
+State the domain before combining logarithms, give the exact solution set in each parameter range, and find the value of a for which the two roots differ by exactly 1. Explain why a positive discriminant alone is not enough.

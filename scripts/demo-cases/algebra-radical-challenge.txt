@@ -1,0 +1,3 @@
+Solve for all real x:
+(x^2 - 5x + 6)/(x - 2) = sqrt(x + 3).
+State the original domain, explain which candidate created by squaring must be rejected, and check the final answer in the original equation.
