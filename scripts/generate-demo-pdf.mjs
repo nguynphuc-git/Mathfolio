@@ -7,7 +7,7 @@ import zlib from 'node:zlib';
 const root=path.resolve(import.meta.dirname,'..');
 const source=path.join(root,'scripts/demo-plan.html');
 const input=fs.readFileSync(source,'utf8');
-const font=fs.readFileSync(path.join(root,'node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf'));
+const font=fs.readFileSync(path.join(root,'scripts/fonts/JetBrainsMono-Regular.ttf'));
 const output=path.join(root,'docs/Mathfolio-demo-3-phut.pdf');
 const u16=(p)=>font.readUInt16BE(p),u32=(p)=>font.readUInt32BE(p);
 const tables=new Map();
@@ -15,6 +15,9 @@ for(let i=0,n=u16(4);i<n;i++){const p=12+16*i;tables.set(font.toString('ascii',p
 const head=tables.get('head'),hhea=tables.get('hhea'),maxp=tables.get('maxp'),hmtx=tables.get('hmtx'),cmap=tables.get('cmap');
 if(![head,hhea,maxp,hmtx,cmap].every(Boolean))throw Error('Font lacks required TrueType tables');
 const units=u16(head.offset+18),numMetrics=u16(hhea.offset+34),glyphs=u16(maxp.offset+4);
+const metric=n=>Math.round(n*1000/units);
+const fontBox=[36,38,40,42].map(p=>metric(font.readInt16BE(head.offset+p)));
+const ascent=metric(font.readInt16BE(hhea.offset+4)),descent=metric(font.readInt16BE(hhea.offset+6));
 let cmapOffset=0;for(let i=0,n=u16(cmap.offset+2);i<n;i++){const p=cmap.offset+4+i*8,platform=u16(p),encoding=u16(p+2),offset=u32(p+4);if(platform===3&&(encoding===1||encoding===10)&&u16(cmap.offset+offset)===4){cmapOffset=cmap.offset+offset;break;}}
 if(!cmapOffset)throw Error('No BMP cmap in font');
 const segmentCount=u16(cmapOffset+6)/2,endAt=cmapOffset+14,startAt=endAt+2*segmentCount+2,deltaAt=startAt+2*segmentCount,rangeAt=deltaAt+2*segmentCount;
@@ -50,19 +53,23 @@ for(const b of blocks){if(b.kind==='page'){if(pages.at(-1).length)next();continu
 if(!pages.at(-1).length)pages.pop();
 const cidMap=Buffer.alloc(65536*2),used=new Set();
 for(const page of pages)for(const line of page)for(const c of line.text){const cp=c.codePointAt(0);if(cp<=65535){used.add(cp);cidMap.writeUInt16BE(gid(cp),cp*2);}}
+const missing=[...used].filter(cp=>gid(cp)===0);
+if(missing.length)throw Error(`Embedded font lacks glyphs: ${missing.map(cp=>String.fromCodePoint(cp)).join(' ')}`);
 function hex(s){let out='';for(const c of s){const cp=c.codePointAt(0);out+=cp<=65535?cp.toString(16).padStart(4,'0'):'003F';}return out.toUpperCase();}
 const objects=[null];const push=s=>{objects.push(s);return objects.length-1;};
 const fontStream=push({stream:zlib.deflateSync(font),dict:`/Filter /FlateDecode /Length1 ${font.length}`});
 const cidStream=push({stream:zlib.deflateSync(cidMap),dict:'/Filter /FlateDecode'});
-const descriptor=push(`<< /Type /FontDescriptor /FontName /LiberationSans /Flags 32 /FontBBox [-550 -303 1400 1005] /ItalicAngle 0 /Ascent 905 /Descent -212 /CapHeight 687 /StemV 80 /FontFile2 ${fontStream} 0 R >>`);
+const descriptor=push(`<< /Type /FontDescriptor /FontName /JetBrainsMono-Regular /Flags 33 /FontBBox [${fontBox.join(' ')}] /ItalicAngle 0 /Ascent ${ascent} /Descent ${descent} /CapHeight ${ascent} /StemV 80 /FontFile2 ${fontStream} 0 R >>`);
 const widths=[...used].sort((a,b)=>a-b).map(cp=>`${cp} [${Math.round(width(cp))}]`).join(' ');
-const descendant=push(`<< /Type /Font /Subtype /CIDFontType2 /BaseFont /LiberationSans /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${descriptor} 0 R /DW 600 /W [${widths}] /CIDToGIDMap ${cidStream} 0 R >>`);
-const mappings=[...used].sort((a,b)=>a-b).map(cp=>`<${cp.toString(16).padStart(4,'0')}> <${cp.toString(16).padStart(4,'0')}>`).join('\n');
-const cmapText=`/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def /CMapName /Adobe-Identity-UCS def /CMapType 2 def 1 begincodespacerange <0000> <FFFF> endcodespacerange ${used.size} beginbfchar\n${mappings}\nendbfchar endcmap CMapName currentdict /CMap defineresource pop end end`;
+const descendant=push(`<< /Type /Font /Subtype /CIDFontType2 /BaseFont /JetBrainsMono-Regular /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${descriptor} 0 R /DW 600 /W [${widths}] /CIDToGIDMap ${cidStream} 0 R >>`);
+const codepoints=[...used].sort((a,b)=>a-b);
+const mappings=[];
+for(let i=0;i<codepoints.length;i+=100){const chunk=codepoints.slice(i,i+100);mappings.push(`${chunk.length} beginbfchar\n${chunk.map(cp=>`<${cp.toString(16).padStart(4,'0')}> <${cp.toString(16).padStart(4,'0')}>`).join('\n')}\nendbfchar`);}
+const cmapText=`/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def /CMapName /Adobe-Identity-UCS def /CMapType 2 def 1 begincodespacerange <0000> <FFFF> endcodespacerange ${mappings.join('\n')} endcmap CMapName currentdict /CMap defineresource pop end end`;
 const unicode=push({stream:Buffer.from(cmapText)});
-const fontObj=push(`<< /Type /Font /Subtype /Type0 /BaseFont /LiberationSans /Encoding /Identity-H /DescendantFonts [${descendant} 0 R] /ToUnicode ${unicode} 0 R >>`);
+const fontObj=push(`<< /Type /Font /Subtype /Type0 /BaseFont /JetBrainsMono-Regular /Encoding /Identity-H /DescendantFonts [${descendant} 0 R] /ToUnicode ${unicode} 0 R >>`);
 const pageRefs=[];const pagesObj=push('');
-for(let i=0;i<pages.length;i++){const page=pages[i];let commands='',annotations=[];for(const line of page){const color=line.kind==='h1'?'0.08 0.24 0.48':line.kind==='h2'?'0.08 0.32 0.59':line.kind==='h3'?'0.13 0.36 0.55':'0.13 0.17 0.23';if(line.kind==='h2')commands+=`q 0.78 0.85 0.92 RG 0.7 w 48 ${(line.y-7).toFixed(1)} m 547 ${(line.y-7).toFixed(1)} l S Q\n`;if(line.kind==='h3')commands+=`q 0.16 0.43 0.69 rg 48 ${(line.y-3).toFixed(1)} 3 16 re f Q\n`;if(line.kind==='sceneBody'||line.kind==='note')commands+=`q ${line.kind==='note'?'1 0.97 0.88':'0.94 0.97 0.99'} rg 45 ${(line.y-4).toFixed(1)} 505 16 re f Q\n`;commands+=`q ${color} rg BT /F1 ${line.size} Tf 48 ${line.y.toFixed(1)} Td <${hex(line.text)}> Tj ET Q\n`;for(const link of line.links){const at=line.text.indexOf(link.label);if(at<0)continue;const measure=s=>[...s].reduce((n,c)=>n+width(c.codePointAt(0))*line.size/1000,0),x0=48+measure(line.text.slice(0,at)),x1=x0+measure(link.label),url=link.href;const escaped=url.replace(/[\\()]/g,'\\$&');annotations.push(push(`<< /Type /Annot /Subtype /Link /Rect [${x0.toFixed(1)} ${(line.y-2).toFixed(1)} ${x1.toFixed(1)} ${(line.y+line.size+2).toFixed(1)}] /Border [0 0 0] /A << /S /URI /URI (${escaped}) >> >>`));}}
+for(let i=0;i<pages.length;i++){const page=pages[i];let commands='q 1 1 1 rg 0 0 595.28 841.89 re f Q\n',annotations=[];for(const line of page){const color=line.kind==='h1'?'0.08 0.24 0.48':line.kind==='h2'?'0.08 0.32 0.59':line.kind==='h3'?'0.13 0.36 0.55':'0.13 0.17 0.23';if(line.kind==='h2')commands+=`q 0.78 0.85 0.92 RG 0.7 w 48 ${(line.y-7).toFixed(1)} m 547 ${(line.y-7).toFixed(1)} l S Q\n`;if(line.kind==='h3')commands+=`q 0.16 0.43 0.69 rg 48 ${(line.y-3).toFixed(1)} 3 16 re f Q\n`;if(line.kind==='sceneBody'||line.kind==='note')commands+=`q ${line.kind==='note'?'1 0.97 0.88':'0.94 0.97 0.99'} rg 45 ${(line.y-4).toFixed(1)} 505 16 re f Q\n`;commands+=`q ${color} rg BT /F1 ${line.size} Tf 48 ${line.y.toFixed(1)} Td <${hex(line.text)}> Tj ET Q\n`;for(const link of line.links){const at=line.text.indexOf(link.label);if(at<0)continue;const measure=s=>[...s].reduce((n,c)=>n+width(c.codePointAt(0))*line.size/1000,0),x0=48+measure(line.text.slice(0,at)),x1=x0+measure(link.label),url=link.href;const escaped=url.replace(/[\\()]/g,'\\$&');annotations.push(push(`<< /Type /Annot /Subtype /Link /Rect [${x0.toFixed(1)} ${(line.y-2).toFixed(1)} ${x1.toFixed(1)} ${(line.y+line.size+2).toFixed(1)}] /Border [0 0 0] /A << /S /URI /URI (${escaped}) >> >>`));}}
  const footer=`Mathfolio • Kế hoạch demo 3 phút    |    ${i+1}/${pages.length}`;
  commands+=`BT /F1 8 Tf 48 28 Td <${hex(footer)}> Tj ET\n`;
  const content=push({stream:Buffer.from(commands)});const pageObj=push(`<< /Type /Page /Parent ${pagesObj} 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 ${fontObj} 0 R >> >> /Contents ${content} 0 R ${annotations.length?`/Annots [${annotations.map(x=>x+' 0 R').join(' ')}]`:''} >>`);pageRefs.push(pageObj);
