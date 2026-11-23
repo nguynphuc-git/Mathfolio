@@ -276,4 +276,5 @@ html[data-theme="dark"] .math-input-tools { border-color: #485e4e; }
 .library-view button[aria-pressed=true]{background:var(--menu-selected);color:var(--menu-selected-ink);border-color:var(--menu-selected)}
 html[data-theme=dark] .library-view button[aria-pressed=true]{background:var(--menu-selected);color:var(--menu-selected-ink);border-color:var(--menu-selected)}
 html[data-theme=dark] .cloud-sync-panel p.error{background:#452d29;color:#f2c2b5;border-radius:8px;padding:12px}
+.latex-message-text{white-space:pre-wrap;overflow-wrap:anywhere}
 @media(max-width:650px){.library-tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.library-tools>input{grid-column:1/-1;min-width:0;width:100%}.library-tools .select-menu .select-trigger{font-size:12px;padding:9px 8px;gap:6px}}

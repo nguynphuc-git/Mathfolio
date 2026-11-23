@@ -5,6 +5,23 @@ import { MarkdownView } from '../src/components/MarkdownView';
 import { LatexMessage } from '../src/components/LatexMessage';
 
 describe('readable and safe chat content', () => {
+  it.each([
+    'why is a positive discriminant not sufficient? Check the logarithm domain.',
+    'Vì sao biệt thức dương vẫn chưa đủ? Kiểm tra miền xác định.',
+  ])('recovers old text-root questions without italicizing words: %s',value=>{
+    expect(latexMessageParts(value)).toEqual([{kind:'text',value}]);
+    const html=renderToStaticMarkup(<LatexMessage value={value}/>);
+    expect(html).toContain(value);expect(html).not.toContain('class="katex"');
+  });
+  it('recovers old text-root math delimiters, line breaks and escaped currency',()=>{
+    const value='Why does $ x>1 $ matter?\nCheck $\\frac{x}{2}$ and cost \\$5.';
+    expect(latexMessageParts(value)).toEqual([
+      {kind:'text',value:'Why does '},{kind:'math',value:'x>1'},{kind:'text',value:' matter?'},
+      {kind:'break',value:''},{kind:'text',value:'Check '},{kind:'math',value:String.raw`\frac{x}{2}`},{kind:'text',value:' and cost $5.'},
+    ]);
+    expect(latexMessageParts(String.raw`$ \frac{x}{2} $`)).toEqual([{kind:'math',value:String.raw`\frac{x}{2}`}]);
+    expect(latexMessageParts('abc')).toEqual([{kind:'math',value:'abc'}]);
+  });
   it('renders common AI math delimiters inline and in display blocks', () => {
     const html = renderToStaticMarkup(<MarkdownView value={String.raw`Use \(r^2\). Then \[A=\pi r^2\]`}/>);
     expect(html.match(/class="katex"/g)).toHaveLength(2);

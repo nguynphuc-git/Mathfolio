@@ -11,19 +11,21 @@ MathfieldElement.fontsDirectory = null;
 MathfieldElement.soundsDirectory = null;
 MathfieldElement.locale = 'en';
 export interface MathInputHandle { focus: () => void; insert: (latex: string) => void; replace: (latex: string) => void }
-interface Props { toolbar?:ReactNode; value:string; onChange?:(value:string)=>void; readOnly?:boolean; disabled?:boolean; label?:string; compact?:boolean; maxLength?:number; initialMode?:'math'|'text'; preserveLines?:boolean; placeholder?:string; mathOnly?:boolean }
-export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({toolbar,value,onChange,readOnly,disabled,label='Problem statement',compact,maxLength=6000,initialMode='math',preserveLines=false,placeholder='Type your problem here',mathOnly=false}, ref) {
+interface Props { toolbar?:ReactNode; value:string; onChange?:(value:string)=>void; onSubmit?:()=>void; readOnly?:boolean; disabled?:boolean; label?:string; compact?:boolean; maxLength?:number; initialMode?:'math'|'text'; defaultMode?:'math'|'text'; preserveLines?:boolean; placeholder?:string; mathOnly?:boolean }
+export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({toolbar,value,onChange,onSubmit,readOnly,disabled,label='Problem statement',compact,maxLength=6000,initialMode='math',defaultMode=initialMode,preserveLines=false,placeholder='Type your problem here',mathOnly=false}, ref) {
   const keyboard=useMathKeyboard(),keyboardRef=useRef(keyboard);keyboardRef.current=keyboard;const editorId=useId();
   const host=useRef<HTMLDivElement>(null);const element=useRef<MathfieldElement|null>(null);
   const change=useRef(onChange);change.current=onChange;
-  const options=useRef({maxLength,preserveLines,mathOnly});options.current={maxLength,preserveLines,mathOnly};
+  const options=useRef({maxLength,preserveLines,mathOnly,onSubmit});options.current={maxLength,preserveLines,mathOnly,onSubmit};
   const [inputError,setInputError]=useState('');const validValue=useRef(value);
   const [mode,setMode]=useState<'math'|'text'>(initialMode);
   const focus=useRef<()=>void>(()=>{});
   const notify=useRef<()=>void>(()=>{});const toggleMode=useRef<()=>void>(()=>{});
   useEffect(()=>{
     const field=new MathfieldElement();
-    field.defaultMode=mathOnly?'math':initialMode;field.smartMode=false;field.smartFence=true;
+    // The document's serialization mode is independent of the current typing mode.
+    // A math root keeps text in explicit \text{} runs when chat is saved/rendered.
+    field.defaultMode=mathOnly?'math':defaultMode;field.smartMode=false;field.smartFence=true;
     field.mathModeSpace='\\ ';
     field.smartSuperscript=false;field.mathVirtualKeyboardPolicy='manual';field.value=validValue.current;
     const flowStyle=document.createElement('style');
@@ -94,6 +96,9 @@ export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({t
       if(field.readOnly){taps.reset();return;}
       taps.keydown(event);
       if(event.isComposing||event.ctrlKey||event.metaKey||event.altKey)return;
+      if(event.key==='Enter'&&options.current.onSubmit&&!event.shiftKey){
+        event.preventDefault();event.stopImmediatePropagation();options.current.onSubmit();return;
+      }
       if(event.key==='Enter'&&options.current.preserveLines&&!event.shiftKey){
         event.preventDefault();event.stopImmediatePropagation();
         const previous=field.mode;field.insert('\\class{mathfolio-line}{#?}',{format:'latex',mode:'math',selectionMode:'placeholder'});field.mode=previous;handleInput();return;
@@ -107,7 +112,7 @@ export const MathInput = forwardRef<MathInputHandle,Props>(function MathInput({t
     field.addEventListener('paste',handlePaste,true);field.addEventListener('keydown',handleKey,true);field.addEventListener('keyup',handleUp,true);field.addEventListener('blur',resetTaps);field.addEventListener('pointerdown',resetTaps,true);window.addEventListener('blur',resetTaps);
     host.current?.appendChild(field);element.current=field;installStyle();if(initialMode==='text'&&!mathOnly)field.mode='text';syncMode();
     return()=>{keyboardRef.current?.release(editorId);field.removeEventListener('pointerup',touchFocus,true);field.removeEventListener('focusin',activate);field.removeEventListener('focus',activate,true);field.removeEventListener('pointerdown',activate,true);field.removeEventListener('mount',installStyle);field.removeEventListener('input',handleInput);field.removeEventListener('mode-change',syncMode);field.removeEventListener('selection-change',syncMode);field.removeEventListener('paste',handlePaste,true);field.removeEventListener('keydown',handleKey,true);field.removeEventListener('keyup',handleUp,true);field.removeEventListener('blur',resetTaps);field.removeEventListener('pointerdown',resetTaps,true);window.removeEventListener('blur',resetTaps);field.remove();element.current=null;notify.current=()=>{};toggleMode.current=()=>{};focus.current=()=>{};};
-  },[label,initialMode,placeholder,editorId,mathOnly,!!toolbar]);
+  },[label,initialMode,defaultMode,placeholder,editorId,mathOnly,!!toolbar]);
   useEffect(()=>{const field=element.current;validValue.current=value;setInputError('');if(field&&field.value!==value){const previous=field.mode;field.value=value;field.mode=previous;}},[value]);
   useEffect(()=>{if(element.current){
     const field=element.current;

@@ -20,7 +20,7 @@ import {NotesEditor} from '../src/components/NotesEditor';
 import { MathInput, type MathInputHandle } from '../src/components/MathInput';
 
 interface StubField extends HTMLElement {
-  value:string; mode:string; readOnly:boolean; selectionIsCollapsed:boolean; smartMode:boolean; smartFence:boolean; smartSuperscript:boolean;
+  value:string; mode:string; defaultMode:string; readOnly:boolean; selectionIsCollapsed:boolean; smartMode:boolean; smartFence:boolean; smartSuperscript:boolean;
   insert:ReturnType<typeof vi.fn>; executeCommand:ReturnType<typeof vi.fn>;
 }
 let root:Root,host:HTMLDivElement; const change=vi.fn(); const handle=createRef<MathInputHandle>();
@@ -38,6 +38,27 @@ beforeEach(async()=>{
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreAllMocks();vi.unstubAllGlobals();});
 describe('math editor event integration',()=>{
+  it('submits chat once on Enter, retaining Text mode and ignoring composition, modifiers and busy input',async()=>{
+    const submit=vi.fn(),value=String.raw`\text{Why is this positive?}`;
+    await act(async()=>root.render(<MathInput label="Chat" value={value} initialMode="text" defaultMode="math" onSubmit={submit}/>));
+    for(const flags of [{isComposing:true},{shiftKey:true},{ctrlKey:true},{metaKey:true}])await editorKey('Enter','keydown',flags);
+    expect(submit).not.toHaveBeenCalled();
+    expect((await editorKey('Enter')).defaultPrevented).toBe(true);expect(submit).toHaveBeenCalledTimes(1);
+    expect(field().value).toBe(value);expect(field().mode).toBe('text');
+    await act(async()=>root.render(<MathInput label="Chat" value={value} initialMode="text" defaultMode="math" onSubmit={submit} disabled/>));
+    await editorKey('Enter');expect(submit).toHaveBeenCalledTimes(1);
+  });
+  it('starts chat in Text while retaining a math document root for self-contained saved LaTeX',async()=>{
+    await act(async()=>root.render(<MathInput label="Chat" value="" initialMode="text" defaultMode="math" onChange={change}/>));
+    expect(field().mode).toBe('text');expect(field().defaultMode).toBe('math');
+    expect(host.querySelector('.editor-mode-toggle')?.textContent).toContain('Text');
+    const value=String.raw`\text{Why is }\frac{x}{2}\text{ positive?}`;
+    await act(async()=>{field().value=value;field().dispatchEvent(new Event('input'));});
+    expect(change).toHaveBeenLastCalledWith(value);
+    await act(async()=>root.render(<MathInput label="Chat" value={value} initialMode="text" defaultMode="math" onChange={change}/>));
+    await act(async()=>root.render(<MathInput label="Chat" value="" initialMode="text" defaultMode="math" onChange={change}/>));
+    expect(field().value).toBe('');expect(field().mode).toBe('text');expect(field().defaultMode).toBe('math');
+  });
   it('opens native text input synchronously on a touch and keeps it through mode changes',async()=>{
     const sink=field().shadowRoot!.querySelector<HTMLElement>('[part="keyboard-sink"]')!;
     expect(sink.getAttribute('inputmode')).toBe('text');
