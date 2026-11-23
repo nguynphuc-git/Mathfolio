@@ -5,6 +5,13 @@ import {
 } from '../src/appearance';
 
 describe('recoverable appearance preferences', () => {
+  it('round-trips Kitty without discarding the previous paper and reading preferences',()=>{
+    let saved='';
+    const preferences={...DEFAULT_APPEARANCE,theme:'kitty' as const,background:'blue' as const,font:'serif' as const,textColor:'plum' as const,textSize:21};
+    expect(saveAppearancePreferences(preferences,{setItem:(_key,value)=>{saved=value;}})).toBe(true);
+    expect(loadAppearancePreferences({getItem:()=>saved})).toEqual(preferences);
+    expect(parseAppearancePreferences({...preferences,theme:'dark'}).background).toBe('blue');
+  });
   it('resolves legacy System once into an explicit theme and drops obsolete alignment',()=>{
     expect(parseAppearancePreferences({theme:'system',alignment:'justify'},true).theme).toBe('dark');
     expect(parseAppearancePreferences({theme:'system'},false).theme).toBe('light');

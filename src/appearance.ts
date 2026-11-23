@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useLayoutEffect, useState} from 'react';
 
 export interface AppearancePreferences {
-  theme: 'light' | 'dark';
+  theme: 'light' | 'dark' | 'kitty';
   background: 'paper' | 'sage' | 'blue' | 'rose';
   font: 'sans' | 'serif';
   textSize: number;
@@ -23,7 +23,7 @@ export function parseAppearancePreferences(value: unknown,systemDark=false): App
   const record = value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown> : {};
   return {
-    theme: record.theme==='system'?(systemDark?'dark':'light'):choice(record.theme, ['light', 'dark'], DEFAULT_APPEARANCE.theme),
+    theme: record.theme==='system'?(systemDark?'dark':'light'):choice(record.theme, ['light', 'dark', 'kitty'], DEFAULT_APPEARANCE.theme),
     background: choice(record.background, ['paper', 'sage', 'blue', 'rose'], DEFAULT_APPEARANCE.background),
     font: choice(record.font, ['sans', 'serif'], DEFAULT_APPEARANCE.font),
     textSize: typeof record.textSize === 'number' && Number.isFinite(record.textSize)
@@ -59,7 +59,7 @@ export function saveAppearancePreferences(
 
 export interface AppearanceController {
   preferences: AppearancePreferences;
-  resolvedTheme: 'light' | 'dark';
+  resolvedTheme: AppearancePreferences['theme'];
   savedLocally: boolean;
   updateAppearance: (patch: Partial<AppearancePreferences>) => void;
   resetAppearance: () => void;

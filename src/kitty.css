@@ -1,0 +1,110 @@
+/* Kitty is a complete palette, independent of the remembered Light/Dark paper color. */
+html[data-theme=kitty]{
+  color-scheme:light;background:#f8e8ee;color:#523343;
+  --kitty-page:#f8e8ee;--kitty-paper:#fff1f5;--kitty-soft:#f5dfe8;
+  --kitty-ink:#523343;--kitty-muted:#7e5366;--kitty-accent:#994765;
+  --menu-surface:#fceaf1;--menu-ink:#523343;--menu-muted:#7e5366;
+  --menu-border:#d9b1c1;--menu-hover:#f3d4e1;--menu-selected:#994765;--menu-selected-ink:#fff1f5;
+  --diagram-fill:#f2d7e3;
+}
+html[data-theme=kitty] body{background:var(--kitty-page);color:var(--kitty-ink)}
+html[data-theme=kitty] .notebook-app{position:relative;z-index:1}
+html[data-theme=kitty] :is(a,.brand,.panel-heading h2,.page-heading h1,.account-panel h1){color:var(--kitty-ink)}
+html[data-theme=kitty] a:hover{color:#8e3b60}
+html[data-theme=kitty][data-paper] .notebook-header{background:#f0d2de;border-color:var(--menu-border);padding-top:36px;box-shadow:0 3px 20px #8c50610a}
+html[data-theme=kitty] .brand-wordmark{position:relative;display:inline-block;isolation:isolate}
+.brand-kitty{position:absolute;width:105px;height:45px;right:1px;top:-30px;pointer-events:none;user-select:none}
+html[data-theme=kitty] :is(.paper,.appearance-settings,.appearance-disclosure>summary,.math-zoom,.symbol-browser,.symbol-drawer-heading,.tool-content){background:var(--kitty-paper);color:var(--kitty-ink);border-color:var(--menu-border);box-shadow:0 3px 0 #ac748715}
+html[data-theme=kitty] button{background:var(--menu-surface);color:var(--kitty-ink);border-color:var(--menu-border)}
+html[data-theme=kitty] :is(input:not([type=checkbox]):not([type=file]),textarea,select){background:var(--menu-surface);color:var(--kitty-ink);border-color:var(--menu-border);accent-color:var(--kitty-accent)}
+html[data-theme=kitty] :is(button:hover:not(:disabled),.appearance-disclosure[open]>summary,.tool-disclosure[open]>summary){background:var(--menu-hover);border-color:#bc829b}
+html[data-theme=kitty] :is(button.primary,.chat-routes button[aria-pressed=true],.symbol-categories button[aria-pressed=true],.workspace-preferences button[aria-pressed=true],.library-view button[aria-pressed=true]){background:var(--kitty-accent);color:var(--menu-selected-ink);border-color:var(--kitty-accent)}
+html[data-theme=kitty] button.primary:hover:not(:disabled){background:#7e3553;border-color:#7e3553}
+html[data-theme=kitty] :is(button,input,textarea,summary):focus-visible{outline-color:#a24c72}
+html[data-theme=kitty] .select-trigger[aria-expanded=true]{outline-color:#ae6d8a55}
+html[data-theme=kitty] :is(.notebook-header nav button,.folder-card .folder-open,.math-zoom button,.symbol-categories button,.chat-routes button){background:transparent}
+html[data-theme=kitty] :is(.notebook-header nav button.active,.notebook-header nav span){background:#e6bacd;color:#523343;border-color:#cca0b2}
+html[data-theme=kitty] :is(.connection,.subtle,.page-heading p,.account-panel p,.library-results p,.exercise-card p,.exercise-card small,.folder-card small,.check,label,.empty-chat,.footer-note,.problem-size-control,.save-state,.problem-attachments,.recent-symbols small,.editor-mode-bar small,.keyboard-target,.math-zoom span,.image-viewer-tools p,.usage-guide p,.usage-guide li,.usage-guide dd,.tool-content label small,.guide-details dt){color:var(--kitty-muted)}
+html[data-theme=kitty] :is(.step,.eyebrow){color:#9a5273!important}
+html[data-theme=kitty] :is(.tag,.source-label,.tag.done,.confirm-icon){background:#f0d2e0;color:#71415b}
+html[data-theme=kitty] :is(.workspace-preferences,.pdf-question-browser,.chat-routes,.empty-illustrations,.math-keys button,.markdown pre,.message,.draft-recovery,.pdf-replace-confirm,.cloud-recommendation,.hint-cloud-suggestion,.geometry-result,.geometry-inputs figure,.geometry-tools,.formula-crop-preview,.pdf-typeset-preview,.empty-import,.cloud-page-preview){background:var(--kitty-soft);color:var(--kitty-ink);border-color:var(--menu-border)}
+html[data-theme=kitty] .message.user{background:#edcfde}
+html[data-theme=kitty] :is(.message small,.preview-section .message small,.live-answer,.empty-panel,.pdf-dialog h2,.confirm-dialog h2,.confirm-dialog #confirm-description,.pdf-replace-confirm p,.cloud-recommendation p,.draft-recovery p,.import-review-columns h3,.import-review-columns summary,.pdf-question-menu summary,.pdf-selection,.pdf-question-list button span,.pdf-question-browser-heading h3,.pdf-question-browser-heading label,.pdf-typeset-details>summary,.keyboard-target strong,.appearance-preview>strong,.appearance-preview span){color:var(--kitty-muted)}
+html[data-theme=kitty] :is(.focus-notice,.save-state.draft){color:#865a33}
+html[data-theme=kitty] .save-state.saved{color:#6d5364}
+html[data-theme=kitty] .workspace-toolbar{background:#f8e8eef5;border-color:var(--menu-border)}
+html[data-theme=kitty] :is(.math-input-frame,.notes-editor .math-input,.chat-entry .math-input,.pdf-typeset-preview .math-input){background:var(--menu-surface);border-color:var(--menu-border)}
+html[data-theme=kitty] .math-input{background:repeating-linear-gradient(var(--menu-surface),var(--menu-surface) 31px,#ecd5df 32px);border-color:var(--menu-border)}
+html[data-theme=kitty] .math-input.compact{background:transparent}
+html[data-theme=kitty] .math-input math-field{color:var(--kitty-ink);--caret-color:#994765;--selection-background-color:#e9bfd2}
+html[data-theme=kitty] .math-editor{--editor-placeholder:#856073}
+html[data-theme=kitty] :is(.math-input-tools,.hint-tier,.chat-form,.preview,.image-viewer-header,.image-viewer-tools,.exercise-preview-header,.preview-section,.preview-section details,.import-review-header,.import-source,.import-review-footer,.pdf-dialog-header,.pdf-dialog-actions,.symbol-drawer-heading){border-color:var(--menu-border)}
+html[data-theme=kitty] :is(.exercise-preview-footer,.import-review-footer,.pdf-dialog>.row,.pdf-dialog-actions,.pdf-question-list button,.pdf-selection textarea,.hint-tier button.hint-toggle,.tool-disclosure>summary,.workspace-help kbd){background:var(--menu-surface);color:var(--kitty-ink)}
+html[data-theme=kitty] :is(.image-viewer-tools button[aria-pressed=true],.pdf-question-list button[aria-pressed=true]){background:var(--menu-selected);color:var(--menu-selected-ink);border-color:var(--menu-selected)}
+html[data-theme=kitty] .pdf-question-list button[aria-pressed=true] span{color:inherit}
+html[data-theme=kitty] .pdf-question-choice[data-selected=true]{color:var(--menu-selected-ink);border-color:var(--kitty-accent);box-shadow:inset 3px 0 #d5a1ba}
+html[data-theme=kitty] .pdf-question-choice[data-selected=true] :is(span,strong,small){color:inherit}
+html[data-theme=kitty] :is(.image-viewer-stage,.formula-crop-stage){background:#ecd4df;scrollbar-color:#b77c96 #ecd4df}
+html[data-theme=kitty] :is(.attachment-thumbnail>span,.pdf-source-image>span,.image-source-zoom>span){background:#71415be8;color:#fff1f5}
+html[data-theme=kitty] :is(.attachments img,.attachments button.attachment-thumbnail,.source-image){background:var(--menu-surface)}
+html[data-theme=kitty] :is(.attachment-button,.pdf-upload-button){border-color:#b77c96}
+html[data-theme=kitty] .cloud-switch{background:transparent;color:var(--kitty-muted)}
+html[data-theme=kitty] .cloud-switch strong{color:var(--kitty-ink)}
+html[data-theme=kitty] .switch-track{background:#d2b6c3}
+html[data-theme=kitty] .switch-track>span{background:#fff1f5}
+html[data-theme=kitty] .cloud-switch[aria-checked=true] .switch-track{background:var(--kitty-accent)}
+html[data-theme=kitty] :is(.notice.error,.cloud-sync-panel p.error,.error){background:#f0d2db;color:#85314f;border-radius:8px}
+html[data-theme=kitty] .cloud-sync-panel p.error{padding:12px}
+html[data-theme=kitty] :is(.notice.success,.success){background:#e6dce7;color:#5f4965}
+html[data-theme=kitty] .ai-toolbar{background:#edd8df;border-color:var(--menu-border)}
+html[data-theme=kitty] button.stop-ai{background:#f0d2db;color:#85314f;border-color:#c89cad}
+html[data-theme=kitty] .appearance-preview{background:var(--menu-surface);border-color:var(--menu-border);--preview-blue:#395c83;--preview-plum:#79435f}
+html[data-theme=kitty][data-ink=blue]{--reading-ink:#395c83}
+html[data-theme=kitty][data-ink=plum]{--reading-ink:#79435f}
+html[data-theme=kitty][data-ink=blue] :is(.markdown,.message,.notes textarea,.usage-guide p,.usage-guide li,.usage-guide dd),
+html[data-theme=kitty][data-ink=plum] :is(.markdown,.message,.notes textarea,.usage-guide p,.usage-guide li,.usage-guide dd){color:var(--reading-ink)}
+.kitty-palette{display:flex;align-items:center;gap:10px;min-height:38px;padding:7px 10px;border:1px solid var(--menu-border);border-radius:10px;font-size:13px;background:var(--menu-surface);color:var(--menu-ink)}
+.kitty-palette>span{color:#a24c72}
+html[data-theme=kitty] .appearance-size output{color:var(--kitty-muted)}
+html[data-theme=kitty] .appearance-size input[type=range]::-webkit-slider-thumb{background:var(--kitty-accent);box-shadow:0 0 0 1px var(--kitty-accent)}
+html[data-theme=kitty] .appearance-size input[type=range]::-moz-range-thumb,html[data-theme=kitty] .appearance-size input[type=range]::-moz-range-progress{background:var(--kitty-accent)}
+html[data-theme=kitty] .drawing-backdrop{--drawing-ink:#634252;--drawing-bg:#fceaf1;--drawing-grid:#eac9d8;--drawing-axis:#a07489;--drawing-selection:#a84278}
+html[data-theme=kitty] :is(.drawing-plane-options input,.drawing-sidebar .equation-slider input[type=range],.pdf-question-choice input){accent-color:var(--kitty-accent)}
+html[data-theme=kitty] .drawing-dialog button[aria-pressed=true]{border-color:var(--kitty-accent)}
+html[data-theme=kitty] :is(.drawing-selection-actions .drawing-delete,.equation-error){color:#85314f}
+html[data-theme=kitty] .drawing-mode-card>span{color:#a24c72}
+html[data-theme=kitty] :is(.math-input,.knowledge-scroll,.messages,.hints-scroll,.exercise-preview-body,.symbol-category-content,.select-options){scrollbar-color:#bb8ba3 transparent}
+html[data-theme=kitty] :is(.math-input,.knowledge-scroll,.messages,.hints-scroll)::-webkit-scrollbar-thumb{background-color:#bb8ba3}
+html[data-theme=kitty] .modal-backdrop{background:#5d394e80}
+html[data-theme=kitty] .image-viewer-backdrop{background:#44263cbb}
+html[data-theme=kitty] .folder-card .folder-open:hover:not(:disabled){background:#e9bfd222}
+html[data-theme=kitty] .folder-card .folder-delete{color:#79435f;border-color:var(--menu-border)}
+html[data-theme=kitty] .paper.folder-card{background:var(--folder-surface);color:var(--folder-ink);border-color:var(--folder-border)}
+html[data-theme=kitty] .paper.folder-card .folder-open :is(span,h2,small){color:inherit}
+html[data-theme=kitty] .folder-swatches .folder-swatch[aria-pressed=true]{box-shadow:0 0 0 2px var(--kitty-paper)}
+
+/* Small original cats sit on card borders, outside the reading and control areas. */
+html[data-theme=kitty] :is(.problem,.hints,.notes,.account-panel,.folder-card,.guide-grid>.paper){position:relative}
+html[data-theme=kitty] :where(.problem,.hints,.notes,.account-panel,.folder-card,.guide-grid>.paper)::after{
+  content:"";position:absolute;pointer-events:none;user-select:none;
+  width:64px;height:40px;top:-28px;right:22px;background:url('/kitty/peeking-cat.svg') center/contain no-repeat;
+}
+html[data-theme=kitty] .notes::after{background-image:url('/kitty/sleeping-cat.svg');width:94px;top:-31px}
+html[data-theme=kitty] .hints::after{background-image:url('/kitty/sitting-cat.svg');height:43px;top:-33px;width:39px}
+html[data-theme=kitty] .account-panel::after{background-image:url('/kitty/sleeping-cat.svg');width:110px;height:48px;top:-33px}
+html[data-theme=kitty] .folder-card::after{top:12px;right:16px;width:65px;height:69px;background-image:url('/kitty/sitting-cat.svg')}
+html[data-theme=kitty] .folder-card:nth-child(even)::after{background-image:url('/kitty/sleeping-cat.svg');width:90px;height:45px;top:29px}
+html[data-theme=kitty] .guide-grid>.paper:nth-child(even)::after{background-image:url('/kitty/sleeping-cat.svg');width:94px;top:-27px}
+
+.kitty-backdrop{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;user-select:none;contain:strict;background:radial-gradient(ellipse at 10% 20%,#edc8dc55,transparent 55%),radial-gradient(ellipse at 90% 75%,#efc1d555,transparent 50%)}
+.sakura-blossom{position:absolute;top:-60px;width:var(--flower-size);height:var(--flower-size);opacity:0;animation:sakura-fall var(--flower-time) var(--flower-delay) linear infinite;will-change:transform}
+.sakura-blossom img{display:block;width:100%;height:100%}
+@keyframes sakura-fall{0%{transform:translate3d(0,-40px,0) rotate(0);opacity:0}8%{opacity:.38}48%{transform:translate3d(calc(var(--flower-drift) * -.25),52vh,0) rotate(calc(var(--flower-turn) * .5))}92%{opacity:.38}100%{transform:translate3d(var(--flower-drift),calc(100dvh + 100px),0) rotate(var(--flower-turn));opacity:0}}
+@media(max-width:650px){
+  html[data-theme=kitty][data-paper] .notebook-header{padding-top:31px}
+  .brand-kitty{width:84px;height:36px;top:-24px}
+  html[data-theme=kitty] :is(.problem,.hints,.notes,.account-panel)::after{right:16px;transform:scale(.8);transform-origin:bottom right}
+  .sakura-blossom:nth-child(n+9){display:none}
+}
+@media(prefers-reduced-motion:reduce){.sakura-blossom{animation:none;opacity:.2;transform:none;will-change:auto}.sakura-blossom:nth-child(3n+1){top:18%}.sakura-blossom:nth-child(3n+2){top:53%}.sakura-blossom:nth-child(3n){top:84%}}
+@media print{.kitty-backdrop,.brand-kitty{display:none}html[data-theme=kitty] :where(.problem,.hints,.notes,.account-panel,.folder-card,.guide-grid>.paper)::after{display:none}}
