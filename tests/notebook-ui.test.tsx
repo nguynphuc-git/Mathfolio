@@ -664,8 +664,7 @@ describe('completion directly in the library',()=>{
     expect(stored().exercises.find(exercise=>exercise.id==='first')!.completed).toBe(true);
     await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));
     await library();
-    const filter=host.querySelector<HTMLSelectElement>('[aria-label="Exercise status"]')!;
-    await act(async()=>{filter.value='completed';filter.dispatchEvent(new Event('change',{bubbles:true}));});
+    await chooseOption('Exercise status','Completed');
     expect(host.querySelectorAll('.exercise-card')).toHaveLength(1);expect(host.querySelector('.exercise-card')!.textContent).toContain('Quadratic page');
     await click('Mark in progress');
     expect(host.querySelectorAll('.exercise-card')).toHaveLength(0);
@@ -1142,14 +1141,62 @@ describe('library browsing improvements',()=>{
   });
   it('makes sorting from the folder overview immediately show ordered exercises',async()=>{
     await click('Exercise library');
-    const select=host.querySelector<HTMLSelectElement>('[aria-label="Sort exercises"]')!;
-    await act(async()=>{select.value='oldest';select.dispatchEvent(new Event('change',{bubbles:true}));});
+    await chooseOption('Sort exercises','Oldest first');
     expect([...host.querySelectorAll('.exercise-card h2')].map(e=>e.textContent)).toEqual(['Second page','Quadratic page']);
     expect(host.querySelector('nav [aria-current="page"]')?.textContent).toContain('Exercise library');
+  });
+  it('uses the shared popup for library filters and returns keyboard focus after selection',async()=>{
+    await click('Exercise library');
+    const trigger=host.querySelector<HTMLButtonElement>('[aria-label="Exercise status"]')!;
+    expect(trigger.getAttribute('role')).toBe('combobox');
+    expect(host.querySelector('.library-tools select')).toBeNull();
+    await act(async()=>trigger.click());
+    const list=document.querySelector('[role="listbox"]')!;
+    expect(list.parentElement).toBe(document.body);
+    expect(list.querySelector('[aria-selected="true"]')?.textContent).toContain('All exercises');
+    await act(async()=>{trigger.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true,cancelable:true}));});
+    await act(async()=>{trigger.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));});
+    expect(trigger.textContent).toContain('Completed');expect(document.activeElement).toBe(trigger);
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    expect(mocks.write).not.toHaveBeenCalled();expect(mocks.ai).not.toHaveBeenCalled();
   });
 });
 
 describe('workspace comfort and English guide',()=>{
+  it('switches Kitty, Dark and Light without losing a draft or the previous page color',async()=>{
+    await type('[aria-label="Problem statement"]','x+3=7');
+    await act(async()=>host.querySelector<HTMLElement>('.appearance-disclosure summary')!.click());
+    await chooseOption('Page color','Sky');
+    await chooseOption('Theme','Kitty');
+    expect(document.documentElement.dataset.theme).toBe('kitty');
+    expect(document.querySelector('.kitty-backdrop')?.getAttribute('aria-hidden')).toBe('true');
+    expect(document.querySelectorAll('.sakura-blossom')).toHaveLength(14);
+    expect(document.querySelector('.kitty-backdrop button,.kitty-backdrop a,.kitty-backdrop input')).toBeNull();
+    expect(host.querySelector('.brand-kitty')?.getAttribute('aria-hidden')).toBe('true');
+    expect(host.querySelector('.kitty-palette')?.textContent).toContain('Sakura pink');
+    expect(host.querySelector('[aria-label="Page color"]')).toBeNull();
+    expect(JSON.parse(localStorage.getItem('mathfolio-appearance-v1')!).theme).toBe('kitty');
+    for(const theme of ['Dark','Light']){
+      await chooseOption('Theme',theme);
+      expect(document.documentElement.dataset.theme).toBe(theme.toLowerCase());
+      expect(document.querySelector('.kitty-backdrop,.brand-kitty')).toBeNull();
+      expect(host.querySelector('[aria-label="Page color"]')?.textContent).toContain('Sky');
+    }
+    expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value).toBe('x+3=7');
+    expect(mocks.ai).not.toHaveBeenCalled();expect(mocks.write).not.toHaveBeenCalled();
+  });
+  it('restores Kitty on reload and keeps decorations out of signed-out login fields',async()=>{
+    mocks.signedIn=false;
+    localStorage.setItem('mathfolio-appearance-v1',JSON.stringify({theme:'kitty'}));
+    await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));
+    expect(document.documentElement.dataset.theme).toBe('kitty');
+    expect(document.querySelector('.login-math-backdrop')).toBeNull();
+    expect(document.querySelector('.kitty-backdrop')?.parentElement).toBe(document.body);
+    await type('input[type="email"]','learner@example.test');
+    expect(host.querySelector<HTMLInputElement>('input[type="email"]')!.value).toBe('learner@example.test');
+    await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));
+    expect(document.querySelectorAll('.kitty-backdrop')).toHaveLength(1);
+  });
   it('opens the English guide without losing a draft and returns to work',async()=>{
     await type('[aria-label="Problem statement"]','2x+3=7');
     await click('How to use');
@@ -1186,7 +1233,7 @@ describe('workspace comfort and English guide',()=>{
   });
   it('applies and persists reading appearance preferences',async()=>{
     await act(async()=>{host.querySelector<HTMLElement>('.appearance-disclosure summary')!.click();});
-    async function choose(label:string,option:string){await act(async()=>host.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click());if(label==='Theme')expect([...document.querySelectorAll('[role="option"]')].map(item=>item.textContent?.replace('✓','').trim())).toEqual(['Light','Dark']);await act(async()=>[...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(item=>item.textContent?.trim().startsWith(option))!.click());}
+    async function choose(label:string,option:string){await act(async()=>host.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click());if(label==='Theme')expect([...document.querySelectorAll('[role="option"]')].map(item=>item.textContent?.replace('✓','').trim())).toEqual(['Light','Dark','Kitty']);await act(async()=>[...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(item=>item.textContent?.trim().startsWith(option))!.click());}
     await choose('Theme','Dark');await choose('Reading font','Book serif');await choose('Text color','Blue');expect(host.querySelector('[aria-label="Text alignment"]')).toBeNull();
     await type('.appearance-size input','19');
     expect(document.documentElement.dataset.theme).toBe('dark');
