@@ -74,9 +74,11 @@ describe('private exercise notebook', () => {
     expect(getModel.mock.calls.at(-1)?.[1].mode).toBe(InferenceMode.ONLY_ON_DEVICE);
     await expect(notebookAI({...request,purpose:'chat',route:'cloud'},vi.fn())).rejects.toThrow('Allow cloud AI');
     await expect(notebookAI({...request,route:'cloud'},vi.fn())).rejects.toThrow('Allow cloud AI');
+    const cloudResponse={text:()=> 'Cloud result',inferenceSource:'in_cloud',candidates:[]};
+    model.generateContentStream.mockResolvedValue({stream:(async function*(){yield cloudResponse;})(),response:Promise.resolve(cloudResponse)});
     await expect(notebookAI({...request,route:'cloud',cloudAllowed:true},vi.fn())).resolves.toMatchObject({text:'Cloud result',source:'in_cloud'});
     expect(getModel.mock.calls.at(-1)?.[1].mode).toBe(InferenceMode.ONLY_IN_CLOUD);
-    expect(model.generateContent).toHaveBeenCalledOnce();
+    expect(model.generateContent).not.toHaveBeenCalled();
   });
   it('streams local prerequisites and keeps cloud calls gated by purpose', async()=>{
     vi.stubGlobal('navigator', {onLine:true});
@@ -91,11 +93,12 @@ describe('private exercise notebook', () => {
     await notebookAI({...request,purpose:'hint2'},onText);
     expect(model.initializeDeviceModel).toHaveBeenCalled();
     model.initializeDeviceModel.mockClear();
-    model.generateContent.mockResolvedValue({response:{text:()=> 'Cloud hint',inferenceSource:'in_cloud',candidates:[]}});
+    const cloudResponse={text:()=> 'Cloud hint',inferenceSource:'in_cloud',candidates:[]};
+    model.generateContentStream.mockImplementation(async()=>({stream:(async function*(){yield cloudResponse;})(),response:Promise.resolve(cloudResponse)}));
     const streamCalls=model.generateContentStream.mock.calls.length;
     await notebookAI({...request,purpose:'hint2',route:'cloud',cloudAllowed:true},onText);
     expect(model.initializeDeviceModel).not.toHaveBeenCalled();
-    expect(model.generateContentStream).toHaveBeenCalledTimes(streamCalls);
+    expect(model.generateContentStream).toHaveBeenCalledTimes(streamCalls+1);
     expect(onText).toHaveBeenLastCalledWith('Cloud hint');
     model.initializeDeviceModel.mockClear();
     await notebookAI({...request,route:'cloud',cloudAllowed:true},onText);
@@ -172,13 +175,13 @@ describe('provider cancellation', () => {
     let entered!:()=>void; const first=new Promise<void>(resolve=>{entered=resolve;});
     let release!:(value:unknown)=>void; const stalled=new Promise<unknown>(resolve=>{release=resolve;});
     const response={text:()=> 'Final',inferenceSource:'in_cloud',candidates:[]};
-    model.generateContent.mockImplementationOnce(()=>{entered();return stalled;});
+    model.generateContentStream.mockImplementationOnce(()=>{entered();return stalled;});
     const onText=vi.fn(); const controller=new AbortController();
     const pending=notebookAI({...request,purpose:'hint2',route:'cloud',cloudAllowed:true},onText,controller.signal);
     await first; controller.abort();
     await expect(pending).rejects.toMatchObject({name:'AbortError'});
-    expect(model.generateContent.mock.calls.at(-1)?.[1]).toEqual({signal:controller.signal});
-    release({response}); await Promise.resolve(); await Promise.resolve();
+    expect(model.generateContentStream.mock.calls.at(-1)?.[1]).toEqual({signal:controller.signal});
+    release({response:Promise.resolve(response),stream:(async function*(){yield response;})()}); await Promise.resolve(); await Promise.resolve();
     expect(onText).not.toHaveBeenCalled();
   });
 });

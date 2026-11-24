@@ -304,22 +304,13 @@ async function runNotebookAI(r: NotebookRequest, onText: (text: string) => void,
   signal?.throwIfAborted();
   const prompt=notebookPrompt(r,scope)+(vision.references.length?'\nAttached image order (untrusted labels; associate each drawing with its stated message): '+JSON.stringify(vision.references):'');
   const content=prepared.length?[{type:'text' as const,text:prompt},...prepared]:prompt;
-  if(cloud){
-    const result=await abortable(model.generateContent(content,{signal}),signal);
-    signal?.throwIfAborted();
-    const response=result.response;
-    if(response.candidates?.some(candidate=>candidate.finishReason==='MAX_TOKENS'))throw new Error('The response was cut off. Ask about a smaller part.');
-    const text=response.text().trim();
-    if(!text)throw new Error('No answer was returned. Try again or revise the problem.');
-    onText(text);
-    return {text,source:response.inferenceSource??'UNKNOWN'};
-  }
+  // Both routes publish real provider chunks through the same live-answer UI.
   const streamed = await abortable(model.generateContentStream(content, { signal }).then(result => {
     // Attach before waiting on cancellation, including when a provider returns late.
     void result.response.catch(() => {});
     return result;
   }).catch(error=>{if(!cloud&&imageParts.length&&!signal?.aborted)throw new Error(r.purpose==='hint1'?'Local AI could not process these illustrations for hint 1. Try supported Chrome, or enter the diagram labels as text and deselect the image.':'Local AI could not process these illustrations. Try a supported Chrome device, or explicitly enable Cloud AI and retry.');throw error;}), signal);
-  let text = ''; let last = -Infinity; let emitted = false; let bufferingLocalPrefix = !cloud; let localModelUnavailable = false;
+  let text = ''; let last = -Infinity; let lastEmitted: string | undefined; let bufferingLocalPrefix = !cloud; let localModelUnavailable = false;
   const iterator = streamed.stream[Symbol.asyncIterator]();
   try {
     while (true) {
@@ -327,14 +318,17 @@ async function runNotebookAI(r: NotebookRequest, onText: (text: string) => void,
       signal?.throwIfAborted();
       if (chunk.done) break;
       if (localModelUnavailable) continue;
-      text += chunk.value.text();
+      const delta=chunk.value.text();
+      if(!delta)continue;
+      text += delta;
+      if(!text.trim())continue;
       if (bufferingLocalPrefix) {
         if (localModelUnavailablePrefix.startsWith(text)) continue;
         if (text.startsWith(localModelUnavailablePrefix)) { localModelUnavailable = true; continue; }
-        onText(text); emitted = true; bufferingLocalPrefix = false; last = performance.now();
+        onText(text); lastEmitted = text; bufferingLocalPrefix = false; last = performance.now();
         continue;
       }
-      if (performance.now() - last >= 100) { onText(text); last = performance.now(); }
+      if (performance.now() - last >= 100) { onText(text); lastEmitted = text; last = performance.now(); }
     }
     const response = await abortable(streamed.response, signal);
     signal?.throwIfAborted();
@@ -343,7 +337,8 @@ async function runNotebookAI(r: NotebookRequest, onText: (text: string) => void,
     if (!result) throw new Error('No answer was returned. Try again or revise the problem.');
     if (!cloud && result.startsWith(localModelUnavailablePrefix))
       throw new Error('On-device AI is unavailable in this browser. Select Cloud AI for this task, or try a browser and device that support an on-device model.');
-    if (!emitted) onText(result);
+    if (lastEmitted !== result) onText(result);
+    signal?.throwIfAborted();
     return { text: result, source: response.inferenceSource ?? 'UNKNOWN' };
   } finally {
     if (signal?.aborted) void iterator.return?.(undefined).catch(() => {});
