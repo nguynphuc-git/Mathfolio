@@ -44,7 +44,7 @@ const mode = r.action === 'deep' || r.action === 'quiz'
 const key = `${mode}:${r.action === 'quiz' ? 'quiz' : 'text'}:${r.language}:${jsonOutput?'json':'default'}`;
 let model = signal ? undefined : models.get(key);
 if (!model) {
-const ai = getAI(getCloudFirebaseApp(), { backend: new GoogleAIBackend() });
+const ai = getAI(getCloudFirebaseApp(mode === InferenceMode.ONLY_IN_CLOUD), { backend: new GoogleAIBackend() });
 model = getGenerativeModel(ai, {
 mode,
 // Firebase forwards promptOptions to Chrome's native promptStreaming(). The native

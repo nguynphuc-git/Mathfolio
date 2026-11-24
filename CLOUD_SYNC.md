@@ -58,3 +58,9 @@ firebase emulators:exec --only auth,firestore,storage --project demo-studylens-l
 The last command needs Java 21 and Firebase emulator binaries. The script refuses to run without emulator endpoints. It tests ownership, cross-account/anonymous denial, schema/version checks, immutable snapshots, size/type limits and tombstones.
 
 For local end-to-end development, start Auth, Firestore and Storage emulators for `demo-studylens-local`, then Vite with `VITE_USE_EMULATORS=true`. The normal `npm run local` launcher starts Auth only; leave sync off unless the other two emulators are also running.
+
+## Chuyển khỏi project quota
+
+Xem [PERMANENT_HOSTING.md](PERMANENT_HOSTING.md). Trước khi project bị thu hồi, lưu workspace rồi dùng **Account → Notebook backup → Export notebook** trên từng thiết bị có dữ liệu cần giữ. File gồm bài tập, thư mục, ghi chú, hội thoại và ảnh đã lưu. Đăng nhập project mới rồi **Import notebook → Import copies**. Không sao chép UID, token hoặc metadata sync của project cũ.
+
+Import giữ nguyên bài đang có và thêm bản sao với ID mới. Chưa cần bật Cloud sync/Storage để nhập và dùng thư viện local. Thiết kế sync hiện tại vẫn cần Firebase Storage kể cả với bài chỉ có chữ.

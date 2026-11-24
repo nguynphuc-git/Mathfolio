@@ -67,6 +67,10 @@ Trình khởi động cài dependency từ lockfile, khởi động Auth Emulato
 - **Illustrations** chỉ giữ ảnh minh họa để xem và đưa vào ngữ cảnh AI; không còn nút đọc chữ dưới mỗi ảnh. Để đọc đề từ ảnh, dùng **Add content → Read image**. Trong PDF, chọn trang ở **PDF page**, chọn nhiều câu qua các trang rồi sửa công thức trực tiếp trong từng ô **Extracted question**. Ảnh **Source page** bấm để zoom; phần nguồn và các ô sửa dùng chung thanh cuộn ngoài. **Use N questions** nhập các câu đã chọn thành một đề nhiều bài (tối đa 6.000 ký tự).
 - Xem [các tính năng Mathfolio](NOTEBOOK.md).
 
+## Xuất bản sau khi hết tài khoản quota
+
+Dùng project cá nhân `mathfolio-192d6`: xem [hướng dẫn sao lưu, chuyển sổ và deploy](PERMANENT_HOSTING.md). `npm run build:personal` tạo bản build riêng cho project cá nhân; chỉ đăng lại giao diện không chuyển dữ liệu Auth/Cloud sync từ project cũ. **Account → Notebook backup** xuất/nhập bài tập và ảnh mà không cần Cloud Storage.
+
 ## Môi trường Firebase khi được cấp quota
 
 | Nhu cầu | Cấu hình |
@@ -74,7 +78,7 @@ Trình khởi động cài dependency từ lockfile, khởi động Auth Emulato
 | Sổ bài tập local | Trình khởi động bật `VITE_USE_EMULATORS=true` và dùng Firestore/Storage Emulator cho lần chạy. |
 | Thử AI khi vẫn dùng tài khoản emulator | Sao chép `.env.example` thành `.env.local`. Điền cấu hình Web, khóa site reCAPTCHA Enterprise và model được cấp. Bật AI Logic và đăng ký App Check cho web app trong cùng project. Chỉ dùng debug token trong development. |
 | Thử Auth của project thật | Bật Email/Password trong Authentication. Dùng cấu hình Web của project, `VITE_USE_EMULATORS=false` và chạy `npm run dev` để dùng các giá trị trong file. |
-| Build cho bản online sau sprint hoặc khi được cấp quyền | Cấu hình biến `VITE_FIREBASE_*`, `VITE_RECAPTCHA_SITE_KEY`, `VITE_CLOUD_FAST_MODEL` và `VITE_CLOUD_DEEP_MODEL` ở môi trường build theo `.env.example`. Đặt `VITE_USE_EMULATORS=false` và `VITE_APPCHECK_DEBUG=false`. Đăng ký domain thật cho Auth và reCAPTCHA. Chạy test và build lại sau mỗi lần đổi cấu hình. Firebase Hosting dùng thư mục `dist/` theo `firebase.json`. |
+| Build cho bản online sau sprint hoặc khi được cấp quyền | Cấu hình biến `VITE_FIREBASE_*`, `VITE_RECAPTCHA_SITE_KEY`, `VITE_CLOUD_MODEL` ở môi trường build theo `.env.example`. Đặt `VITE_USE_EMULATORS=false` và `VITE_APPCHECK_DEBUG=false`. Đăng ký domain thật cho Auth và reCAPTCHA. Chạy test và build lại sau mỗi lần đổi cấu hình. Firebase Hosting dùng thư mục `dist/` theo `firebase.json`. |
 
 Các biến `VITE_*` xuất hiện trong trình duyệt. Chỉ điền cấu hình Firebase Web và khóa site công khai. Service account, khóa riêng, Gemini server key và App Check debug token phải nằm ngoài mã nguồn và ngoài `VITE_*`. Xem [cấu hình Web Firebase](https://firebase.google.com/docs/projects/api-keys) và [App Check cho Web](https://firebase.google.com/docs/app-check/web/recaptcha-enterprise-provider).
 
