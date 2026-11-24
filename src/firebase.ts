@@ -38,11 +38,15 @@ export function getFirebaseApp() {
     return getLocalFirebaseApp();
   }
 
-  return getCloudFirebaseApp();
+  return getConfiguredFirebaseApp(false);
 }
 
-// Dùng riêng cho AI kết nối project Firebase thật.
-export function getCloudFirebaseApp() {
+// The SDK uses the real project even for strictly on-device inference.
+export function getCloudFirebaseApp(requireAppCheck = true) {
+  return getConfiguredFirebaseApp(requireAppCheck);
+}
+
+function getConfiguredFirebaseApp(requireAppCheck: boolean) {
   const env = import.meta.env;
   const config = {
     apiKey: env.VITE_FIREBASE_API_KEY,
@@ -64,8 +68,11 @@ export function getCloudFirebaseApp() {
   if (!cloudReady) {
     const key = env.VITE_RECAPTCHA_SITE_KEY;
 
-    if (!key || key === 'REPLACE_ME') {
-      throw new Error('The reCAPTCHA Enterprise site key is missing.');
+    if (!key || /REPLACE|YOUR_/.test(key)) {
+      // Auth and the local notebook work on a personal Spark project before AI setup.
+      // Enforced backend rules still reject requests without a valid App Check token.
+      if (requireAppCheck) throw new Error('Set up App Check for this Firebase project before using Cloud AI.');
+      return app;
     }
 
     if (import.meta.env.DEV && env.VITE_APPCHECK_DEBUG === 'true') {

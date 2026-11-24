@@ -13,6 +13,7 @@
 "dev": "node scripts/start-dev.mjs --host 0.0.0.0",
 "prebuild": "node scripts/prepare-ocr-assets.mjs",
 "build": "tsc --noEmit && vite build",
+"build:personal": "node scripts/build-personal.mjs",
 "setup:math-ocr": "node scripts/setup-math-ocr.mjs",
 "preview": "vite preview --host 0.0.0.0",
 "test": "vitest run"

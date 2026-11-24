@@ -1313,3 +1313,42 @@ describe('workspace comfort and English guide',()=>{
     expect(mocks.ai).not.toHaveBeenCalled();
   });
 });
+
+describe('portable notebook backup controls',()=>{
+  async function selectBackup(raw:string){
+    const file=new File([raw],'mathfolio-backup.json',{type:'application/json'});
+    Object.defineProperty(file,'text',{value:async()=>raw});
+    const input=host.querySelector<HTMLInputElement>('[aria-label="Notebook backup file"]')!;
+    Object.defineProperty(input,'files',{configurable:true,value:[file]});
+    await act(async()=>input.dispatchEvent(new Event('change',{bubbles:true})));
+  }
+  it('reviews an import before adding copies with images and keeps the current workspace',async()=>{
+    await type('[aria-label="Notes"]','My unsaved workspace');
+    const before=structuredClone(stored());
+    await click('Account');
+    await selectBackup(JSON.stringify({format:'mathfolio-notebook',version:1,exportedAt:new Date().toISOString(),notebook:before}));
+    expect(host.textContent).toContain('Import 2 exercises');
+    expect(stored()).toEqual(before);
+    await click('Cancel import');expect(host.textContent).not.toContain('Import 2 exercises');
+    await selectBackup(JSON.stringify({format:'mathfolio-notebook',version:1,exportedAt:new Date().toISOString(),notebook:before}));
+    await click('Import copies');
+    expect(stored().exercises).toHaveLength(4);
+    expect(stored().exercises[2].attachments).toEqual(before.exercises[0].attachments);
+    expect(stored().exercises[2].id).not.toBe(before.exercises[0].id);
+    await click('Workspace');expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Notes"]')!.value).toContain('My unsaved workspace');
+  });
+  it('reports a rejected backup on the page and keeps all saved data',async()=>{
+    const before=structuredClone(stored());await click('Account');await selectBackup('{bad file');
+    expect(host.querySelector('.notebook-backup-panel [role="alert"]')?.textContent).toContain('not valid JSON');
+    expect(stored()).toEqual(before);
+  });
+  it('downloads the saved notebook including images without any cloud connection',async()=>{
+    const create=vi.fn().mockReturnValue('blob:backup'),revoke=vi.fn();
+    vi.stubGlobal('URL',class extends URL{static createObjectURL=create;static revokeObjectURL=revoke;});
+    const download=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{});
+    await click('Account');await click('Export notebook');
+    expect(download).toHaveBeenCalledOnce();expect(create).toHaveBeenCalledOnce();
+    const raw=await create.mock.calls[0][0].text();expect(JSON.parse(raw).notebook).toEqual(stored());
+    expect(mocks.cloud).not.toHaveBeenCalled();expect(host.textContent).toContain('Backup download started');
+  });
+});
