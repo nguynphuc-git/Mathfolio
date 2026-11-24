@@ -8,6 +8,31 @@ Repo chính: [nguynphuc-git/Mathfolio](https://github.com/nguynphuc-git/Mathfoli
 
 [Kế hoạch quay demo 3 phút (HTML tương tác)](https://mathfolio-pm.web.app/) mở trực tiếp trong trình duyệt; các link test case trong từng bước dẫn tới file mẫu để tải hoặc sao chép. Bản nguồn ở [scripts/demo-plan.html](scripts/demo-plan.html).
 
+## Kịch bản quay demo 3 phút cho đội sản xuất
+
+**Dùng bản HTML tương tác khi quay:** [mở kế hoạch](https://mathfolio-pm.web.app/). Phần này là checklist ngay trong repo; trang HTML có lời thuyết trình **tiếng Anh**, shot list tách riêng cho người quay, và đáp án đối chiếu. Quay thao tác thô đầy đủ, rồi dựng theo mốc 03:00; không cố hoàn thành mọi thao tác trong đúng 3 phút lúc ghi màn hình.
+
+### Chuẩn bị trước khi bấm Record
+
+1. Mở [Mathfolio bản live](https://mathfolio-mp.web.app/) trên Chrome desktop ở 1920×1080. Giữ cố định zoom và kích thước cửa sổ. Tạo hai Chrome profile A/B, đăng nhập **cùng một tài khoản Firebase**, bật Cloud Sync ở cả hai; kiểm tra A/B đều có mạng và pending bằng 0.
+2. Tải [bộ đề đại số 6 trang, 18 câu](https://raw.githubusercontent.com/nguynphuc-git/Mathfolio/main/scripts/demo-cases/algebra-workbook-6-pages.pdf). Mở sẵn [đề log tham số để dán](https://raw.githubusercontent.com/nguynphuc-git/Mathfolio/main/scripts/demo-cases/algebra-parameter-challenge.txt), [notes mẫu](https://raw.githubusercontent.com/nguynphuc-git/Mathfolio/main/scripts/demo-cases/solution-notes.txt) và [đáp án 18 câu](https://raw.githubusercontent.com/nguynphuc-git/Mathfolio/main/scripts/demo-cases/algebra-workbook-answer-key.txt) ở tab riêng. Chưa mở [đề hình học cho Draw](https://raw.githubusercontent.com/nguynphuc-git/Mathfolio/main/scripts/demo-cases/geometry-drawing.txt) cho đến cảnh 7.
+3. Chạy thử trước một lần: PDF mở đủ 6 trang, chọn được câu 01, Local AI hiện trạng thái thật trên máy, Cloud AI hiện bước đồng ý và còn quota, Save/Sync hoạt động. Chuẩn bị tài khoản và dữ liệu thử, không để email, token hoặc DevTools lộ trong bản dựng.
+
+| Cảnh dựng | Thao tác cần quay theo thứ tự | Bằng chứng giữ lại khi dựng |
+| --- | --- | --- |
+| **1 · 00:00–00:12** | Quay toàn cảnh Workspace 2 giây; rê qua Problem, Illustrations, AI, Notes; dừng ở vùng nhập đề. | Tên Mathfolio và bốn vùng làm việc. |
+| **2 · 00:12–00:32** | Dán [đề log tham số](https://raw.githubusercontent.com/nguynphuc-git/Mathfolio/main/scripts/demo-cases/algebra-parameter-challenge.txt), cho thấy Math/Text và bàn phím toán. Chọn **Add content → Read PDF**, tải [PDF 6 trang](https://raw.githubusercontent.com/nguynphuc-git/Mathfolio/main/scripts/demo-cases/algebra-workbook-6-pages.pdf), lướt 1 → 3 → 6, trở về trang 1, chọn câu 01, sửa OCR nếu cần rồi **Use this problem**. | Bộ đếm 1/6, 3/6, 6/6 và màn review có đề đúng trước khi phân tích. |
+| **3 · 00:32–01:10** | Trên cùng đề đại số, quay A dùng **Local AI → Confirm & analyze → Knowledge → Hint 1**. Quay B dùng **Cloud AI**, giữ bước đồng ý, rồi Knowledge và Hint 1–3. Chụp hai kết quả thật để dựng hai cột. | Tên tuyến AI, bước đồng ý, câu trả lời thật. Nếu Local không hỗ trợ, quay đúng thông báo đó; không ghép kết quả máy khác. |
+| **4 · 01:10–01:32** | Trên B, hỏi chat “Why is a positive discriminant not sufficient? Check the logarithm domain.” Dán [notes mẫu](https://raw.githubusercontent.com/nguynphuc-git/Mathfolio/main/scripts/demo-cases/solution-notes.txt), sửa một dòng, đánh dấu Completed. | Chat kiểm tra miền xác định, notes do người học sửa, trạng thái Completed. |
+| **5 · 01:32–01:57** | Lưu bài “Algebra · parameter logs”, gán hai thư mục màu. Vào Library, tìm “Algebra”, lọc Completed, mở preview, sửa notes và Save changes. | Bài tìm được trong thư viện; mở lại vẫn còn notes mới. |
+| **6 · 01:57–02:22** | A chờ pending=0. B cùng UID bấm Sync now và mở bài. Trên B bật DevTools Network → Offline, sửa notes, **Save**, quay pending > 0; bật Online, Sync now đến pending=0. A Sync now và mở phiên bản mới. | Cùng bài xuất hiện ở A/B; pending tăng rồi về 0. Chỉ cắt thời gian chờ, không dựng giả trạng thái sync. |
+| **7 · 02:22–02:42** | Tạo **bài mới**, dán [đề hình học riêng](https://raw.githubusercontent.com/nguynphuc-git/Mathfolio/main/scripts/demo-cases/geometry-drawing.txt). Draw illustration → Coordinate plane; dựng A/B/C/D, M, I; thử Undo/Redo; Add to illustrations. | Nhãn “Separate drawing exercise”, hình hoàn chỉnh và tỷ số $AD^2/IM^2=10$. Không dùng hình này làm kết quả AI đại số. |
+| **8 · 02:42–03:00** | Mở rồi thoát Solo; đổi theme và cỡ chữ trong Appearance; mở Study options và đổi một tùy chọn; cuộn How to use; kết ở tên Mathfolio và URL. | Mỗi tính năng phụ hiện rõ 2–3 giây, màn kết sạch khoảng 3 giây. |
+
+**Đối chiếu toán trước khi dựng:** với câu log, điều kiện là $a>1$, $1<x<a$; số nghiệm đổi tại $a=1+2\sqrt2$, và hai nghiệm cách nhau 1 khi $a=4$. Đáp án này dùng để kiểm tra AI, không thay thế phản hồi AI thật bằng chữ dựng. Bài hình học có lời giải riêng trong [đề Draw](https://raw.githubusercontent.com/nguynphuc-git/Mathfolio/main/scripts/demo-cases/geometry-drawing.txt).
+
+**Bàn giao dựng:** đặt tên take `01-opening` đến `08-extras`; gửi thêm hai ảnh Local/Cloud và một ảnh pending offline. Giữ lời thuyết trình tiếng Anh và timecode trong [kế hoạch HTML](https://mathfolio-pm.web.app/), chỉ rút ngắn lúc tải/chờ. Nếu một thao tác không chạy đúng, quay trạng thái thật rồi sửa lời dẫn cho khớp; không trình bày tính năng chưa kiểm chứng như đã thành công.
+
 Khung vẽ Illustration có chế độ nền trắng hoặc tọa độ. Ở chế độ tọa độ, nhập nhiều phương trình tự do, bất phương trình, biến có thanh trượt và dãy giá trị; kéo nền để dịch khung nhìn, giữ Shift để chọn nhiều hình. Solo mode cho tự vẽ hoặc tải ảnh lên; ảnh thêm tại đây mặc định không dùng cho AI. Công cụ Perp. segment hạ đoạn vuông góc từ một điểm xuống đường gốc; nếu điểm ở trên đường, chọn thêm đầu còn lại để định chiều và độ dài. Parallelogram nhận ba đỉnh liên tiếp và dựng đỉnh thứ tư theo chúng. Khi vẽ, đưa con trỏ gần điểm hoặc đường để bắt điểm dùng chung; Intersection dùng được với cả nét vẽ tay.
 
 ## Chạy thử trên máy của đồng đội

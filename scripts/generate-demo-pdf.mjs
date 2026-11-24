@@ -24,7 +24,7 @@ const segmentCount=u16(cmapOffset+6)/2,endAt=cmapOffset+14,startAt=endAt+2*segme
 function gid(code){let lo=0,hi=segmentCount-1;while(lo<=hi){const m=(lo+hi)>>1,end=u16(endAt+m*2);if(code>end)lo=m+1;else hi=m-1;}if(lo>=segmentCount||code<u16(startAt+lo*2))return 0;const delta=u16(deltaAt+lo*2),range=u16(rangeAt+lo*2);if(!range)return(code+delta)&65535;const p=rangeAt+lo*2+range+2*(code-u16(startAt+lo*2));if(p>=font.length)return 0;const g=u16(p);return g?(g+delta)&65535:0;}
 function width(code){const g=Math.min(gid(code),glyphs-1),metric=Math.min(g,numMetrics-1);return u16(hmtx.offset+4*metric)*1000/units;}
 const decode=s=>s.replace(/&(?:amp|lt|gt|quot|nbsp|#39);/g,m=>({'&amp;':'&','&lt;':'<','&gt;':'>','&quot;':'"','&nbsp;':' ','&#39;':"'"}[m]));
-let html=input.replace(/<style[\s\S]*?<\/style>/gi,'').replace(/<head[\s\S]*?<\/head>/gi,'').replace(/<script[\s\S]*?<\/script>/gi,'');
+let html=input.replace(/<style[\s\S]*?<\/style>/gi,'').replace(/<head[\s\S]*?<\/head>/gi,'').replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<header class="web-only"[\s\S]*?<\/header>/gi,'');
 const blocks=[];let buffer='',kind='body',anchors=[],openAnchor=null,container='';
 function flush(){const value=decode(buffer).replace(/\s+/g,' ').trim();if(value)blocks.push({kind,text:value,links:anchors});buffer='';kind='body';anchors=[];openAnchor=null;}
 for(const token of html.match(/<[^>]*>|[^<]+/g)??[]){
