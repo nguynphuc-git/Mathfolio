@@ -3,12 +3,17 @@ import { normalizeProblemText } from './problem-text';
 
 export function prose(value: string): string {
   if (!value) return '';
-  return `\\text{${value.replace(/\\/g, '\\textbackslash{}').replace(/[{}%&#_^$]/g, '\\$&')}}`;
+  // Escape once: a TeX accent (\^) can swallow the rest of a MathLive text run,
+  // and a second replacement pass would corrupt the braces in \textbackslash{}.
+  const special:Record<string,string>={'\\':'\\textbackslash{}','^':'\\textasciicircum{}','~':'\\textasciitilde{}'};
+  return `\\text{${value.replace(/[\\{}%&#_^$~]/g,char=>special[char]??`\\${char}`)}}`;
 }
 const mathNames = /\b(?:sin|cos|tan|cot|sec|csc|sinh|cosh|tanh|arcsin|arccos|arctan|log|ln|exp|sqrt|abs|lim|sum|prod|int|pi|alpha|beta|gamma|delta|theta|infty|dx|dy|dt)\b/g;
 function isMath(value: string): boolean {
   if (/^\\(?:text|mathrm|operatorname)\{/.test(value)) return true;
-  const letters = value.replace(/\\[a-zA-Z]+/g, '').replace(mathNames, '');
+  const letters = value.replace(/\\[a-zA-Z]+/g, '').replace(mathNames, '')
+    // Segment-length powers such as AD^2 / IM^2 are formulas, not English words.
+    .replace(/\b[A-Z]{2,3}(?=[\^_²³])/g,'');
   // Accented Latin words are prose too: e.g. “là”, “và”, “đề”, not variables.
   if (/[^\x00-\x7F]/.test(letters.replace(/[α-ωΑ-Ωℕℤℚℝℂ∅Ø∈∉⊂⊆⊃⊇∪∩∖∀∃¬∧∨⇒⇔≤≥≠≈∑∏∫√∞²³⁰¹⁴⁵⁶⁷⁸⁹₀-₉−×÷±·]/g, ''))) return false;
   return !/\p{L}{2,}/u.test(letters.replace(/[α-ωΑ-Ω]/g,'')) && !/["'$]/.test(value)
