@@ -54,19 +54,20 @@ describe('illustrations are actual model input',()=>{
   });
   it('sends images to cloud only on the explicitly authorized second-hint route',async()=>{
     await notebookAI({...base,purpose:'hint2',route:'cloud',cloudAllowed:true},()=>{});
-    expect(mock.model.mock.calls.at(-1)?.[1].mode).toBe(InferenceMode.ONLY_IN_CLOUD);expect(mock.initialize).not.toHaveBeenCalled();expect(mock.generate.mock.calls[0][0][1].inlineData.mimeType).toBe('image/png');expect(mock.stream).not.toHaveBeenCalled();
+    expect(mock.model.mock.calls.at(-1)?.[1].mode).toBe(InferenceMode.ONLY_IN_CLOUD);expect(mock.initialize).not.toHaveBeenCalled();expect(mock.stream.mock.calls[0][0][1].inlineData.mimeType).toBe('image/png');expect(mock.generate).not.toHaveBeenCalled();
   });
   it('uses cloud for a visual first hint only when explicitly selected and authorized',async()=>{
     await notebookAI({...base,purpose:'hint1',route:'cloud',cloudAllowed:true},()=>{},new AbortController().signal);
-    expect(mock.initialize).not.toHaveBeenCalled();expect(mock.generate).toHaveBeenCalledOnce();expect(mock.generate.mock.calls[0][0][1].inlineData.mimeType).toBe('image/png');expect(mock.stream).not.toHaveBeenCalled();
+    expect(mock.initialize).not.toHaveBeenCalled();expect(mock.stream).toHaveBeenCalledOnce();expect(mock.stream.mock.calls[0][0][1].inlineData.mimeType).toBe('image/png');expect(mock.generate).not.toHaveBeenCalled();
   });
   it('honors explicit cloud knowledge even for a problem with a local calculation shortcut',async()=>{
+    mock.stream.mockResolvedValueOnce(response('IN_CLOUD','Cloud result'));
     const result=await notebookAI({...base,purpose:'knowledge',statement:'2x+3=7',images:[],route:'cloud',cloudAllowed:true},()=>{});
-    expect(result.text).toBe('Cloud result');expect(mock.generate).toHaveBeenCalledOnce();expect(mock.initialize).not.toHaveBeenCalled();
+    expect(result.text).toBe('Cloud result');expect(mock.stream).toHaveBeenCalledOnce();expect(mock.initialize).not.toHaveBeenCalled();
   });
   it('generates all worksheet exercises through an explicitly authorized cloud first hint',async()=>{
     const result=await notebookAI({...base,purpose:'hint1',statement:worksheet,route:'cloud',cloudAllowed:true},()=>{});
-    expect(mock.generate).toHaveBeenCalledTimes(3);expect(mock.initialize).not.toHaveBeenCalled();expect(mock.stream).not.toHaveBeenCalled();
+    expect(mock.stream).toHaveBeenCalledTimes(3);expect(mock.initialize).not.toHaveBeenCalled();expect(mock.generate).not.toHaveBeenCalled();
     expect(result.text).toContain('Exercise 1');expect(result.text).toContain('Exercise 2');expect(result.text).toContain('Exercise 3');
   });
   it('fails explicitly when device vision is unavailable, without retrying in cloud or dropping images',async()=>{
@@ -256,7 +257,7 @@ describe('chat drawings and auxiliary construction guidance',()=>{
   const sketch={name:'My message.png',data:'data:image/png;base64,AQ=='};
   it('sends the current chat drawing and recent message images as actual pixels with message association',async()=>{
     await notebookAI({...base,purpose:'chat',question:'Is my construction valid?',route:'cloud',cloudAllowed:true,messages:[{role:'user',text:'Earlier sketch',images:[{name:'Earlier.png',data:'data:image/png;base64,Ag=='}]}],messageImages:[sketch]},()=>{});
-    const parts=mock.generate.mock.calls[0][0];expect(parts.slice(1).map((p:any)=>p.inlineData.data)).toEqual(['AA==','Ag==','AQ==']);
+    const parts=mock.stream.mock.calls[0][0];expect(parts.slice(1).map((p:any)=>p.inlineData.data)).toEqual(['AA==','Ag==','AQ==']);
     expect(parts[0].text).toContain('current-user-message');expect(parts[0].text).toContain('Earlier sketch');expect(parts[0].text).not.toContain('base64');
   });
   it('keeps chat images outside knowledge/hint requests and prevents local image shortcuts',async()=>{
@@ -264,8 +265,8 @@ describe('chat drawings and auxiliary construction guidance',()=>{
     await notebookAI({...base,images:[],purpose:'chat',question:'Solve 2x+3=7',messageImages:[sketch]},()=>{});expect(mock.initialize).toHaveBeenCalled();expect(mock.stream.mock.calls[0][0][1].inlineData.data).toBe('AQ==');expect(mock.generate).not.toHaveBeenCalled();
   });
   it('requires cloud consent for chat drawings and supports an image-only message',async()=>{
-    await expect(notebookAI({...base,purpose:'chat',statement:'',question:'',images:[],messageImages:[sketch],route:'cloud',cloudAllowed:false},()=>{})).rejects.toThrow('Allow cloud');expect(mock.generate).not.toHaveBeenCalled();
-    await notebookAI({...base,purpose:'chat',statement:'',question:'',images:[],messageImages:[sketch],route:'cloud',cloudAllowed:true},()=>{});expect(mock.generate.mock.calls[0][0][1].inlineData.data).toBe('AQ==');
+    await expect(notebookAI({...base,purpose:'chat',statement:'',question:'',images:[],messageImages:[sketch],route:'cloud',cloudAllowed:false},()=>{})).rejects.toThrow('Allow cloud');expect(mock.stream).not.toHaveBeenCalled();
+    await notebookAI({...base,purpose:'chat',statement:'',question:'',images:[],messageImages:[sketch],route:'cloud',cloudAllowed:true},()=>{});expect(mock.stream.mock.calls[0][0][1].inlineData.data).toBe('AQ==');
   });
   it.each(['local','cloud'] as const)('asks the %s tutor to explain required auxiliary constructions without claiming automatic drawing',route=>{
     const prompt=notebookPrompt({...base,purpose:'hint3',route});expect(prompt).toContain('explain exactly how to construct');expect(prompt).toContain('why it is needed');expect(prompt).toContain('Do not claim a figure has been drawn');
