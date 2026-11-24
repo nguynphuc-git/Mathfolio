@@ -3,7 +3,9 @@ import {mixedTextToLatex} from '../math-paste';
 export function ProblemSourceInput({disabled,onApply}:{disabled:boolean;onApply:(latex:string)=>void}) {
   const [source,setSource]=useState(''),[error,setError]=useState('');
   function apply(){
-    const latex=mixedTextToLatex(source,true);
+    // A copied file's trailing blank lines are not part of the exercise. Empty
+    // terminal MathLive groups can leave its caret invalid when switching modes.
+    const latex=mixedTextToLatex(source.replace(/(?:\r?\n[\t ]*)+$/,''),true);
     if(!source.trim()||latex.length>6000){setError('Enter a problem that fits within 6,000 characters after formatting.');return;}
     onApply(latex);setSource('');setError('');
   }

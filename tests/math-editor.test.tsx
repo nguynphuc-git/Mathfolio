@@ -100,7 +100,7 @@ describe('math editor event integration',()=>{
     await act(async()=>host.querySelector<HTMLButtonElement>('.editor-mode-toggle')!.click());
     const event=await paste('text/plain','Find x^2 = 4 now');
     expect(event.defaultPrevented).toBe(true);
-    expect(field().insert).toHaveBeenCalledWith(String.raw`\text{Find x\^2 = 4 now}`,expect.objectContaining({format:'latex',mode:'math'}));
+    expect(field().insert).toHaveBeenCalledWith(String.raw`\text{Find x\textasciicircum{}2 = 4 now}`,expect.objectContaining({format:'latex',mode:'math'}));
     expect(change).toHaveBeenCalledWith(field().value);
   });
   it('preserves explicit LaTeX and structured MathLive clipboard data',async()=>{
@@ -185,7 +185,7 @@ describe('manual Math/Text control',()=>{
     await act(async()=>toggle.click());
     expect(field().mode).toBe('text');expect(field().smartMode).toBe(false);expect(change).not.toHaveBeenCalled();
     await paste('text/plain','hôm nay là ngày đầu tuần x^2');
-    expect(field().insert.mock.calls.at(-1)?.[0]).toBe(String.raw`\text{hôm nay là ngày đầu tuần x\^2}`);
+    expect(field().insert.mock.calls.at(-1)?.[0]).toBe(String.raw`\text{hôm nay là ngày đầu tuần x\textasciicircum{}2}`);
     expect((await editorKey('^')).defaultPrevented).toBe(false);
     await altTap();
     expect(field().mode).toBe('math');expect(toggle.textContent).toContain('Math');

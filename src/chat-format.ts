@@ -124,7 +124,7 @@ export function latexMessageParts(value: string): ChatPart[] {
 }
 
 function decodeEditorText(value: string): string | undefined {
-  const escaped: Record<string, string> = { '\\textbackslash{}': '\\', '\\{': '{', '\\}': '}', '\\%': '%', '\\&': '&', '\\#': '#', '\\_': '_', '\\$': '$', '\\^': '^', '\\ ': ' ' };
+  const escaped: Record<string, string> = { '\\textbackslash{}': '\\', '\\textasciicircum{}': '^', '\\textasciitilde{}': '~', '\\{': '{', '\\}': '}', '\\%': '%', '\\&': '&', '\\#': '#', '\\_': '_', '\\$': '$', '\\^': '^', '\\ ': ' ' };
   let output = '';
   for (let index = 0; index < value.length;) {
     if (value[index] === '\\') {

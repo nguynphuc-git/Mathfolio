@@ -3,8 +3,15 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { normalizeChatMath, latexMessageParts } from '../src/chat-format';
 import { MarkdownView } from '../src/components/MarkdownView';
 import { LatexMessage } from '../src/components/LatexMessage';
+import {prose} from '../src/math-paste';
 
 describe('readable and safe chat content', () => {
+  it('decodes safe literal caret, tilde and backslash text without turning it into math',()=>{
+    const value=String.raw`Keep x^2 and ~ and C:\work\notes exactly.`;
+    expect(latexMessageParts(prose(value))).toEqual([{kind:'text',value}]);
+    const html=renderToStaticMarkup(<LatexMessage value={prose(value)}/>);
+    expect(html).toContain(value);expect(html).not.toContain('class="katex"');
+  });
   it.each([
     'why is a positive discriminant not sufficient? Check the logarithm domain.',
     'Vì sao biệt thức dương vẫn chưa đủ? Kiểm tra miền xác định.',

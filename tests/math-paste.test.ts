@@ -1,9 +1,35 @@
 import { describe, expect, it, vi } from 'vitest';
+import {readFileSync} from 'node:fs';
 import { convertLatexToMarkup } from 'mathlive/ssr';
-import { editorPaste, mixedTextToLatex } from '../src/math-paste';
+import { editorPaste, mixedTextToLatex, prose } from '../src/math-paste';
 import { insertPower } from '../src/math-editor-actions';
 
 describe('mixed clipboard input', () => {
+  it('renders the entire reported geometry demo, including both squared segment lengths and the final instruction',()=>{
+    const source=readFileSync(new URL('../scripts/demo-cases/geometry-drawing.txt',import.meta.url),'utf8');
+    const latex=mixedTextToLatex(source,true),html=convertLatexToMarkup(latex);
+    expect(latex).toContain('AD^{2}');expect(latex).toContain('IM^{2}');
+    expect(html).toContain('Separate geometry exercise for the drawing demo:');
+    expect(html).toContain('Show how the intersection coordinates are obtained; do not estimate lengths from the drawing.');
+    expect(html).not.toContain('ML__error');
+  });
+  it.each(['AD^2 / IM^2','AB^{3} / CD^{2}','AD² / IM²'])('formats geometric powers in %s while retaining the text that follows',formula=>{
+    const latex=mixedTextToLatex(`Find ${formula}. Explain every step that follows.`,true),html=convertLatexToMarkup(latex);
+    expect(latex).not.toContain('\\textasciicircum');
+    expect(html).toContain('Explain every step that follows.');expect(html).not.toContain('ML__error');
+  });
+  it.each([
+    'Type x^2 and x^n literally; keep all the words after them.',
+    String.raw`Keep C:\work\lesson, {braces}, a_b, 10%, #1, A&B and $5; keep this final sentence.`,
+    'Keep ~ and ^ then show this final sentence.',
+  ])('keeps literal Text-mode punctuation and the whole suffix: %s',source=>{
+    const html=convertLatexToMarkup(editorPaste(source,'text'));
+    const rendered=html.replace(/<[^>]*>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+    expect(rendered).toBe(source);expect(html).not.toContain('ML__error');
+  });
+  it('escapes a literal backslash once without escaping the braces it just inserted',()=>{
+    expect(prose(String.raw`C:\work\lesson`)).toBe(String.raw`\text{C:\textbackslash{}work\textbackslash{}lesson}`);
+  });
   it('keeps ordinary prose as text and recognizes an embedded equation', () => {
     const result = mixedTextToLatex('Solve x^2 + 3x = 0 for x.');
     expect(result).toContain(String.raw`\text{Solve }`);
@@ -54,7 +80,7 @@ Chọn một \(k_0\ge\max\{K,N\}\). Khi đó \(m_{k_0}\ge k_0\ge N\).`;
     expect(editorPaste(value,'math')).toContain(String.raw`\text{Giải phương trình }`);
     expect(editorPaste(value,'math')).toContain(String.raw`\text{ rồi kiểm tra nghiệm.}`);
     expect(editorPaste(value,'math')).toMatch(/x\^\{?2/);
-    expect(editorPaste(value,'text')).toBe(String.raw`\text{Giải phương trình x\^2 + 3x = 0 rồi kiểm tra nghiệm.}`);
+    expect(editorPaste(value,'text')).toBe(String.raw`\text{Giải phương trình x\textasciicircum{}2 + 3x = 0 rồi kiểm tra nghiệm.}`);
   });
   it('keeps undelimited TeX formulas structured in Math paste',()=>{
     const formula=String.raw`|a_n-a|\le\frac{\varepsilon}{2}+\frac{\varepsilon}{2}=\varepsilon`;

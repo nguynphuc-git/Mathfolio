@@ -2,6 +2,7 @@
 import { act, forwardRef, useImperativeHandle, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {readFileSync} from 'node:fs';
 import type { NotebookRequest } from '../src/ai';
 import type { Answer, Notebook } from '../src/notebook';
 
@@ -1191,6 +1192,27 @@ describe('library browsing improvements',()=>{
 });
 
 describe('workspace comfort and English guide',()=>{
+  it('takes the entire geometry source through Apply, AI and Save without dropping the final instruction',async()=>{
+    const source=readFileSync('scripts/demo-cases/geometry-drawing.txt','utf8');
+    await act(async()=>host.querySelector<HTMLElement>('.problem-source summary')!.click());
+    await type('[aria-label="Problem source"]',source);await click('Use pasted problem');
+    const latex=host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value;
+    expect(latex).toContain('AD^{2}');expect(latex).toContain('IM^{2}');
+    expect(latex).toContain('Show how the intersection coordinates are obtained; do not estimate lengths from the drawing.');
+    expect(latex).not.toMatch(/\\class\{mathfolio-line\}\{\}$/);
+    mocks.ai.mockResolvedValue({text:'Use exact coordinates.',source:'on_device'});await click('Confirm & analyze');
+    expect(mocks.ai.mock.calls[0][0].statement).toBe(latex);
+    await click('Save exercise');await type('[aria-labelledby="save-title"] label input','Complete geometry source');await click('Save on this device');
+    expect(stored().exercises.find(exercise=>exercise.title==='Complete geometry source')?.statement).toBe(latex);
+  });
+  it('keeps internal source paragraphs while removing only copied blank lines at the end',async()=>{
+    await act(async()=>host.querySelector<HTMLElement>('.problem-source summary')!.click());
+    await type('[aria-label="Problem source"]','First paragraph.\r\n\r\nSecond paragraph.\r\n\r\n  ');await click('Use pasted problem');
+    const latex=host.querySelector<HTMLTextAreaElement>('[aria-label="Problem statement"]')!.value;
+    expect(latex.match(/\\class\{mathfolio-line\}/g)).toHaveLength(3);
+    expect(latex).toContain('First paragraph.');expect(latex).toContain('Second paragraph.');
+    expect(latex).not.toMatch(/\\class\{mathfolio-line\}\{\}$/);
+  });
   it('switches Kitty, Dark and Light without losing a draft or the previous page color',async()=>{
     await type('[aria-label="Problem statement"]','x+3=7');
     await act(async()=>host.querySelector<HTMLElement>('.appearance-disclosure summary')!.click());
