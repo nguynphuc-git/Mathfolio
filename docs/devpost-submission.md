@@ -1,6 +1,6 @@
 # Mathfolio — Devpost submission
 
-Copy each numbered section into its matching Devpost field. Verify the hosted build and AI quota before submitting.
+Copy each numbered section from the Markdown source into its matching Devpost field (on GitHub, choose **Raw** before copying so the `$$` math delimiters are included). Verify the hosted build and AI quota before submitting.
 
 # 1. About the project
 
@@ -22,7 +22,7 @@ The workspace connects four activities that usually live in separate apps:
 Our demo starts with an algebra challenge involving a real parameter:
 
 $$
-\log_2(x-1)+\log_2(a-x)=1.
+\log_{2}(x-1) + \log_{2}(a-x) = 1
 $$
 
 The learner must state the domain \\(1<x<a\\), classify when there are zero, one, or two real solutions, and find the parameter for which the two roots differ by exactly \\(1\\) (\\(a=4\\), giving \\(x=2,3\\)). This question comes from a six-page, eighteen-problem algebra workbook that also tests radicals, extraneous roots, rational inequalities, and parameter cases. We compare a local route with a Gemini cloud route on **this same statement**, ask why a positive discriminant is not enough, and save the learner's corrected reasoning. A **separate geometry exercise** then demonstrates the drawing tools; it is not part of the Local/Cloud algebra comparison. The demo shows each AI route's limits rather than treating either as an answer authority.
